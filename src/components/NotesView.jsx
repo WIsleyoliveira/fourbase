@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { IconPlus, IconTrash, IconNotes } from '../icons.jsx'
+import { IconPlus, IconTrash, IconNotes, IconKanban } from '../icons.jsx'
 
 const formatDate = (iso) => {
   const d = new Date(iso)
@@ -12,15 +12,29 @@ const stripHtml = (html) => {
   return div.innerText.trim()
 }
 
-export default function NotesView({ notes, onCreate, onSave, onDelete }) {
+export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToKanban }) {
   const editorRef = useRef(null)
   const [activeId, setActiveId] = useState(notes[0]?.id ?? null)
   const [title, setTitle] = useState('')
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [wordCount, setWordCount] = useState(0)
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState('recent')
 
   const active = notes.find((n) => n.id === activeId) || null
+
+  const visibleNotes = notes
+    .filter((n) => {
+      if (!search.trim()) return true
+      const q = search.trim().toLowerCase()
+      return n.title.toLowerCase().includes(q) || stripHtml(n.content).toLowerCase().includes(q)
+    })
+    .sort((a, b) => {
+      if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '')
+      if (sortBy === 'oldest') return new Date(a.updated_at) - new Date(b.updated_at)
+      return new Date(b.updated_at) - new Date(a.updated_at)
+    })
 
   // carrega a nota ativa no editor
   useEffect(() => {
@@ -100,11 +114,27 @@ export default function NotesView({ notes, onCreate, onSave, onDelete }) {
             <IconPlus size={16} />
           </button>
         </div>
+        <div className="notes-filters">
+          <input
+            type="text"
+            placeholder="Buscar notas..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="recent">Mais recentes</option>
+            <option value="oldest">Mais antigas</option>
+            <option value="title">Título A-Z</option>
+          </select>
+        </div>
         <div className="notes-items">
           {notes.length === 0 && (
             <div className="empty-hint">Nenhuma nota — crie a primeira.</div>
           )}
-          {notes.map((n) => {
+          {notes.length > 0 && visibleNotes.length === 0 && (
+            <div className="empty-hint">Nenhuma nota encontrada para esse filtro.</div>
+          )}
+          {visibleNotes.map((n) => {
             const preview = stripHtml(n.content).slice(0, 64)
             return (
               <div
@@ -117,16 +147,28 @@ export default function NotesView({ notes, onCreate, onSave, onDelete }) {
                   {preview && <small className="note-preview">{preview}</small>}
                   <small className="note-date">{formatDate(n.updated_at)}</small>
                 </div>
-                <button
-                  className="icon-btn danger"
-                  title="Excluir nota"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeNote(n.id)
-                  }}
-                >
-                  <IconTrash size={14} />
-                </button>
+                <div className="note-item-actions">
+                  <button
+                    className="icon-btn"
+                    title="Enviar para o Kanban"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onSendToKanban(n.title || 'Sem título', stripHtml(n.content))
+                    }}
+                  >
+                    <IconKanban size={14} />
+                  </button>
+                  <button
+                    className="icon-btn danger"
+                    title="Excluir nota"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      removeNote(n.id)
+                    }}
+                  >
+                    <IconTrash size={14} />
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -191,6 +233,16 @@ export default function NotesView({ notes, onCreate, onSave, onDelete }) {
               </button>
             </div>
             <span className="toolbar-spacer" />
+            <button
+              className="secondary"
+              title="Enviar para o Kanban"
+              onClick={() =>
+                onSendToKanban(title.trim() || 'Sem título', editorRef.current?.innerText.trim() || '')
+              }
+            >
+              <IconKanban size={15} />
+              <span>Virar tarefa</span>
+            </button>
             <button className={dirty ? '' : 'secondary'} disabled={saving} onClick={save}>
               {saving ? 'Salvando...' : dirty ? 'Salvar' : 'Salvo ✓'}
             </button>

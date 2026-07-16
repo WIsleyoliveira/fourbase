@@ -89,23 +89,33 @@ app.get('/api/auth/me', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
-// ---------- Tarefas (do usuário logado) ----------
+// ---------- Tarefas (atribuídas ao usuário logado) ----------
 app.get('/api/tasks', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_tasks')
     .select('*')
-    .eq('user_id', req.user.id)
+    .eq('assigned_to', req.user.id)
     .order('created_at', { ascending: true })
   if (error) throw error
   res.json(data)
 }))
 
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
-  const { title, priority = 'Média' } = req.body
+  const { title, priority = 'Média', due_date = null, assigned_to, description = '' } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
+  const isGestor = req.user.role === 'gestor'
+  const owner = isGestor && assigned_to ? assigned_to : req.user.id
   const { data, error } = await supabase
     .from('fourbase_tasks')
-    .insert({ title: title.trim(), priority, column_key: 'todo', user_id: req.user.id })
+    .insert({
+      title: title.trim(),
+      description: description.trim(),
+      priority,
+      due_date,
+      column_key: 'todo',
+      user_id: req.user.id,
+      assigned_to: owner,
+    })
     .select()
     .single()
   if (error) throw error
@@ -113,30 +123,38 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { column_key, title, priority } = req.body
+  const { column_key, title, priority, due_date, assigned_to, description } = req.body
   const updates = {}
   if (column_key) updates.column_key = column_key
   if (title) updates.title = title
+  if (description !== undefined) updates.description = description
   if (priority) updates.priority = priority
-  const { data, error } = await supabase
-    .from('fourbase_tasks')
-    .update(updates)
-    .eq('id', req.params.id)
-    .eq('user_id', req.user.id)
-    .select()
-    .single()
+  if (due_date !== undefined) updates.due_date = due_date
+  if (assigned_to && req.user.role === 'gestor') updates.assigned_to = assigned_to
+
+  const query = supabase.from('fourbase_tasks').update(updates).eq('id', req.params.id)
+  if (req.user.role !== 'gestor') query.eq('assigned_to', req.user.id)
+  const { data, error } = await query.select().single()
   if (error) throw error
   res.json(data)
 }))
 
 app.delete('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { error } = await supabase
-    .from('fourbase_tasks')
-    .delete()
-    .eq('id', req.params.id)
-    .eq('user_id', req.user.id)
+  const query = supabase.from('fourbase_tasks').delete().eq('id', req.params.id)
+  if (req.user.role !== 'gestor') query.eq('assigned_to', req.user.id)
+  const { error } = await query
   if (error) throw error
   res.status(204).end()
+}))
+
+// ---------- Membros (para o seletor de responsável) ----------
+app.get('/api/members', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_users')
+    .select('id, name')
+    .order('name')
+  if (error) throw error
+  res.json(data)
 }))
 
 // ---------- Notas ----------
@@ -196,11 +214,11 @@ app.get('/api/todos', auth, asyncRoute(async (req, res) => {
 }))
 
 app.post('/api/todos', auth, asyncRoute(async (req, res) => {
-  const { text } = req.body
+  const { text, priority = 'Média', due_at = null } = req.body
   if (!text || !text.trim()) return res.status(400).json({ error: 'Texto obrigatório' })
   const { data, error } = await supabase
     .from('fourbase_todos')
-    .insert({ text: text.trim(), user_id: req.user.id })
+    .insert({ text: text.trim(), priority, due_at, user_id: req.user.id })
     .select()
     .single()
   if (error) throw error
@@ -208,10 +226,14 @@ app.post('/api/todos', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/todos/:id', auth, asyncRoute(async (req, res) => {
-  const { done } = req.body
+  const { done, priority, due_at } = req.body
+  const updates = {}
+  if (done !== undefined) updates.done = done
+  if (priority) updates.priority = priority
+  if (due_at !== undefined) updates.due_at = due_at
   const { data, error } = await supabase
     .from('fourbase_todos')
-    .update({ done })
+    .update(updates)
     .eq('id', req.params.id)
     .eq('user_id', req.user.id)
     .select()
@@ -268,6 +290,67 @@ app.delete('/api/media', auth, asyncRoute(async (req, res) => {
   res.status(204).end()
 }))
 
+// ---------- Clientes e mídia por cliente ----------
+app.get('/api/clients', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_clients')
+    .select('*')
+    .order('name')
+  if (error) throw error
+  res.json(data)
+}))
+
+app.post('/api/clients', auth, asyncRoute(async (req, res) => {
+  const { name } = req.body
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Nome do cliente obrigatório' })
+  const { data, error } = await supabase
+    .from('fourbase_clients')
+    .insert({ name: name.trim(), created_by: req.user.id })
+    .select()
+    .single()
+  if (error) throw error
+  res.status(201).json(data)
+}))
+
+app.delete('/api/clients/:id', auth, asyncRoute(async (req, res) => {
+  const { error } = await supabase.from('fourbase_clients').delete().eq('id', req.params.id)
+  if (error) throw error
+  res.status(204).end()
+}))
+
+app.get('/api/clients/:id/media', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_client_media')
+    .select('*')
+    .eq('client_id', req.params.id)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  res.json(data)
+}))
+
+app.post('/api/clients/:id/media', auth, asyncRoute(async (req, res) => {
+  const { kind, url, name = '' } = req.body
+  if (!['image', 'video', 'document'].includes(kind)) return res.status(400).json({ error: 'Tipo inválido' })
+  if (!url) return res.status(400).json({ error: 'URL obrigatória' })
+  const { data, error } = await supabase
+    .from('fourbase_client_media')
+    .insert({ client_id: req.params.id, kind, url, name, uploaded_by: req.user.id })
+    .select()
+    .single()
+  if (error) throw error
+  res.status(201).json(data)
+}))
+
+app.delete('/api/clients/:clientId/media/:mediaId', auth, asyncRoute(async (req, res) => {
+  const { error } = await supabase
+    .from('fourbase_client_media')
+    .delete()
+    .eq('id', req.params.mediaId)
+    .eq('client_id', req.params.clientId)
+  if (error) throw error
+  res.status(204).end()
+}))
+
 // ---------- Equipe (somente gestor) ----------
 app.get('/api/team/overview', auth, gestorOnly, asyncRoute(async (req, res) => {
   const [users, tasks, todos, notes] = await Promise.all([
@@ -303,14 +386,14 @@ app.get('/api/team/overview', auth, gestorOnly, asyncRoute(async (req, res) => {
 app.get('/api/team/tasks', auth, gestorOnly, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_tasks')
-    .select('*, fourbase_users(name, email)')
+    .select('*, assignee:fourbase_users!fourbase_tasks_assigned_to_fkey(name, email)')
     .order('created_at', { ascending: false })
   if (error) throw error
   res.json(
-    data.map(({ fourbase_users: owner, ...task }) => ({
+    data.map(({ assignee, ...task }) => ({
       ...task,
-      owner_name: owner?.name || 'Sem dono',
-      owner_email: owner?.email || '',
+      owner_name: assignee?.name || 'Sem dono',
+      owner_email: assignee?.email || '',
     }))
   )
 }))

@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, getAuth, setAuth } from './api.js'
-import { supabase, MEDIA_BUCKET, storagePathFromUrl } from './supabase.js'
 import Login from './components/Login.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Kanban from './components/Kanban.jsx'
+import Calendar from './components/Calendar.jsx'
 import NotesView from './components/NotesView.jsx'
 import MediaPanel from './components/MediaPanel.jsx'
 import Checklist from './components/Checklist.jsx'
 import TeamView from './components/TeamView.jsx'
+import SendToKanbanModal from './components/SendToKanbanModal.jsx'
 import {
   IconDashboard,
   IconKanban,
+  IconCalendar,
   IconNotes,
   IconMedia,
   IconCheck,
@@ -22,8 +24,9 @@ import {
 const VIEWS = [
   { key: 'painel', label: 'Painel principal', icon: IconDashboard, title: 'Painel principal', subtitle: 'Visão geral do seu workspace' },
   { key: 'kanban', label: 'Kanban', icon: IconKanban, title: 'Kanban de tarefas', subtitle: 'Organize o fluxo de trabalho arrastando os cartões' },
+  { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
-  { key: 'midia', label: 'Mídia', icon: IconMedia, title: 'Imagens e vídeos', subtitle: 'Anexos visuais do projeto' },
+  { key: 'midia', label: 'Mídia', icon: IconMedia, title: 'Imagens e vídeos', subtitle: 'Galeria de fotos e documentos por cliente' },
   { key: 'checklist', label: 'Checklist', icon: IconCheck, title: 'Checklist rápido', subtitle: 'Acompanhamento operacional do dia a dia' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
 ]
@@ -34,10 +37,11 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [notes, setNotes] = useState([])
   const [todos, setTodos] = useState([])
-  const [media, setMedia] = useState({ image: '', video: '' })
+  const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [online, setOnline] = useState(true)
   const [toast, setToast] = useState('')
+  const [kanbanDraft, setKanbanDraft] = useState(null)
 
   const showToast = (msg) => {
     setToast(msg)
@@ -51,16 +55,16 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [t, n, q, m] = await Promise.all([
+      const [t, n, q, mb] = await Promise.all([
         api.getTasks(),
         api.getNotes(),
         api.getTodos(),
-        api.getMedia(),
+        api.getMembers(),
       ])
       setTasks(t)
       setNotes(n)
       setTodos(q)
-      setMedia(m)
+      setMembers(mb)
       setOnline(true)
     } catch (err) {
       setOnline(false)
@@ -87,16 +91,38 @@ export default function App() {
     setTasks([])
     setNotes([])
     setTodos([])
-    setMedia({ image: '', video: '' })
   }
 
   // ---- tarefas ----
-  const addTask = (title, priority) =>
-    api.addTask(title, priority).then((t) => setTasks((prev) => [...prev, t])).catch(handleError)
+  const addTask = (title, priority, due_date, assigned_to, description) =>
+    api
+      .addTask(title, priority, due_date, assigned_to, description)
+      .then((t) => setTasks((prev) => [...prev, t]))
+      .catch(handleError)
+
+  const openSendToKanban = (title, description = '') => setKanbanDraft({ title, description })
+
+  const confirmSendToKanban = (data) =>
+    api
+      .addTask(data.title, data.priority, data.due_date, data.assigned_to, data.description)
+      .then((t) => {
+        setTasks((prev) => [...prev, t])
+        setKanbanDraft(null)
+        showToast('Enviado para o Kanban.')
+      })
+      .catch(handleError)
 
   const moveTask = (id, column_key) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
     api.moveTask(id, column_key).catch((err) => {
+      handleError(err)
+      loadAll()
+    })
+  }
+
+  const updateTask = (id, updates) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+    api.updateTask(id, updates).catch((err) => {
       handleError(err)
       loadAll()
     })
@@ -144,8 +170,11 @@ export default function App() {
   }
 
   // ---- checklist ----
-  const addTodo = (text) =>
-    api.addTodo(text).then((item) => setTodos((prev) => [...prev, item])).catch(handleError)
+  const addTodo = (text, priority, due_at) =>
+    api
+      .addTodo(text, priority, due_at)
+      .then((item) => setTodos((prev) => [...prev, item]))
+      .catch(handleError)
 
   const toggleTodo = (id, done) => {
     setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done } : t)))
@@ -163,24 +192,6 @@ export default function App() {
     })
   }
 
-  // ---- mídia ----
-  const mediaUploaded = async (kind, url) => {
-    await api.saveMedia(kind, url)
-    setMedia((prev) => ({ ...prev, [kind]: url }))
-    showToast('Mídia salva.')
-  }
-
-  const clearMedia = () => {
-    const paths = [media.image, media.video]
-      .map((url) => (url ? storagePathFromUrl(url) : null))
-      .filter(Boolean)
-    setMedia({ image: '', video: '' })
-    api.clearMedia().catch(handleError)
-    if (paths.length) {
-      supabase.storage.from(MEDIA_BUCKET).remove(paths).catch(() => {})
-    }
-  }
-
   if (!session) return <Login onLogin={login} />
 
   const user = session.user
@@ -191,29 +202,46 @@ export default function App() {
   const renderView = () => {
     switch (view) {
       case 'kanban':
-        return <Kanban tasks={tasks} onAdd={addTask} onMove={moveTask} onDelete={deleteTask} />
-      case 'notas':
         return (
-          <NotesView notes={notes} onCreate={createNote} onSave={saveNote} onDelete={deleteNote} />
-        )
-      case 'midia':
-        return (
-          <MediaPanel
-            media={media}
-            onUploaded={mediaUploaded}
-            onError={handleError}
-            onClear={clearMedia}
+          <Kanban
+            tasks={tasks}
+            members={members}
+            currentUser={user}
+            onAdd={addTask}
+            onMove={moveTask}
+            onUpdate={updateTask}
+            onDelete={deleteTask}
           />
         )
+      case 'calendario':
+        return <Calendar tasks={tasks} members={members} currentUser={user} onAdd={addTask} />
+      case 'notas':
+        return (
+          <NotesView
+            notes={notes}
+            onCreate={createNote}
+            onSave={saveNote}
+            onDelete={deleteNote}
+            onSendToKanban={openSendToKanban}
+          />
+        )
+      case 'midia':
+        return <MediaPanel onError={handleError} />
       case 'checklist':
         return (
-          <Checklist todos={todos} onAdd={addTodo} onToggle={toggleTodo} onDelete={deleteTodo} />
+          <Checklist
+            todos={todos}
+            onAdd={addTodo}
+            onToggle={toggleTodo}
+            onDelete={deleteTodo}
+            onSendToKanban={openSendToKanban}
+          />
         )
       case 'equipe':
         return isGestor ? <TeamView onError={handleError} /> : null
       default:
         return (
-          <Dashboard tasks={tasks} todos={todos} notes={notes} media={media} onNavigate={setView} />
+          <Dashboard tasks={tasks} todos={todos} notes={notes} onNavigate={setView} />
         )
     }
   }
@@ -286,6 +314,15 @@ export default function App() {
         )}
       </main>
       {toast && <div className="toast">{toast}</div>}
+      {kanbanDraft && (
+        <SendToKanbanModal
+          draft={kanbanDraft}
+          members={members}
+          currentUser={user}
+          onCancel={() => setKanbanDraft(null)}
+          onConfirm={confirmSendToKanban}
+        />
+      )}
     </div>
   )
 }

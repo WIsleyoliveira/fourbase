@@ -108,3 +108,25 @@ export const IconArrowRight = (p) => (
     <polyline points="12 5 19 12 12 19" />
   </Icon>
 )
+
+export const IconCheckPlain = (p) => (
+  <Icon {...p}>
+    <polyline points="20 6 9 17 4 12" />
+  </Icon>
+)
+
+export const IconCalendar = (p) => (
+  <Icon {...p}>
+    <rect x="3" y="4.5" width="18" height="16" rx="2.5" />
+    <line x1="3" y1="9.5" x2="21" y2="9.5" />
+    <line x1="8" y1="2.5" x2="8" y2="6.5" />
+    <line x1="16" y1="2.5" x2="16" y2="6.5" />
+  </Icon>
+)
+
+export const IconClose = (p) => (
+  <Icon {...p}>
+    <line x1="6" y1="6" x2="18" y2="18" />
+    <line x1="18" y1="6" x2="6" y2="18" />
+  </Icon>
+)

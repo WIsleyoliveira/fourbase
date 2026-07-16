@@ -1,6 +1,6 @@
 import { IconKanban, IconNotes, IconMedia, IconCheck, IconArrowRight } from '../icons.jsx'
 
-export default function Dashboard({ tasks, todos, notes, media, onNavigate }) {
+export default function Dashboard({ tasks, todos, notes, onNavigate }) {
   const counts = {
     todo: tasks.filter((t) => t.column_key === 'todo').length,
     doing: tasks.filter((t) => t.column_key === 'doing').length,
@@ -9,7 +9,6 @@ export default function Dashboard({ tasks, todos, notes, media, onNavigate }) {
   const todosDone = todos.filter((t) => t.done).length
   const taskProgress = tasks.length ? Math.round((counts.done / tasks.length) * 100) : 0
   const todoProgress = todos.length ? Math.round((todosDone / todos.length) * 100) : 0
-  const mediaCount = (media.image ? 1 : 0) + (media.video ? 1 : 0)
 
   const stats = [
     { label: 'A fazer', value: counts.todo, tone: 'info' },
@@ -37,7 +36,7 @@ export default function Dashboard({ tasks, todos, notes, media, onNavigate }) {
       key: 'midia',
       icon: <IconMedia size={22} />,
       title: 'Mídia',
-      desc: mediaCount ? `${mediaCount} anexo${mediaCount === 1 ? '' : 's'} salvos` : 'Nenhum anexo ainda',
+      desc: 'Fotos e documentos organizados por cliente',
     },
     {
       key: 'checklist',

@@ -49,11 +49,19 @@ export const api = {
 
   // tarefas
   getTasks: () => request('/api/tasks'),
-  addTask: (title, priority) =>
-    request('/api/tasks', { method: 'POST', body: JSON.stringify({ title, priority }) }),
+  addTask: (title, priority, due_date, assigned_to, description) =>
+    request('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ title, priority, due_date, assigned_to, description }),
+    }),
   moveTask: (id, column_key) =>
     request(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ column_key }) }),
+  updateTask: (id, updates) =>
+    request(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
   deleteTask: (id) => request(`/api/tasks/${id}`, { method: 'DELETE' }),
+
+  // membros
+  getMembers: () => request('/api/members'),
 
   // notas
   getNotes: () => request('/api/notes'),
@@ -65,18 +73,28 @@ export const api = {
 
   // checklist
   getTodos: () => request('/api/todos'),
-  addTodo: (text) => request('/api/todos', { method: 'POST', body: JSON.stringify({ text }) }),
+  addTodo: (text, priority, due_at) =>
+    request('/api/todos', { method: 'POST', body: JSON.stringify({ text, priority, due_at }) }),
   toggleTodo: (id, done) =>
     request(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify({ done }) }),
+  updateTodo: (id, updates) =>
+    request(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
   deleteTodo: (id) => request(`/api/todos/${id}`, { method: 'DELETE' }),
-
-  // mídia
-  getMedia: () => request('/api/media'),
-  saveMedia: (kind, data_url) =>
-    request(`/api/media/${kind}`, { method: 'PUT', body: JSON.stringify({ data_url }) }),
-  clearMedia: () => request('/api/media', { method: 'DELETE' }),
 
   // equipe (gestor)
   getTeamOverview: () => request('/api/team/overview'),
   getTeamTasks: () => request('/api/team/tasks'),
+
+  // clientes
+  getClients: () => request('/api/clients'),
+  createClient: (name) => request('/api/clients', { method: 'POST', body: JSON.stringify({ name }) }),
+  deleteClient: (id) => request(`/api/clients/${id}`, { method: 'DELETE' }),
+  getClientMedia: (clientId) => request(`/api/clients/${clientId}/media`),
+  addClientMedia: (clientId, kind, url, name) =>
+    request(`/api/clients/${clientId}/media`, {
+      method: 'POST',
+      body: JSON.stringify({ kind, url, name }),
+    }),
+  deleteClientMedia: (clientId, mediaId) =>
+    request(`/api/clients/${clientId}/media/${mediaId}`, { method: 'DELETE' }),
 }

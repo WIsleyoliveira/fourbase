@@ -7,10 +7,11 @@ const key =
 export const supabase = createClient(url, key)
 
 export const MEDIA_BUCKET = 'fourbase-media'
+export const CLIENT_MEDIA_BUCKET = 'fourbase-client-media'
 
 // extrai o caminho do objeto a partir da URL pública do bucket
-export function storagePathFromUrl(publicUrl) {
-  const marker = `/object/public/${MEDIA_BUCKET}/`
+export function storagePathFromUrl(publicUrl, bucket = MEDIA_BUCKET) {
+  const marker = `/object/public/${bucket}/`
   const idx = publicUrl.indexOf(marker)
   return idx === -1 ? null : decodeURIComponent(publicUrl.slice(idx + marker.length))
 }
