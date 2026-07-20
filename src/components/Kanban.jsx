@@ -1,21 +1,16 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   IconPlus,
-  IconTrash,
   IconArrowLeft,
   IconArrowRight,
   IconCheckPlain,
   IconClose,
+  IconCalendar,
 } from '../icons.jsx'
+import TaskDetailModal from './TaskDetailModal.jsx'
 
-const COLUMNS = [
-  { key: 'todo', label: 'A Fazer' },
-  { key: 'doing', label: 'Em Progresso' },
-  { key: 'done', label: 'Concluído' },
-]
-const ORDER = COLUMNS.map((c) => c.key)
-const PRIORITY_CLASS = { Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
-const PRIORITY_RANK = { Alta: 0, Média: 1, Baixa: 2 }
+const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
+const PRIORITY_RANK  = { Urgente: 0, Alta: 1, Média: 2, Baixa: 3 }
 
 const formatDate = (iso) => {
   if (!iso) return ''
@@ -36,7 +31,7 @@ const dueState = (due_date) => {
 
 const sortTasks = (list) =>
   list.slice().sort((a, b) => {
-    const rankDiff = (PRIORITY_RANK[a.priority] ?? 1) - (PRIORITY_RANK[b.priority] ?? 1)
+    const rankDiff = (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2)
     if (rankDiff !== 0) return rankDiff
     if (a.due_date && b.due_date) return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
     if (a.due_date) return -1
@@ -44,7 +39,90 @@ const sortTasks = (list) =>
     return 0
   })
 
-export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onUpdate, onDelete }) {
+// ─── Botão "+ Adicionar grupo" ─────────────────────────────────────────────────
+function AddGroupButton({ onAdd }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [loading, setLoading] = useState(false)
+  const inputRef = useRef(null)
+  const formRef = useRef(null)
+
+  // Foca o input quando entra no modo de edição
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
+
+  // Cancela ao clicar fora do formulário
+  useEffect(() => {
+    if (!editing) return
+    const handler = (e) => {
+      if (formRef.current && !formRef.current.contains(e.target)) cancel()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [editing])
+
+  const cancel = () => {
+    setEditing(false)
+    setValue('')
+  }
+
+  const confirm = async () => {
+    const trimmed = value.trim()
+    if (!trimmed) { cancel(); return }
+    setLoading(true)
+    try {
+      await onAdd(trimmed)
+    } finally {
+      setLoading(false)
+      cancel()
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') confirm()
+    if (e.key === 'Escape') cancel()
+  }
+
+  if (!editing) {
+    return (
+      <button className="add-group-btn" onClick={() => setEditing(true)}>
+        <IconPlus size={14} />
+        Adicionar grupo
+      </button>
+    )
+  }
+
+  return (
+    <div className="add-group-form" ref={formRef}>
+      <input
+        ref={inputRef}
+        className="add-group-input"
+        value={value}
+        placeholder="Nome do status..."
+        maxLength={40}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        disabled={loading}
+      />
+      <div className="add-group-actions">
+        <button
+          className="add-group-confirm"
+          onClick={confirm}
+          disabled={loading || !value.trim()}
+        >
+          {loading ? 'Criando…' : 'Criar'}
+        </button>
+        <button className="add-group-cancel" onClick={cancel} disabled={loading} title="Cancelar (Esc)">
+          <IconClose size={13} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Componente principal ──────────────────────────────────────────────────────
+export default function Kanban({ tasks, members, currentUser, columns, onAdd, onMove, onUpdate, onDelete, onAddColumn }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('Média')
@@ -52,8 +130,11 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
   const [assignedTo, setAssignedTo] = useState(currentUser?.id || '')
   const [dragId, setDragId] = useState(null)
   const [overColumn, setOverColumn] = useState(null)
-  const [detailTask, setDetailTask] = useState(null)
-  const [descDraft, setDescDraft] = useState('')
+  // Armazena apenas o ID para que o modal sempre leia os dados mais recentes de `tasks`
+  const [detailTaskId, setDetailTaskId] = useState(null)
+
+  // Ordem dos keys para as setas de navegação dos cards
+  const ORDER = columns.map((c) => c.key)
 
   const isGestor = currentUser?.role === 'gestor'
   const memberName = (id) => members.find((m) => m.id === id)?.name || 'Sem responsável'
@@ -67,16 +148,6 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
     setDescription('')
   }
 
-  const openDetail = (task) => {
-    setDetailTask(task)
-    setDescDraft(task.description || '')
-  }
-
-  const saveDescription = () => {
-    onUpdate(detailTask.id, { description: descDraft })
-    setDetailTask({ ...detailTask, description: descDraft })
-  }
-
   const step = (task, direction) => {
     const next = ORDER[ORDER.indexOf(task.column_key) + direction]
     if (next) onMove(task.id, next)
@@ -88,14 +159,9 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
     setDragId(null)
   }
 
-  const removeTask = (id) => {
-    if (!confirm('Excluir esta tarefa?')) return
-    onDelete(id)
-    setDetailTask(null)
-  }
-
   return (
     <div className="panel">
+      {/* ── Formulário de criação de tarefa ── */}
       <form className="task-form" onSubmit={submit}>
         <input
           type="text"
@@ -107,6 +173,7 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
           <option value="Baixa">Prioridade: Baixa</option>
           <option value="Média">Prioridade: Média</option>
           <option value="Alta">Prioridade: Alta</option>
+          <option value="Urgente">Prioridade: Urgente</option>
         </select>
         <input
           type="date"
@@ -117,9 +184,7 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
         {isGestor && (
           <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
             {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
+              <option key={m.id} value={m.id}>{m.name}</option>
             ))}
           </select>
         )}
@@ -135,30 +200,32 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
           <span>Adicionar</span>
         </button>
       </form>
+
+      {/* ── Board de colunas dinâmicas ── */}
       <div className="kanban">
-        {COLUMNS.map((col) => {
+        {columns.map((col) => {
           const colTasks = sortTasks(tasks.filter((t) => t.column_key === col.key))
           return (
             <div className={`column column-${col.key}`} key={col.key}>
               <h4>
                 <span className="column-title">
-                  <span className={`column-dot dot-${col.key}`} />
+                  {/* Dot colorido dinamicamente — compatível com colunas padrão e customizadas */}
+                  <span className="column-dot" style={{ background: col.color }} />
                   {col.label}
                 </span>
                 <span className="count">{colTasks.length}</span>
               </h4>
               <div
                 className={`dropzone${overColumn === col.key ? ' drag-over' : ''}`}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setOverColumn(col.key)
-                }}
+                onDragOver={(e) => { e.preventDefault(); setOverColumn(col.key) }}
                 onDragLeave={() => setOverColumn(null)}
                 onDrop={() => drop(col.key)}
               >
                 {colTasks.length === 0 && <div className="empty-hint">Solte cartões aqui</div>}
                 {colTasks.map((task) => {
                   const due = dueState(task.due_date)
+                  const isDone = task.column_key === 'done'
+                  const initials = memberName(task.assigned_to).charAt(0).toUpperCase()
                   return (
                     <div
                       className={`card ${PRIORITY_CLASS[task.priority] || 'p-media'}${dragId === task.id ? ' dragging' : ''}`}
@@ -166,57 +233,71 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
                       draggable
                       onDragStart={() => setDragId(task.id)}
                       onDragEnd={() => setDragId(null)}
-                      onClick={() => openDetail(task)}
+                      onClick={() => setDetailTaskId(task.id)}
                     >
+                      {/* ── Badge de prioridade ── */}
                       <div className="card-top">
                         <small className={`priority-tag ${PRIORITY_CLASS[task.priority] || 'p-media'}`}>
                           {task.priority}
                         </small>
-                        <button
-                          className="icon-btn success"
-                          title="Concluir tarefa"
-                          disabled={task.column_key === 'done'}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onMove(task.id, 'done')
-                          }}
-                        >
-                          <IconCheckPlain size={15} />
-                        </button>
                       </div>
-                      <h5>{task.title}</h5>
-                      {task.description && <p className="card-description">{task.description}</p>}
-                      {(task.due_date || task.assigned_to) && (
-                        <div className="card-meta">
-                          {task.due_date && (
-                            <span className={`due-tag due-${due}`}>Prazo: {formatDate(task.due_date)}</span>
-                          )}
-                          {task.assigned_to && <span className="assignee-tag">{memberName(task.assigned_to)}</span>}
-                        </div>
+
+                      {/* ── Círculo de conclusão + título ── */}
+                      <div className="card-title-row">
+                        <button
+                          className={`card-complete-btn${isDone ? ' is-done' : ''}`}
+                          title={isDone ? 'Tarefa concluída' : 'Marcar como concluída'}
+                          disabled={isDone}
+                          onClick={(e) => { e.stopPropagation(); onMove(task.id, 'done') }}
+                        >
+                          {isDone && <IconCheckPlain size={9} />}
+                        </button>
+                        <h5>{task.title}</h5>
+                      </div>
+
+                      {/* ── Descrição (max 2 linhas) ── */}
+                      {task.description && (
+                        <p className="card-description">{task.description}</p>
                       )}
-                      <div className="card-actions">
-                        <button
-                          className="icon-btn"
-                          title="Voltar coluna"
-                          disabled={task.column_key === 'todo'}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            step(task, -1)
-                          }}
-                        >
-                          <IconArrowLeft size={15} />
-                        </button>
-                        <button
-                          className="icon-btn"
-                          title="Avançar coluna"
-                          disabled={task.column_key === 'done'}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            step(task, 1)
-                          }}
-                        >
-                          <IconArrowRight size={15} />
-                        </button>
+
+                      {/* ── Rodapé: prazo | setas (hover) + avatar ── */}
+                      <div className="card-footer">
+                        {task.due_date ? (
+                          <span className={`due-tag due-${due}`}>
+                            <IconCalendar size={10} />
+                            {formatDate(task.due_date)}
+                          </span>
+                        ) : <span />}
+
+                        <div className="card-footer-end">
+                          <div className="card-nav-arrows">
+                            <button
+                              className="icon-btn"
+                              title="Voltar coluna"
+                              disabled={task.column_key === ORDER[0]}
+                              onClick={(e) => { e.stopPropagation(); step(task, -1) }}
+                            >
+                              <IconArrowLeft size={13} />
+                            </button>
+                            <button
+                              className="icon-btn"
+                              title="Avançar coluna"
+                              disabled={task.column_key === ORDER[ORDER.length - 1]}
+                              onClick={(e) => { e.stopPropagation(); step(task, 1) }}
+                            >
+                              <IconArrowRight size={13} />
+                            </button>
+                          </div>
+
+                          {task.assigned_to && (
+                            <div
+                              className="assignee-avatar"
+                              title={memberName(task.assigned_to)}
+                            >
+                              {initials}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )
@@ -225,62 +306,28 @@ export default function Kanban({ tasks, members, currentUser, onAdd, onMove, onU
             </div>
           )
         })}
+
+        {/* ── Botão "+ Adicionar grupo" ── */}
+        <AddGroupButton onAdd={onAddColumn} />
       </div>
 
-      {detailTask && (
-        <div className="modal-backdrop" onClick={() => setDetailTask(null)}>
-          <div className="modal task-detail" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{detailTask.title}</h3>
-              <button className="icon-btn" onClick={() => setDetailTask(null)}>
-                <IconClose size={16} />
-              </button>
-            </div>
-            <div className="task-detail-rows">
-              <div className="task-detail-row">
-                <span>Prioridade</span>
-                <strong className={PRIORITY_CLASS[detailTask.priority] || 'p-media'}>
-                  {detailTask.priority}
-                </strong>
-              </div>
-              <div className="task-detail-row">
-                <span>Criada em</span>
-                <strong>{formatDate(detailTask.created_at)}</strong>
-              </div>
-              <div className="task-detail-row">
-                <span>Prazo de entrega</span>
-                <strong>{detailTask.due_date ? formatDate(detailTask.due_date) : 'Sem prazo definido'}</strong>
-              </div>
-              <div className="task-detail-row">
-                <span>Responsável</span>
-                <strong>{memberName(detailTask.assigned_to)}</strong>
-              </div>
-              <div className="task-detail-row">
-                <span>Status</span>
-                <strong>{COLUMNS.find((c) => c.key === detailTask.column_key)?.label}</strong>
-              </div>
-            </div>
-            <div className="task-detail-description">
-              <span>Descrição</span>
-              <textarea
-                rows={4}
-                placeholder="Adicione detalhes, contexto ou links..."
-                value={descDraft}
-                onChange={(e) => setDescDraft(e.target.value)}
-              />
-              {descDraft !== (detailTask.description || '') && (
-                <button className="secondary" onClick={saveDescription}>
-                  Salvar descrição
-                </button>
-              )}
-            </div>
-            <button className="secondary danger-text" onClick={() => removeTask(detailTask.id)}>
-              <IconTrash size={15} />
-              <span>Excluir tarefa</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── Modal de detalhes da tarefa ── */}
+      {detailTaskId && (() => {
+        const detailTask = tasks.find((t) => t.id === detailTaskId)
+        if (!detailTask) return null
+        return (
+          <TaskDetailModal
+            task={detailTask}
+            members={members}
+            currentUser={currentUser}
+            columns={columns}
+            onClose={() => setDetailTaskId(null)}
+            onUpdate={onUpdate}
+            onMove={onMove}
+            onDelete={onDelete}
+          />
+        )
+      })()}
     </div>
   )
 }

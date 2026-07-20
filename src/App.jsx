@@ -1,11 +1,33 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, getAuth, setAuth } from './api.js'
+
+// Colunas padrão — usadas como fallback antes de qualquer persistência
+const DEFAULT_COLUMNS = [
+  { id: 'col-todo',  key: 'todo',  label: 'A Fazer',       position: 0, color: '#9ca3af' },
+  { id: 'col-doing', key: 'doing', label: 'Em Progresso',  position: 1, color: '#14b8c4' },
+  { id: 'col-done',  key: 'done',  label: 'Concluído',     position: 2, color: '#2ec27e' },
+]
+
+// Paleta de cores para novas colunas (evita conflito com as 3 padrão)
+const EXTRA_COLORS = ['#a855f7', '#f2a93b', '#e85d75', '#4f8ff7', '#f97316', '#0ea5e9', '#ec4899']
+
+const colsLsKey = (uid) => `fb_cols_${uid}`
+
+// Gera um slug URL-safe + sufixo único baseado em timestamp
+const toColKey = (label) => {
+  const slug = label
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'col'
+  return `${slug}-${Date.now().toString(36)}`
+}
 import Login from './components/Login.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Kanban from './components/Kanban.jsx'
 import Calendar from './components/Calendar.jsx'
 import NotesView from './components/NotesView.jsx'
-import MediaPanel from './components/MediaPanel.jsx'
+import DocumentsView from './components/DocumentsView.jsx'
 import Checklist from './components/Checklist.jsx'
 import TeamView from './components/TeamView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
@@ -14,7 +36,7 @@ import {
   IconKanban,
   IconCalendar,
   IconNotes,
-  IconMedia,
+  IconFolder,
   IconCheck,
   IconRefresh,
   IconTeam,
@@ -26,7 +48,7 @@ const VIEWS = [
   { key: 'kanban', label: 'Kanban', icon: IconKanban, title: 'Kanban de tarefas', subtitle: 'Organize o fluxo de trabalho arrastando os cartões' },
   { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
-  { key: 'midia', label: 'Mídia', icon: IconMedia, title: 'Imagens e vídeos', subtitle: 'Galeria de fotos e documentos por cliente' },
+  { key: 'midia', label: 'Documentações', icon: IconFolder, title: 'Documentações', subtitle: 'Pastas coloridas com os documentos da empresa' },
   { key: 'checklist', label: 'Checklist', icon: IconCheck, title: 'Checklist rápido', subtitle: 'Acompanhamento operacional do dia a dia' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
 ]
@@ -42,6 +64,19 @@ export default function App() {
   const [online, setOnline] = useState(true)
   const [toast, setToast] = useState('')
   const [kanbanDraft, setKanbanDraft] = useState(null)
+  const [targetFolderId, setTargetFolderId] = useState(null)
+  const [targetNoteId, setTargetNoteId] = useState(null)
+
+  // Colunas do Kanban — inicializa do localStorage; sincroniza com a API quando disponível
+  const [columns, setColumns] = useState(() => {
+    const auth = getAuth()
+    if (!auth?.user?.id) return DEFAULT_COLUMNS
+    try {
+      const saved = JSON.parse(localStorage.getItem(colsLsKey(auth.user.id)) || 'null')
+      if (Array.isArray(saved) && saved.length > 0) return saved
+    } catch {}
+    return DEFAULT_COLUMNS
+  })
 
   const showToast = (msg) => {
     setToast(msg)
@@ -72,6 +107,19 @@ export default function App() {
     } finally {
       setLoading(false)
     }
+
+    // Tenta carregar colunas da API (tabela pode não existir ainda — falha silenciosa)
+    api.getColumns()
+      .then((cols) => {
+        if (Array.isArray(cols) && cols.length > 0) {
+          setColumns(cols)
+          const auth = getAuth()
+          if (auth?.user?.id) {
+            localStorage.setItem(colsLsKey(auth.user.id), JSON.stringify(cols))
+          }
+        }
+      })
+      .catch(() => { /* tabela ainda não criada — usa localStorage/padrão */ })
   }, [])
 
   useEffect(() => {
@@ -91,6 +139,23 @@ export default function App() {
     setTasks([])
     setNotes([])
     setTodos([])
+  }
+
+  // ---- colunas ----
+  const addColumn = (label) => {
+    const key = toColKey(label)
+    const color = EXTRA_COLORS[columns.length % EXTRA_COLORS.length]
+    const newCol = { id: `col-${key}`, key, label: label.trim(), position: columns.length, color }
+
+    setColumns((prev) => {
+      const next = [...prev, newCol]
+      const auth = getAuth()
+      if (auth?.user?.id) localStorage.setItem(colsLsKey(auth.user.id), JSON.stringify(next))
+      return next
+    })
+
+    // Tenta sincronizar com o banco — silencioso se a tabela ainda não existir
+    api.createColumn(newCol.label, key, newCol.position, color).catch(() => {})
   }
 
   // ---- tarefas ----
@@ -169,6 +234,24 @@ export default function App() {
     })
   }
 
+  const linkNoteFolder = (id, folderId) =>
+    api
+      .updateNoteFolder(id, folderId)
+      .then((n) => setNotes((prev) => prev.map((x) => (x.id === id ? n : x))))
+      .catch(handleError)
+
+  // Navega para a aba Documentações já com a pasta indicada aberta/selecionada
+  const navigateToFolder = (folderId) => {
+    setTargetFolderId(folderId)
+    setView('midia')
+  }
+
+  // Navega para a aba Notas já com a nota indicada selecionada
+  const navigateToNote = (noteId) => {
+    setTargetNoteId(noteId)
+    setView('notas')
+  }
+
   // ---- checklist ----
   const addTodo = (text, priority, due_at) =>
     api
@@ -207,14 +290,27 @@ export default function App() {
             tasks={tasks}
             members={members}
             currentUser={user}
+            columns={columns}
             onAdd={addTask}
             onMove={moveTask}
             onUpdate={updateTask}
             onDelete={deleteTask}
+            onAddColumn={addColumn}
           />
         )
       case 'calendario':
-        return <Calendar tasks={tasks} members={members} currentUser={user} onAdd={addTask} />
+        return (
+          <Calendar
+            tasks={tasks}
+            members={members}
+            currentUser={user}
+            columns={columns}
+            onAdd={addTask}
+            onUpdate={updateTask}
+            onMove={moveTask}
+            onDelete={deleteTask}
+          />
+        )
       case 'notas':
         return (
           <NotesView
@@ -223,10 +319,22 @@ export default function App() {
             onSave={saveNote}
             onDelete={deleteNote}
             onSendToKanban={openSendToKanban}
+            onLinkFolder={linkNoteFolder}
+            onNavigateToFolder={navigateToFolder}
+            targetNoteId={targetNoteId}
+            onConsumeNoteTarget={() => setTargetNoteId(null)}
           />
         )
       case 'midia':
-        return <MediaPanel onError={handleError} />
+        return (
+          <DocumentsView
+            onError={handleError}
+            targetFolderId={targetFolderId}
+            onConsumeTarget={() => setTargetFolderId(null)}
+            onOpenNote={navigateToNote}
+            onUnlinkNote={(id) => linkNoteFolder(id, null)}
+          />
+        )
       case 'checklist':
         return (
           <Checklist
@@ -241,7 +349,19 @@ export default function App() {
         return isGestor ? <TeamView onError={handleError} /> : null
       default:
         return (
-          <Dashboard tasks={tasks} todos={todos} notes={notes} onNavigate={setView} />
+          <Dashboard
+            tasks={tasks}
+            todos={todos}
+            notes={notes}
+            members={members}
+            currentUser={user}
+            columns={columns}
+            onNavigate={setView}
+            onCreateTask={() => openSendToKanban('', '')}
+            onUpdateTask={updateTask}
+            onMoveTask={moveTask}
+            onDeleteTask={deleteTask}
+          />
         )
     }
   }
@@ -289,7 +409,7 @@ export default function App() {
         </button>
         <div className="footer-note">fourbase workspace</div>
       </aside>
-      <main className="main">
+      <main className={`main${view === 'calendario' ? ' main-full' : ''}`}>
         <section className="topbar">
           <div>
             <h2>{current.title}</h2>

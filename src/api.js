@@ -62,6 +62,7 @@ export const api = {
 
   // membros
   getMembers: () => request('/api/members'),
+  deleteMember: (id) => request(`/api/members/${id}`, { method: 'DELETE' }),
 
   // notas
   getNotes: () => request('/api/notes'),
@@ -70,6 +71,8 @@ export const api = {
   updateNote: (id, title, content) =>
     request(`/api/notes/${id}`, { method: 'PUT', body: JSON.stringify({ title, content }) }),
   deleteNote: (id) => request(`/api/notes/${id}`, { method: 'DELETE' }),
+  updateNoteFolder: (id, folderId) =>
+    request(`/api/notes/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder_id: folderId }) }),
 
   // checklist
   getTodos: () => request('/api/todos'),
@@ -81,20 +84,29 @@ export const api = {
     request(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
   deleteTodo: (id) => request(`/api/todos/${id}`, { method: 'DELETE' }),
 
+  // colunas do kanban
+  getColumns: () => request('/api/columns'),
+  createColumn: (label, key, position, color) =>
+    request('/api/columns', { method: 'POST', body: JSON.stringify({ label, key, position, color }) }),
+  deleteColumn: (key) => request(`/api/columns/${key}`, { method: 'DELETE' }),
+
   // equipe (gestor)
   getTeamOverview: () => request('/api/team/overview'),
   getTeamTasks: () => request('/api/team/tasks'),
 
-  // clientes
-  getClients: () => request('/api/clients'),
-  createClient: (name) => request('/api/clients', { method: 'POST', body: JSON.stringify({ name }) }),
-  deleteClient: (id) => request(`/api/clients/${id}`, { method: 'DELETE' }),
-  getClientMedia: (clientId) => request(`/api/clients/${clientId}/media`),
-  addClientMedia: (clientId, kind, url, name) =>
-    request(`/api/clients/${clientId}/media`, {
+  // pastas de documentos
+  getFolders: () => request('/api/folders'),
+  createFolder: (name, color, parentId = null) =>
+    request('/api/folders', { method: 'POST', body: JSON.stringify({ name, color, parent_id: parentId || null }) }),
+  updateFolder: (id, updates) =>
+    request(`/api/folders/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+  deleteFolder: (id) => request(`/api/folders/${id}`, { method: 'DELETE' }),
+  getFolderDocuments: (folderId) => request(`/api/folders/${folderId}/documents`),
+  addFolderDocument: (folderId, kind, url, name) =>
+    request(`/api/folders/${folderId}/documents`, {
       method: 'POST',
       body: JSON.stringify({ kind, url, name }),
     }),
-  deleteClientMedia: (clientId, mediaId) =>
-    request(`/api/clients/${clientId}/media/${mediaId}`, { method: 'DELETE' }),
+  deleteFolderDocument: (folderId, docId) =>
+    request(`/api/folders/${folderId}/documents/${docId}`, { method: 'DELETE' }),
 }

@@ -1,42 +1,90 @@
 import { useEffect, useRef, useState } from 'react'
-import { IconPlus, IconTrash, IconNotes, IconKanban } from '../icons.jsx'
+import {
+  IconPlus, IconTrash, IconNotes, IconKanban, IconCheckPlain,
+  IconBold, IconItalic, IconUnderline, IconStrikethrough,
+  IconList, IconListOrdered, IconQuote,
+  IconLink, IconCalendar, IconType,
+  IconHeading, IconParagraph,
+  IconFolderFilled, IconClose,
+} from '../icons.jsx'
+import { api } from '../api.js'
+import { getPreview } from '../textPreview.js'
 
 const formatDate = (iso) => {
   const d = new Date(iso)
   return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
 }
 
-const stripHtml = (html) => {
-  const div = document.createElement('div')
-  div.innerHTML = html
-  return div.innerText.trim()
+// ─── Sub-componente: botão de ferramenta da toolbar ───────────────────────────
+function ToolBtn({ title, onClick, children }) {
+  return (
+    <button
+      className="toolbar-btn"
+      title={title}
+      onMouseDown={(e) => {
+        e.preventDefault() // evita perder o foco do editor
+        onClick()
+      }}
+    >
+      {children}
+    </button>
+  )
 }
 
-export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToKanban }) {
+// ─── Sub-componente: divisor da toolbar ───────────────────────────────────────
+function ToolDivider() {
+  return <span className="toolbar-divider" aria-hidden="true" />
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
+export default function NotesView({
+  notes, onCreate, onSave, onDelete, onSendToKanban, onLinkFolder, onNavigateToFolder,
+  targetNoteId, onConsumeNoteTarget,
+}) {
   const editorRef = useRef(null)
-  const [activeId, setActiveId] = useState(notes[0]?.id ?? null)
-  const [title, setTitle] = useState('')
-  const [dirty, setDirty] = useState(false)
-  const [saving, setSaving] = useState(false)
+  // Se chegamos aqui vindos de um documento relacionado (aba Documentações), abre direto naquela nota
+  const [activeId, setActiveId] = useState(() =>
+    targetNoteId && notes.some((n) => n.id === targetNoteId) ? targetNoteId : notes[0]?.id ?? null,
+  )
+  const [title, setTitle]         = useState('')
+  const [dirty, setDirty]         = useState(false)
+  const [saving, setSaving]       = useState(false)
   const [wordCount, setWordCount] = useState(0)
-  const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('recent')
+  const [search, setSearch]       = useState('')
+  const [sortBy, setSortBy]       = useState('recent')
+
+  // Pastas de Documentações (carregadas à parte, só para o seletor "Relacionar")
+  const [folders, setFolders]         = useState([])
+  const [relateOpen, setRelateOpen]   = useState(false)
+  const [relateSearch, setRelateSearch] = useState('')
+  const relateRef = useRef(null)
 
   const active = notes.find((n) => n.id === activeId) || null
+  const linkedFolder = active?.folder_id ? folders.find((f) => f.id === active.folder_id) || null : null
+
+  // Caminho "Pai › Filho" de uma pasta, usada na lista de seleção
+  const folderPath = (id) => {
+    const parts = []
+    let cur = folders.find((f) => f.id === id)
+    while (cur) {
+      parts.unshift(cur.name)
+      cur = folders.find((f) => f.id === cur.parent_id) || null
+    }
+    return parts.join(' › ')
+  }
 
   const visibleNotes = notes
     .filter((n) => {
       if (!search.trim()) return true
       const q = search.trim().toLowerCase()
-      return n.title.toLowerCase().includes(q) || stripHtml(n.content).toLowerCase().includes(q)
+      return n.title.toLowerCase().includes(q) || getPreview(n.content).toLowerCase().includes(q)
     })
     .sort((a, b) => {
-      if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '')
+      if (sortBy === 'title')  return (a.title || '').localeCompare(b.title || '')
       if (sortBy === 'oldest') return new Date(a.updated_at) - new Date(b.updated_at)
       return new Date(b.updated_at) - new Date(a.updated_at)
     })
 
-  // carrega a nota ativa no editor
   useEffect(() => {
     setTitle(active?.title || '')
     if (editorRef.current) editorRef.current.innerHTML = active?.content || ''
@@ -44,12 +92,36 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
     updateCount()
   }, [activeId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // se a nota ativa sumiu (excluída) ou não há seleção, seleciona a primeira
   useEffect(() => {
     if (!notes.find((n) => n.id === activeId)) {
       setActiveId(notes[0]?.id ?? null)
     }
   }, [notes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Carrega as pastas de Documentações uma vez — usadas no badge e no seletor "Relacionar"
+  useEffect(() => {
+    api.getFolders().then(setFolders).catch(() => {})
+  }, [])
+
+  // Consome o alvo de navegação vindo de Documentações (só precisa disparar uma vez, ao montar)
+  useEffect(() => {
+    if (targetNoteId) onConsumeNoteTarget?.()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fecha o seletor de pastas ao clicar fora ou pressionar ESC
+  useEffect(() => {
+    if (!relateOpen) return
+    const handleClick = (e) => {
+      if (relateRef.current && !relateRef.current.contains(e.target)) setRelateOpen(false)
+    }
+    const handleKey = (e) => { if (e.key === 'Escape') setRelateOpen(false) }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [relateOpen])
 
   const updateCount = () => {
     const text = editorRef.current?.innerText || ''
@@ -69,7 +141,7 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
 
   const selectNote = async (id) => {
     if (id === activeId) return
-    if (dirty) await save() // salva silenciosamente antes de trocar
+    if (dirty) await save()
     setActiveId(id)
   }
 
@@ -84,6 +156,21 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
     onDelete(id)
   }
 
+  const linkFolder = (folderId) => {
+    setRelateOpen(false)
+    setRelateSearch('')
+    if (active) onLinkFolder(active.id, folderId)
+  }
+
+  const unlinkFolder = () => {
+    if (active) onLinkFolder(active.id, null)
+  }
+
+  const relateResults = folders.filter((f) =>
+    f.name.toLowerCase().includes(relateSearch.trim().toLowerCase()),
+  )
+
+  // execCommand com foco garantido; onMouseDown nos ToolBtn já previne blur
   const exec = (cmd, value = null) => {
     editorRef.current?.focus()
     document.execCommand(cmd, false, value)
@@ -107,6 +194,7 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
 
   return (
     <div className="notes-layout">
+      {/* ══ Sidebar de notas ══════════════════════════════════════════════════ */}
       <aside className="notes-list panel">
         <div className="notes-list-header">
           <h3>Suas notas</h3>
@@ -114,6 +202,7 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
             <IconPlus size={16} />
           </button>
         </div>
+
         <div className="notes-filters">
           <input
             type="text"
@@ -127,15 +216,16 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
             <option value="title">Título A-Z</option>
           </select>
         </div>
+
         <div className="notes-items">
           {notes.length === 0 && (
             <div className="empty-hint">Nenhuma nota — crie a primeira.</div>
           )}
           {notes.length > 0 && visibleNotes.length === 0 && (
-            <div className="empty-hint">Nenhuma nota encontrada para esse filtro.</div>
+            <div className="empty-hint">Nenhuma nota encontrada.</div>
           )}
           {visibleNotes.map((n) => {
-            const preview = stripHtml(n.content).slice(0, 64)
+            const preview = getPreview(n.content)
             return (
               <div
                 key={n.id}
@@ -153,7 +243,7 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
                     title="Enviar para o Kanban"
                     onClick={(e) => {
                       e.stopPropagation()
-                      onSendToKanban(n.title || 'Sem título', stripHtml(n.content))
+                      onSendToKanban(n.title || 'Sem título', getPreview(n.content))
                     }}
                   >
                     <IconKanban size={14} />
@@ -175,96 +265,185 @@ export default function NotesView({ notes, onCreate, onSave, onDelete, onSendToK
         </div>
       </aside>
 
+      {/* ══ Painel de edição ════════════════════════════════════════════════ */}
       {active ? (
         <div className="panel editor-panel" onKeyDown={onKeyDown}>
-          <input
-            className="note-title"
-            type="text"
-            placeholder="Título da nota"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value)
-              setDirty(true)
-            }}
-          />
-          <div className="notes-toolbar">
-            <div className="toolbar-group">
-              <button className="secondary" title="Título" onClick={() => exec('formatBlock', 'H2')}>
-                H2
+
+          {/* ── Cabeçalho: título + relacionar pasta + botão Virar tarefa ── */}
+          <div className="editor-panel-header">
+            <input
+              className="note-title"
+              type="text"
+              placeholder="Título da nota…"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                setDirty(true)
+              }}
+            />
+
+            {linkedFolder ? (
+              <button
+                className="note-folder-badge"
+                style={{ '--folder-color': linkedFolder.color }}
+                title={`Ir para a pasta "${linkedFolder.name}" em Documentações`}
+                onClick={() => onNavigateToFolder(linkedFolder.id)}
+              >
+                <IconFolderFilled size={13} style={{ color: linkedFolder.color }} />
+                <span>{linkedFolder.name}</span>
+                <span
+                  className="note-folder-badge-x"
+                  title="Remover relação"
+                  onClick={(e) => { e.stopPropagation(); unlinkFolder() }}
+                >
+                  <IconClose size={11} />
+                </span>
               </button>
-              <button className="secondary" title="Parágrafo" onClick={() => exec('formatBlock', 'P')}>
-                ¶
-              </button>
-            </div>
-            <div className="toolbar-group">
-              <button className="secondary" title="Negrito (Ctrl+B)" onClick={() => exec('bold')}>
-                <b>B</b>
-              </button>
-              <button className="secondary" title="Itálico (Ctrl+I)" onClick={() => exec('italic')}>
-                <i>I</i>
-              </button>
-              <button className="secondary" title="Sublinhado" onClick={() => exec('underline')}>
-                <u>U</u>
-              </button>
-              <button className="secondary" title="Tachado" onClick={() => exec('strikeThrough')}>
-                <s>S</s>
-              </button>
-            </div>
-            <div className="toolbar-group">
-              <button className="secondary" title="Lista" onClick={() => exec('insertUnorderedList')}>
-                • Lista
-              </button>
-              <button className="secondary" title="Lista numerada" onClick={() => exec('insertOrderedList')}>
-                1. Lista
-              </button>
-              <button className="secondary" title="Citação" onClick={() => exec('formatBlock', 'BLOCKQUOTE')}>
-                ❝
-              </button>
-            </div>
-            <div className="toolbar-group">
-              <button className="secondary" title="Inserir link" onClick={insertLink}>
-                Link
-              </button>
-              <button className="secondary" title="Inserir data de hoje" onClick={insertDate}>
-                Data
-              </button>
-              <button className="secondary" title="Limpar formatação" onClick={() => exec('removeFormat')}>
-                Tx
-              </button>
-            </div>
-            <span className="toolbar-spacer" />
+            ) : (
+              <div className="relate-wrap" ref={relateRef}>
+                <button
+                  className="btn-relate"
+                  title="Relacionar esta nota a uma pasta de Documentações"
+                  onClick={() => setRelateOpen((v) => !v)}
+                >
+                  <IconLink size={14} />
+                  Relacionar
+                </button>
+                {relateOpen && (
+                  <div className="relate-popover">
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="Buscar pasta..."
+                      value={relateSearch}
+                      onChange={(e) => setRelateSearch(e.target.value)}
+                    />
+                    <div className="relate-list">
+                      {relateResults.length === 0 && (
+                        <div className="empty-hint">Nenhuma pasta encontrada.</div>
+                      )}
+                      {relateResults.map((f) => (
+                        <button key={f.id} className="relate-item" onClick={() => linkFolder(f.id)}>
+                          <IconFolderFilled size={15} style={{ color: f.color }} />
+                          <span className="relate-item-name">{f.name}</span>
+                          {f.parent_id && (
+                            <small className="relate-item-path">{folderPath(f.parent_id)}</small>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
-              className="secondary"
-              title="Enviar para o Kanban"
+              className="btn-to-kanban"
+              title="Criar tarefa no Kanban a partir desta nota"
               onClick={() =>
                 onSendToKanban(title.trim() || 'Sem título', editorRef.current?.innerText.trim() || '')
               }
             >
-              <IconKanban size={15} />
-              <span>Virar tarefa</span>
-            </button>
-            <button className={dirty ? '' : 'secondary'} disabled={saving} onClick={save}>
-              {saving ? 'Salvando...' : dirty ? 'Salvar' : 'Salvo ✓'}
+              <IconKanban size={14} />
+              Virar tarefa
             </button>
           </div>
+
+          {/* ── Toolbar com ícones ── */}
+          <div className="notes-toolbar" role="toolbar" aria-label="Formatação">
+
+            {/* Bloco 1: Bloco de texto */}
+            <div className="toolbar-group">
+              <ToolBtn title="Título (H2)" onClick={() => exec('formatBlock', 'H2')}>
+                <IconHeading size={15} />
+              </ToolBtn>
+              <ToolBtn title="Parágrafo" onClick={() => exec('formatBlock', 'P')}>
+                <IconParagraph size={15} />
+              </ToolBtn>
+            </div>
+
+            <ToolDivider />
+
+            {/* Bloco 2: Estilo inline */}
+            <div className="toolbar-group">
+              <ToolBtn title="Negrito (Ctrl+B)" onClick={() => exec('bold')}>
+                <IconBold size={15} />
+              </ToolBtn>
+              <ToolBtn title="Itálico (Ctrl+I)" onClick={() => exec('italic')}>
+                <IconItalic size={15} />
+              </ToolBtn>
+              <ToolBtn title="Sublinhado (Ctrl+U)" onClick={() => exec('underline')}>
+                <IconUnderline size={15} />
+              </ToolBtn>
+              <ToolBtn title="Tachado" onClick={() => exec('strikeThrough')}>
+                <IconStrikethrough size={15} />
+              </ToolBtn>
+            </div>
+
+            <ToolDivider />
+
+            {/* Bloco 3: Listas e citação */}
+            <div className="toolbar-group">
+              <ToolBtn title="Lista de marcadores" onClick={() => exec('insertUnorderedList')}>
+                <IconList size={15} />
+              </ToolBtn>
+              <ToolBtn title="Lista numerada" onClick={() => exec('insertOrderedList')}>
+                <IconListOrdered size={15} />
+              </ToolBtn>
+              <ToolBtn title="Citação" onClick={() => exec('formatBlock', 'BLOCKQUOTE')}>
+                <IconQuote size={15} />
+              </ToolBtn>
+            </div>
+
+            <ToolDivider />
+
+            {/* Bloco 4: Links e extras */}
+            <div className="toolbar-group">
+              <ToolBtn title="Inserir link" onClick={insertLink}>
+                <IconLink size={15} />
+              </ToolBtn>
+              <ToolBtn title="Inserir data de hoje" onClick={insertDate}>
+                <IconCalendar size={15} />
+              </ToolBtn>
+              <ToolBtn title="Limpar formatação" onClick={() => exec('removeFormat')}>
+                <IconType size={15} />
+              </ToolBtn>
+            </div>
+          </div>
+
+          {/* ── Área do editor ── */}
           <div
             ref={editorRef}
             className="editor"
             contentEditable
             suppressContentEditableWarning
-            data-placeholder="Escreva ideias, observações, links, decisões e documentação interna da fourbase..."
+            data-placeholder="Escreva ideias, observações, links, decisões e documentação interna…"
             onInput={() => {
               setDirty(true)
               updateCount()
             }}
           />
+
+          {/* ── Rodapé: contagem + status salvo ── */}
           <div className="editor-footer">
-            <span>
+            <span className="editor-word-count">
               {wordCount} palavra{wordCount === 1 ? '' : 's'}
             </span>
-            <span>
-              {dirty ? 'Alterações não salvas · Ctrl+S para salvar' : `Atualizada em ${formatDate(active.updated_at)}`}
-            </span>
+            <div className="editor-footer-right">
+              {dirty ? (
+                <>
+                  <span className="editor-unsaved-hint">Ctrl+S para salvar</span>
+                  <button className="btn-save" disabled={saving} onClick={save}>
+                    {saving ? 'Salvando…' : 'Salvar'}
+                  </button>
+                </>
+              ) : (
+                <span className="editor-saved-badge">
+                  <IconCheckPlain size={11} />
+                  {saving ? 'Salvando…' : 'Alterações salvas'}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       ) : (

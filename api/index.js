@@ -157,6 +157,49 @@ app.get('/api/members', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
+app.delete('/api/members/:id', auth, gestorOnly, asyncRoute(async (req, res) => {
+  const { id } = req.params
+
+  // Impede auto-exclusão
+  if (req.user.id === id) {
+    return res.status(400).json({ error: 'Você não pode remover sua própria conta' })
+  }
+
+  // Verifica existência e protege gestores
+  const { data: target, error: fetchErr } = await supabase
+    .from('fourbase_users')
+    .select('role')
+    .eq('id', id)
+    .maybeSingle()
+  if (fetchErr) throw fetchErr
+  if (!target) return res.status(404).json({ error: 'Usuário não encontrado' })
+  if (target.role === 'gestor') {
+    return res.status(403).json({ error: 'Não é possível remover um Gestor' })
+  }
+
+  // Reatribui tarefas ao gestor que está realizando a ação (evita violação de FK)
+  const { error: taskAssignErr } = await supabase
+    .from('fourbase_tasks')
+    .update({ assigned_to: req.user.id })
+    .eq('assigned_to', id)
+  if (taskAssignErr) throw taskAssignErr
+
+  const { error: taskUserErr } = await supabase
+    .from('fourbase_tasks')
+    .update({ user_id: req.user.id })
+    .eq('user_id', id)
+  if (taskUserErr) throw taskUserErr
+
+  // Remove o usuário (outras tabelas limpas por CASCADE no Supabase)
+  const { error: deleteErr } = await supabase
+    .from('fourbase_users')
+    .delete()
+    .eq('id', id)
+  if (deleteErr) throw deleteErr
+
+  res.status(204).end()
+}))
+
 // ---------- Notas ----------
 app.get('/api/notes', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
@@ -200,6 +243,20 @@ app.delete('/api/notes/:id', auth, asyncRoute(async (req, res) => {
     .eq('user_id', req.user.id)
   if (error) throw error
   res.status(204).end()
+}))
+
+// Relaciona (ou desvincula, com folder_id = null) uma nota a uma pasta de Documentações
+app.patch('/api/notes/:id/folder', auth, asyncRoute(async (req, res) => {
+  const { folder_id } = req.body
+  const { data, error } = await supabase
+    .from('fourbase_notes')
+    .update({ folder_id: folder_id || null })
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id)
+    .select()
+    .single()
+  if (error) throw error
+  res.json(data)
 }))
 
 // ---------- Checklist ----------
@@ -290,63 +347,145 @@ app.delete('/api/media', auth, asyncRoute(async (req, res) => {
   res.status(204).end()
 }))
 
-// ---------- Clientes e mídia por cliente ----------
-app.get('/api/clients', auth, asyncRoute(async (req, res) => {
+// ---------- Pastas de documentos (hierárquicas) ----------
+//
+// Execute no Supabase SQL Editor para adicionar suporte a hierarquia:
+//
+//   ALTER TABLE fourbase_folders
+//     ADD COLUMN IF NOT EXISTS parent_id UUID
+//     REFERENCES fourbase_folders(id) ON DELETE CASCADE;
+//
+// Isso permite pastas dentro de pastas (estilo ClickUp).
+// A coluna é nullable — pastas raiz têm parent_id = NULL.
+
+app.get('/api/folders', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
-    .from('fourbase_clients')
+    .from('fourbase_folders')
     .select('*')
     .order('name')
   if (error) throw error
   res.json(data)
 }))
 
-app.post('/api/clients', auth, asyncRoute(async (req, res) => {
-  const { name } = req.body
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Nome do cliente obrigatório' })
+app.post('/api/folders', auth, asyncRoute(async (req, res) => {
+  const { name, color = '#14b8c4', parent_id = null } = req.body
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Nome da pasta obrigatório' })
   const { data, error } = await supabase
-    .from('fourbase_clients')
-    .insert({ name: name.trim(), created_by: req.user.id })
+    .from('fourbase_folders')
+    .insert({ name: name.trim(), color, parent_id: parent_id || null, created_by: req.user.id })
     .select()
     .single()
   if (error) throw error
   res.status(201).json(data)
 }))
 
-app.delete('/api/clients/:id', auth, asyncRoute(async (req, res) => {
-  const { error } = await supabase.from('fourbase_clients').delete().eq('id', req.params.id)
+app.patch('/api/folders/:id', auth, asyncRoute(async (req, res) => {
+  const { name, color, parent_id } = req.body
+  const updates = {}
+  if (name !== undefined && name.trim()) updates.name = name.trim()
+  if (color !== undefined) updates.color = color
+  if (parent_id !== undefined) updates.parent_id = parent_id || null
+  const { data, error } = await supabase
+    .from('fourbase_folders')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) throw error
+  res.json(data)
+}))
+
+app.delete('/api/folders/:id', auth, asyncRoute(async (req, res) => {
+  const { error } = await supabase.from('fourbase_folders').delete().eq('id', req.params.id)
   if (error) throw error
   res.status(204).end()
 }))
 
-app.get('/api/clients/:id/media', auth, asyncRoute(async (req, res) => {
+app.get('/api/folders/:id/documents', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
-    .from('fourbase_client_media')
+    .from('fourbase_folder_media')
     .select('*')
-    .eq('client_id', req.params.id)
+    .eq('folder_id', req.params.id)
     .order('created_at', { ascending: false })
   if (error) throw error
   res.json(data)
 }))
 
-app.post('/api/clients/:id/media', auth, asyncRoute(async (req, res) => {
+app.post('/api/folders/:id/documents', auth, asyncRoute(async (req, res) => {
   const { kind, url, name = '' } = req.body
   if (!['image', 'video', 'document'].includes(kind)) return res.status(400).json({ error: 'Tipo inválido' })
   if (!url) return res.status(400).json({ error: 'URL obrigatória' })
   const { data, error } = await supabase
-    .from('fourbase_client_media')
-    .insert({ client_id: req.params.id, kind, url, name, uploaded_by: req.user.id })
+    .from('fourbase_folder_media')
+    .insert({ folder_id: req.params.id, kind, url, name, uploaded_by: req.user.id })
     .select()
     .single()
   if (error) throw error
   res.status(201).json(data)
 }))
 
-app.delete('/api/clients/:clientId/media/:mediaId', auth, asyncRoute(async (req, res) => {
+app.delete('/api/folders/:folderId/documents/:docId', auth, asyncRoute(async (req, res) => {
   const { error } = await supabase
-    .from('fourbase_client_media')
+    .from('fourbase_folder_media')
     .delete()
-    .eq('id', req.params.mediaId)
-    .eq('client_id', req.params.clientId)
+    .eq('id', req.params.docId)
+    .eq('folder_id', req.params.folderId)
+  if (error) throw error
+  res.status(204).end()
+}))
+
+// ---------- Colunas do Kanban ----------
+// Para persistência no banco, execute no Supabase SQL Editor:
+//
+//   CREATE TABLE IF NOT EXISTS fourbase_columns (
+//     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//     key        TEXT NOT NULL UNIQUE,
+//     label      TEXT NOT NULL,
+//     position   INTEGER NOT NULL DEFAULT 0,
+//     color      TEXT NOT NULL DEFAULT '#14b8c4',
+//     created_at TIMESTAMPTZ DEFAULT NOW()
+//   );
+//   INSERT INTO fourbase_columns (key, label, position, color) VALUES
+//     ('todo',  'A Fazer',       0, '#9ca3af'),
+//     ('doing', 'Em Progresso',  1, '#14b8c4'),
+//     ('done',  'Concluído',     2, '#2ec27e')
+//   ON CONFLICT (key) DO NOTHING;
+//
+// Enquanto a tabela não existir, o frontend usa localStorage como fallback.
+
+app.get('/api/columns', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_columns')
+    .select('*')
+    .order('position', { ascending: true })
+  if (error) throw error
+  res.json(data)
+}))
+
+app.post('/api/columns', auth, asyncRoute(async (req, res) => {
+  const { label, key, position = 0, color = '#14b8c4' } = req.body
+  if (!label?.trim()) return res.status(400).json({ error: 'Nome da coluna obrigatório' })
+  if (!key?.trim())   return res.status(400).json({ error: 'Chave da coluna obrigatória' })
+  const { data, error } = await supabase
+    .from('fourbase_columns')
+    .insert({ label: label.trim(), key: key.trim(), position, color })
+    .select()
+    .single()
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Já existe uma coluna com essa chave' })
+    throw error
+  }
+  res.status(201).json(data)
+}))
+
+app.delete('/api/columns/:key', auth, asyncRoute(async (req, res) => {
+  if (['todo', 'doing', 'done'].includes(req.params.key)) {
+    return res.status(400).json({ error: 'Não é possível excluir colunas padrão' })
+  }
+  const { error } = await supabase
+    .from('fourbase_columns')
+    .delete()
+    .eq('key', req.params.key)
   if (error) throw error
   res.status(204).end()
 }))

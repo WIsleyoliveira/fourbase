@@ -1,6 +1,47 @@
-import { IconKanban, IconNotes, IconMedia, IconCheck, IconArrowRight } from '../icons.jsx'
+import { useEffect, useState } from 'react'
+import { IconKanban, IconNotes, IconFolder, IconCheck, IconArrowRight, IconPlus } from '../icons.jsx'
+import TaskDetailModal from './TaskDetailModal.jsx'
+import { api } from '../api.js'
 
-export default function Dashboard({ tasks, todos, notes, onNavigate }) {
+const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
+const MAX_UPCOMING = 4
+
+// Estado do prazo em relação a hoje — reaproveita a mesma lógica usada no Kanban
+const dueState = (due_date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const due = new Date(`${due_date}T00:00:00`)
+  const diffDays = Math.round((due - today) / 86400000)
+  if (diffDays < 0) return 'overdue'
+  if (diffDays === 0) return 'today'
+  return 'upcoming'
+}
+
+const dueLabel = (due_date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const due = new Date(`${due_date}T00:00:00`)
+  const diffDays = Math.round((due - today) / 86400000)
+  if (diffDays < 0) return `Atrasada ${Math.abs(diffDays)}d`
+  if (diffDays === 0) return 'Hoje'
+  if (diffDays === 1) return 'Amanhã'
+  return due.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
+export default function Dashboard({
+  tasks, todos, notes, members, currentUser, columns,
+  onNavigate, onCreateTask, onUpdateTask, onMoveTask, onDeleteTask,
+}) {
+  const [detailTaskId, setDetailTaskId] = useState(null)
+  // null = ainda carregando — mantém o widget com o mesmo layout enquanto busca
+  const [folderCount, setFolderCount] = useState(null)
+
+  useEffect(() => {
+    api.getFolders()
+      .then((list) => setFolderCount(list.length))
+      .catch(() => setFolderCount(0))
+  }, [])
+
   const counts = {
     todo: tasks.filter((t) => t.column_key === 'todo').length,
     doing: tasks.filter((t) => t.column_key === 'doing').length,
@@ -17,44 +58,64 @@ export default function Dashboard({ tasks, todos, notes, onNavigate }) {
     { label: 'Checklist', value: `${todosDone}/${todos.length}`, tone: 'brand' },
   ]
 
-  const shortcuts = [
-    {
-      key: 'kanban',
-      icon: <IconKanban size={22} />,
-      title: 'Kanban',
-      desc: `${tasks.length} tarefa${tasks.length === 1 ? '' : 's'} no quadro · ${taskProgress}% concluído`,
-    },
+  // Tarefas do usuário atual (a API já filtra por assigned_to), não concluídas, com prazo —
+  // ordenadas por vencimento mais próximo primeiro
+  const upcomingTasks = tasks
+    .filter((t) => t.column_key !== 'done' && t.due_date)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    .slice(0, MAX_UPCOMING)
+
+  const detailTask = detailTaskId ? tasks.find((t) => t.id === detailTaskId) : null
+  const latestNote = notes[0] || null
+
+  // Os 4 atalhos/widgets da coluna direita — mesma estrutura visual para todos,
+  // cada um mantendo seus próprios dados/contadores dinâmicos no subtítulo
+  const sideWidgets = [
     {
       key: 'notas',
-      icon: <IconNotes size={22} />,
+      icon: <IconNotes size={18} />,
       title: 'Notas',
-      desc: notes.length
-        ? `${notes.length} nota${notes.length === 1 ? '' : 's'} · última: "${notes[0].title}"`
+      subtitle: latestNote
+        ? `${notes.length} nota${notes.length === 1 ? '' : 's'} · última: "${latestNote.title || 'Sem título'}"`
         : 'Nenhuma nota criada ainda',
     },
     {
       key: 'midia',
-      icon: <IconMedia size={22} />,
-      title: 'Mídia',
-      desc: 'Fotos e documentos organizados por cliente',
+      icon: <IconFolder size={18} />,
+      title: 'Documentações',
+      subtitle: folderCount === null
+        ? 'Carregando...'
+        : `${folderCount} pasta${folderCount === 1 ? '' : 's'} criada${folderCount === 1 ? '' : 's'}`,
+    },
+    {
+      key: 'kanban',
+      icon: <IconKanban size={18} />,
+      title: 'Kanban',
+      subtitle: `${tasks.length} tarefa${tasks.length === 1 ? '' : 's'} · ${taskProgress}% concluído`,
     },
     {
       key: 'checklist',
-      icon: <IconCheck size={22} />,
+      icon: <IconCheck size={18} />,
       title: 'Checklist',
-      desc: todos.length ? `${todoProgress}% dos itens concluídos` : 'Nenhum item ainda',
+      subtitle: todos.length ? `${todosDone}/${todos.length} · ${todoProgress}% concluído` : 'Nenhum item ainda',
     },
   ]
 
   return (
     <div className="dashboard">
-      <div className="stats-grid">
-        {stats.map((s) => (
-          <div className={`stat-card tone-${s.tone}`} key={s.label}>
-            <span className="stat-value">{s.value}</span>
-            <span className="stat-label">{s.label}</span>
-          </div>
-        ))}
+      <div className="dashboard-header">
+        <div className="stats-grid">
+          {stats.map((s) => (
+            <div className={`stat-card tone-${s.tone}`} key={s.label}>
+              <span className="stat-value">{s.value}</span>
+              <span className="stat-label">{s.label}</span>
+            </div>
+          ))}
+        </div>
+        <button className="dashboard-create-btn" onClick={onCreateTask}>
+          <IconPlus size={16} />
+          Criar Tarefa
+        </button>
       </div>
 
       <div className="panel progress-panel">
@@ -70,20 +131,65 @@ export default function Dashboard({ tasks, todos, notes, onNavigate }) {
         </div>
       </div>
 
-      <div className="shortcut-grid">
-        {shortcuts.map((s) => (
-          <button className="shortcut-card" key={s.key} onClick={() => onNavigate(s.key)}>
-            <span className="shortcut-icon">{s.icon}</span>
-            <span className="shortcut-body">
-              <strong>{s.title}</strong>
-              <small>{s.desc}</small>
-            </span>
-            <span className="shortcut-arrow">
-              <IconArrowRight size={16} />
-            </span>
-          </button>
-        ))}
+      {/* Grid principal: prazos (2/3) + atalhos empilhados (1/3) — mesma altura, colunas simétricas */}
+      <div className="dashboard-grid">
+        <div className="panel upcoming-panel dashboard-grid-main">
+          <div className="panel-header">
+            <div>
+              <h3>Próximos prazos</h3>
+              <span>Suas tarefas com vencimento mais próximo</span>
+            </div>
+          </div>
+          <div className="upcoming-list">
+            {upcomingTasks.length === 0 && (
+              <div className="empty-hint">Nenhuma tarefa com prazo definido no momento.</div>
+            )}
+            {upcomingTasks.map((t) => (
+              <button
+                key={t.id}
+                className="upcoming-item"
+                onClick={() => setDetailTaskId(t.id)}
+              >
+                <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>
+                  {t.priority}
+                </span>
+                <span className="upcoming-item-title">{t.title}</span>
+                <span className={`due-tag due-${dueState(t.due_date)}`}>
+                  {dueLabel(t.due_date)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <aside className="dashboard-side">
+          {sideWidgets.map((w) => (
+            <button className="dashboard-widget" key={w.key} onClick={() => onNavigate(w.key)}>
+              <span className="dashboard-widget-left">
+                <span className="dashboard-widget-icon">{w.icon}</span>
+                <span className="dashboard-widget-text">
+                  <strong>{w.title}</strong>
+                  <small>{w.subtitle}</small>
+                </span>
+              </span>
+              <IconArrowRight size={15} className="dashboard-widget-arrow" />
+            </button>
+          ))}
+        </aside>
       </div>
+
+      {detailTask && (
+        <TaskDetailModal
+          task={detailTask}
+          members={members}
+          currentUser={currentUser}
+          columns={columns}
+          onClose={() => setDetailTaskId(null)}
+          onUpdate={onUpdateTask}
+          onMove={onMoveTask}
+          onDelete={onDeleteTask}
+        />
+      )}
     </div>
   )
 }
