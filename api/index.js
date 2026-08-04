@@ -4,8 +4,8 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uokpmlzdwnilqaujohov.supabase.co'
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_B3FzeCCWZTVQbTvw8lcueA_7gLHY9bN'
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uamjgaeawwkfdlrlpmfc.supabase.co'
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_RvGMiJo63JeC3euIiT9Iwg_dWSwuThZ'
 const JWT_SECRET = process.env.JWT_SECRET || 'fourbase-dev-secret-troque-em-producao'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
