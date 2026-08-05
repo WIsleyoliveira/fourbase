@@ -317,6 +317,20 @@ export const IconFolderFilled = (p) => (
   </Icon>
 )
 
+export const IconPaperclip = (p) => (
+  <Icon {...p}>
+    <path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" />
+  </Icon>
+)
+
+export const IconExpandSearch = (p) => (
+  <Icon {...p}>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="M21 21l-4.35-4.35" />
+    <path d="M8 10.5h5M10.5 8v5" />
+  </Icon>
+)
+
 export const IconMoreHorizontal = (p) => (
   <Icon {...p}>
     <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />

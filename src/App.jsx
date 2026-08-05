@@ -48,7 +48,7 @@ const VIEWS = [
   { key: 'kanban', label: 'Kanban', icon: IconKanban, title: 'Kanban de tarefas', subtitle: 'Organize o fluxo de trabalho arrastando os cartões' },
   { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
-  { key: 'midia', label: 'Documentações', icon: IconFolder, title: 'Documentações', subtitle: 'Pastas coloridas com os documentos da empresa' },
+  { key: 'midia', label: 'Documentações', icon: IconFolder, title: 'Documentações', subtitle: 'Gerencie e organize a documentação da sua equipe.' },
   { key: 'checklist', label: 'Checklist', icon: IconCheck, title: 'Checklist rápido', subtitle: 'Acompanhamento operacional do dia a dia' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
 ]

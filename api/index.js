@@ -123,7 +123,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { column_key, title, priority, due_date, assigned_to, description } = req.body
+  const { column_key, title, priority, due_date, assigned_to, description, logged_time_seconds, attachments } = req.body
   const updates = {}
   if (column_key) updates.column_key = column_key
   if (title) updates.title = title
@@ -131,6 +131,8 @@ app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   if (priority) updates.priority = priority
   if (due_date !== undefined) updates.due_date = due_date
   if (assigned_to && req.user.role === 'gestor') updates.assigned_to = assigned_to
+  if (logged_time_seconds !== undefined) updates.logged_time_seconds = Math.max(0, Math.floor(Number(logged_time_seconds)) || 0)
+  if (attachments !== undefined) updates.attachments = Array.isArray(attachments) ? attachments : []
 
   const query = supabase.from('fourbase_tasks').update(updates).eq('id', req.params.id)
   if (req.user.role !== 'gestor') query.eq('assigned_to', req.user.id)

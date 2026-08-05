@@ -1419,34 +1419,88 @@ textarea:focus {
   display: grid;
   grid-template-columns: 300px 1fr;
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
+  height: calc(100vh - 170px);
+}
+/* Ambas as colunas preenchem 100% da altura do grid — cabeçalho/busca fixos,
+   só a lista/conteúdo interno rola, evitando bordas desalinhadas no rodapé */
+.media-layout > .panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .folder-tree-panel {
   padding: 16px;
-  display: flex;
-  flex-direction: column;
   gap: 12px;
-  max-height: calc(100vh - 180px);
-  overflow-y: auto;
 }
 
 /* ---------- Criação de pasta ---------- */
-.folder-add-form {
+.folder-create-btn {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
-}
-.folder-add-row {
-  display: flex;
-  gap: 8px;
-}
-.folder-add-row input {
-  flex: 1;
-}
-.folder-add-row button {
+  width: 100%;
   border: none;
   background: var(--primary);
   color: var(--white);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 13.5px;
+  box-shadow: 0 6px 16px rgba(20, 184, 196, 0.22);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.folder-create-btn:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+.create-folder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.create-folder-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.create-folder-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.create-folder-actions button {
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 13.5px;
+}
+.create-folder-actions button[type='submit'] {
+  border: none;
+  background: var(--primary);
+  color: var(--white);
+}
+.create-folder-actions button[type='submit']:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+.create-folder-actions button[type='submit']:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.create-folder-actions button.secondary {
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--muted);
+}
+.create-folder-actions button.secondary:hover:not(:disabled) {
+  background: var(--bg);
 }
 .folder-color-swatches {
   display: flex;
@@ -1478,6 +1532,9 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .folder-branch {
   display: flex;
@@ -1692,7 +1749,8 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 260px;
+  flex: 1;
+  min-height: 0;
   background: #fafeff;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1708,6 +1766,10 @@ textarea:focus {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: start;
 }
 .gallery-item {
   position: relative;
@@ -3309,6 +3371,9 @@ textarea:focus {
   .media-layout {
     grid-template-columns: 1fr;
   }
+  .media-layout {
+    height: auto;
+  }
   .notes-list,
   .folder-tree-panel {
     max-height: 300px;
@@ -4112,6 +4177,103 @@ textarea:focus {
 
 .tdv2-description textarea::placeholder {
   color: #b4d4d9;
+}
+
+/* ── Anexos e Imagens ──────────────────────────────────────────────────────── */
+.tdv2-attachments {
+  padding: 0 28px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tdv2-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--primary-dark);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--primary-light);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tdv2-dropzone:hover,
+.tdv2-dropzone.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.tdv2-attachments-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.tdv2-attachment-item {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  aspect-ratio: 1;
+  box-shadow: var(--shadow-sm);
+  background: #fafeff;
+}
+
+.tdv2-attachment-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tdv2-attachment-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(10, 28, 31, 0);
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.tdv2-attachment-item:hover .tdv2-attachment-overlay {
+  opacity: 1;
+  background: rgba(10, 28, 31, 0.45);
+}
+
+.tdv2-attachment-btn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tdv2-attachment-btn:hover {
+  background: var(--white);
+}
+
+.tdv2-attachment-btn.danger:hover {
+  color: var(--danger);
+}
+
+@media (max-width: 600px) {
+  .tdv2-attachments {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
 }
 
 /* ── Footer ──────────────────────────────────────────────────────────────────── */

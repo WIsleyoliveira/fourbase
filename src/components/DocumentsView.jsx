@@ -285,11 +285,17 @@ function FolderNode({ folder }) {
   )
 }
 
-// ── Formulário de nova pasta raiz ───────────────────────────────────────────
-function AddRootFolderForm({ onSubmit }) {
+// ── Modal de criação de pasta ────────────────────────────────────────────────
+function CreateFolderModal({ onClose, onSubmit }) {
   const [name, setName]   = useState('')
   const [color, setColor] = useState(FOLDER_COLORS[0].value)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const submit = async (e) => {
     e.preventDefault()
@@ -297,34 +303,48 @@ function AddRootFolderForm({ onSubmit }) {
     setLoading(true)
     try {
       await onSubmit(name.trim(), color)
-      setName('')
-      setColor(FOLDER_COLORS[0].value)
+      onClose()
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <form className="folder-add-form" onSubmit={submit}>
-      <div className="folder-add-row">
-        <input
-          type="text"
-          placeholder="Nova pasta raiz"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={loading}
-        />
-        <button
-          type="submit"
-          className="icon-btn"
-          title="Criar pasta raiz"
-          disabled={loading || !name.trim()}
-        >
-          <IconPlus size={16} />
-        </button>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Criar Nova Pasta</h3>
+          <button className="icon-btn" title="Fechar" onClick={onClose}>
+            <IconClose size={16} />
+          </button>
+        </div>
+        <form className="create-folder-form" onSubmit={submit}>
+          <label>
+            Nome da pasta
+            <input
+              type="text"
+              autoFocus
+              placeholder="Ex: Contratos, Financeiro..."
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={loading}
+            />
+          </label>
+          <label>
+            Cor da pasta
+            <ColorSwatches value={color} onChange={setColor} />
+          </label>
+          <div className="create-folder-actions">
+            <button type="button" className="secondary" onClick={onClose} disabled={loading}>
+              Cancelar
+            </button>
+            <button type="submit" disabled={loading || !name.trim()}>
+              {loading ? 'Criando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
       </div>
-      <ColorSwatches value={color} onChange={setColor} />
-    </form>
+    </div>
   )
 }
 
@@ -363,6 +383,7 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
   const [newSubColor, setNewSubColor]   = useState(FOLDER_COLORS[0].value)
 
   const [uploading, setUploading]       = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const uploadTargetRef = useRef(null)
   const inputRef        = useRef(null)
   const menuRef         = useRef(null)
@@ -656,14 +677,17 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
           <h3>Documentações</h3>
         </div>
 
+        <button className="folder-create-btn" onClick={() => setIsCreateModalOpen(true)}>
+          <IconPlus size={15} />
+          Nova Pasta
+        </button>
+
         <input
           type="text"
           placeholder="Buscar pasta..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-
-        <AddRootFolderForm onSubmit={(name, color) => createFolder(name, color, null)} />
 
         <FolderCtx.Provider value={ctxValue}>
           <div className="folder-tree">
@@ -695,9 +719,7 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
             ) : (
               /* ── Modo de árvore hierárquica ── */
               rootFolders.length === 0 ? (
-                <div className="empty-hint">
-                  Nenhuma pasta ainda — crie a primeira acima.
-                </div>
+                <div className="empty-hint">Nenhuma pasta criada ainda.</div>
               ) : (
                 rootFolders.map((f) => <FolderNode key={f.id} folder={f} />)
               )
@@ -705,6 +727,13 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
           </div>
         </FolderCtx.Provider>
       </aside>
+
+      {isCreateModalOpen && (
+        <CreateFolderModal
+          onClose={() => setIsCreateModalOpen(false)}
+          onSubmit={(name, color) => createFolder(name, color, null)}
+        />
+      )}
 
       {/* Input de upload oculto */}
       <input
@@ -836,7 +865,7 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
         <div className="panel editor-empty">
           <IconFolderFilled size={34} style={{ color: 'var(--border)' }} />
           <strong>Nenhuma pasta selecionada</strong>
-          <p>Crie uma pasta ou selecione uma da árvore à esquerda.</p>
+          <p>Selecione uma pasta na lista à esquerda para visualizar seu conteúdo ou crie uma nova.</p>
         </div>
       )}
 
