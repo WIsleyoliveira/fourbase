@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { IconClose, IconBuilding, IconUser } from '../icons.jsx'
 import { maskCNPJ, maskPhone, isValidEmail, isValidCNPJLength } from '../format.js'
+import ColorPickerField from './ColorPickerField.jsx'
 
 // Modal de cadastro/edição de cliente. Todos os campos são opcionais.
 // `client` preenchido → modo edição; ausente → modo criação.
@@ -13,6 +14,7 @@ export default function ClientModal({ client, onCancel, onSave }) {
     contact_name: client?.contact_name || '',
     address: client?.address || '',
   })
+  const [color, setColor] = useState(client?.color || null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -44,6 +46,7 @@ export default function ClientModal({ client, onCancel, onSave }) {
         email: form.email.trim(),
         contact_name: form.contact_name.trim(),
         address: form.address.trim(),
+        color,
       })
     } catch (err) {
       setError(err.message)
@@ -133,6 +136,8 @@ export default function ClientModal({ client, onCancel, onSave }) {
               </label>
             </div>
           </div>
+
+          <ColorPickerField value={color} onChange={setColor} />
 
           {error && <div className="login-error">{error}</div>}
           <p className="client-form-hint">Todos os campos são opcionais.</p>

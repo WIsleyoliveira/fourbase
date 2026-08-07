@@ -33,8 +33,17 @@ function hashString(str) {
   return Math.abs(hash)
 }
 
-// Retorna a cor única associada a um responsável (por id).
-export function assigneeColor(id) {
+// Retorna a cor associada a um responsável (por id). Se `overrideColor` for
+// informado (cor escolhida manualmente no cadastro do membro/cliente), ela
+// prevalece sobre a cor automática gerada por hash.
+export function assigneeColor(id, overrideColor) {
+  if (overrideColor) return overrideColor
   if (!id) return NO_ASSIGNEE_COLOR
   return ASSIGNEE_PALETTE[hashString(String(id)) % ASSIGNEE_PALETTE.length]
+}
+
+// Variante para os pontos do código onde só se tem o id (ex: task.assigned_to)
+// e uma lista de membros/clientes à mão — busca a cor personalizada, se houver.
+export function memberColor(id, list = []) {
+  return assigneeColor(id, list.find((m) => m.id === id)?.color)
 }

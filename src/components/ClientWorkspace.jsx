@@ -29,7 +29,7 @@ export default function ClientWorkspace({
     return m
   }, [tasks])
 
-  const color = assigneeColor(client.id)
+  const color = assigneeColor(client.id, client.color)
 
   // Toda tarefa criada neste quadro nasce vinculada ao cliente ativo
   const handleAdd = (title, priority, due_date, assigned_to, description) =>

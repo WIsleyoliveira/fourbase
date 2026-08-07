@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconPlus, IconTrash, IconDownload, IconClose, IconChevronDown } from '../icons.jsx'
 import { api } from '../api.js'
-import { assigneeColor } from '../colors.js'
+import { memberColor } from '../colors.js'
 
 const STATUS_OPTIONS = ['A fazer', 'Em progresso', 'Pendente', 'Concluído']
 const STATUS_CLASS = {
@@ -255,7 +255,7 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
                     <td>
                       <div className="reports-assignee-cell">
                         {a.assigned_to && (
-                          <span className="reports-assignee-dot" style={{ background: assigneeColor(a.assigned_to) }} />
+                          <span className="reports-assignee-dot" style={{ background: memberColor(a.assigned_to, members) }} />
                         )}
                         <select
                           className="reports-cell-select"

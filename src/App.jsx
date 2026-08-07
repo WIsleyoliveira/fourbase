@@ -266,7 +266,7 @@ export default function App() {
   // ---- cadastro de membro (gestor) ----
   const createMember = (member) =>
     api.createMember(member).then((m) => {
-      setMembers((prev) => [...prev, { id: m.id, name: m.name }])
+      setMembers((prev) => [...prev, m])
       showToast('Membro cadastrado.')
       return m
     })

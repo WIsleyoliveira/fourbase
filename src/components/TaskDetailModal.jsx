@@ -479,7 +479,7 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
                   <div className="tdv2-assignee">
                     {assigneeMember ? (
                       <>
-                        <div className="tdv2-avatar" style={{ background: assigneeColor(assigneeMember.id) }}>{getInitials(assigneeMember.name)}</div>
+                        <div className="tdv2-avatar" style={{ background: assigneeColor(assigneeMember.id, assigneeMember.color) }}>{getInitials(assigneeMember.name)}</div>
                         <span className="tdv2-assignee-name">{assigneeMember.name}</span>
                       </>
                     ) : (

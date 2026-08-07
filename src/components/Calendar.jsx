@@ -11,7 +11,7 @@ import {
   IconClose,
   IconCheckPlain,
 } from '../icons.jsx'
-import { assigneeColor } from '../colors.js'
+import { assigneeColor, memberColor } from '../colors.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -273,14 +273,14 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                       className={assigneeFilter === m.id ? 'active' : ''}
                       onClick={() => { setAssigneeFilter(m.id); setAssigneeMenuOpen(false) }}
                     >
-                      <span className="member-avatar sm" style={{ background: assigneeColor(m.id) }}>{getInitials(m.name)}</span>
+                      <span className="member-avatar sm" style={{ background: assigneeColor(m.id, m.color) }}>{getInitials(m.name)}</span>
                       {m.name}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <div className="member-avatar calview-avatar" style={{ background: assigneeColor(currentUser?.id) }} title={currentUser?.name}>
+            <div className="member-avatar calview-avatar" style={{ background: memberColor(currentUser?.id, members) }} title={currentUser?.name}>
               {getInitials(currentUser?.name)}
             </div>
             {searchOpen ? (
@@ -344,12 +344,12 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                     <button
                       key={t.id}
                       className="calview-task-badge"
-                      style={{ background: `${assigneeColor(t.assigned_to)}22` }}
+                      style={{ background: `${memberColor(t.assigned_to, members)}22` }}
                       onClick={(e) => openDetail(e, t)}
                       draggable
                       onDragStart={(e) => { e.stopPropagation(); dragTask(e, t.id) }}
                     >
-                      <span className="calview-task-dot" style={{ background: assigneeColor(t.assigned_to) }} />
+                      <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
                       <span className="calview-task-title">{t.title}</span>
                     </button>
                   ))}
@@ -391,7 +391,7 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                   onDragStart={(e) => dragTask(e, t.id)}
                   onClick={() => setDetailTask(t)}
                 >
-                  <span className="calview-task-dot" style={{ background: assigneeColor(t.assigned_to) }} />
+                  <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
                   <span>{t.title}</span>
                 </div>
               ))}
@@ -407,7 +407,7 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                   onDragStart={(e) => dragTask(e, t.id)}
                   onClick={() => setDetailTask(t)}
                 >
-                  <span className="calview-task-dot" style={{ background: assigneeColor(t.assigned_to) }} />
+                  <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
                   <span>{t.title}</span>
                 </div>
               ))}
@@ -461,7 +461,7 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                         </span>
                         <div
                           className={`member-avatar sm${assignee ? '' : ' empty'}`}
-                          style={assignee ? { background: assigneeColor(assignee.id) } : undefined}
+                          style={assignee ? { background: assigneeColor(assignee.id, assignee.color) } : undefined}
                           title={assignee?.name || 'Sem responsável'}
                         >
                           {assignee ? getInitials(assignee.name) : '—'}

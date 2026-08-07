@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { api } from '../api.js'
-import { assigneeColor } from '../colors.js'
+import { memberColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
 const MAX_UPCOMING = 4
@@ -141,7 +141,7 @@ export default function Dashboard({
               <button
                 key={t.id}
                 className="upcoming-item"
-                style={{ borderLeft: `3px solid ${assigneeColor(t.assigned_to)}`, paddingLeft: 10 }}
+                style={{ borderLeft: `3px solid ${memberColor(t.assigned_to, members)}`, paddingLeft: 10 }}
                 onClick={() => setDetailTaskId(t.id)}
               >
                 <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>

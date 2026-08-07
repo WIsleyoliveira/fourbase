@@ -153,10 +153,15 @@ app.delete('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
 }))
 
 // ---------- Membros (para o seletor de responsável) ----------
+// Cor personalizada (escolhida no seletor de espectro do cadastro) — só aceita
+// um hex válido; qualquer outra coisa vira null (cor automática por hash).
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+const normalizeColor = (value) => (typeof value === 'string' && HEX_COLOR.test(value) ? value : null)
+
 app.get('/api/members', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_users')
-    .select('id, name')
+    .select('id, name, color')
     .order('name')
   if (error) throw error
   res.json(data)
@@ -164,7 +169,7 @@ app.get('/api/members', auth, asyncRoute(async (req, res) => {
 
 // Criação de membro pelo gestor (Central de Cadastros → "Cadastrar Membro da Equipe")
 app.post('/api/members', auth, gestorOnly, asyncRoute(async (req, res) => {
-  const { name, email, password, role = 'funcionario', job_title = '' } = req.body
+  const { name, email, password, role = 'funcionario', job_title = '', color } = req.body
   if (!name?.trim() || !email?.trim() || !password) {
     return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' })
   }
@@ -181,8 +186,9 @@ app.post('/api/members', auth, gestorOnly, asyncRoute(async (req, res) => {
       password_hash,
       role: roleValue,
       job_title: job_title.trim() || null,
+      color: normalizeColor(color),
     })
-    .select('id, name, email, role')
+    .select('id, name, email, role, color')
     .single()
   if (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'Este e-mail já está cadastrado' })
@@ -571,7 +577,7 @@ app.get('/api/clients', auth, asyncRoute(async (req, res) => {
 }))
 
 app.post('/api/clients', auth, asyncRoute(async (req, res) => {
-  const { name = '', cnpj = '', phone = '', email = '', contact_name = '', address = '' } = req.body
+  const { name = '', cnpj = '', phone = '', email = '', contact_name = '', address = '', color } = req.body
   const { data, error } = await supabase
     .from('fourbase_clients')
     .insert({
@@ -581,6 +587,7 @@ app.post('/api/clients', auth, asyncRoute(async (req, res) => {
       email: email.trim().toLowerCase() || null,
       contact_name: contact_name.trim() || null,
       address: address.trim() || null,
+      color: normalizeColor(color),
       created_by: req.user.id,
     })
     .select()
@@ -597,6 +604,7 @@ app.patch('/api/clients/:id', auth, asyncRoute(async (req, res) => {
       updates[key] = key === 'email' ? (v.toLowerCase() || null) : (v || null)
     }
   }
+  if (req.body.color !== undefined) updates.color = normalizeColor(req.body.color)
   const { data, error } = await supabase
     .from('fourbase_clients')
     .update(updates)

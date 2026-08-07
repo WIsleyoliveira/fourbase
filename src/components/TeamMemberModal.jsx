@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { IconClose, IconUserCheck } from '../icons.jsx'
+import ColorPickerField from './ColorPickerField.jsx'
 
 // Modal de cadastro de membro da equipe (usuário do software Fourbase).
 // A senha é necessária para o login do novo usuário.
@@ -9,6 +10,7 @@ export default function TeamMemberModal({ onCancel, onSave }) {
   const [password, setPassword] = useState('')
   const [jobTitle, setJobTitle] = useState('')
   const [role, setRole] = useState('funcionario')
+  const [color, setColor] = useState(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -34,6 +36,7 @@ export default function TeamMemberModal({ onCancel, onSave }) {
         password,
         role,
         job_title: jobTitle.trim(),
+        color,
       })
     } catch (err) {
       setError(err.message)
@@ -101,6 +104,8 @@ export default function TeamMemberModal({ onCancel, onSave }) {
               </select>
             </label>
           </div>
+
+          <ColorPickerField value={color} onChange={setColor} />
 
           {error && <div className="login-error">{error}</div>}
 

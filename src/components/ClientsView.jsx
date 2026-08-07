@@ -185,7 +185,7 @@ export default function ClientsView({ clients, tasks, onUpdate, onDelete, onOpen
         return (
           <div className="client-card is-clickable" key={c.id} onClick={() => onOpenClient(c.id)}>
             <div className="client-card-head">
-              <div className="client-card-icon" style={{ background: `${assigneeColor(c.id)}1f`, color: assigneeColor(c.id) }}>
+              <div className="client-card-icon" style={{ background: `${assigneeColor(c.id, c.color)}1f`, color: assigneeColor(c.id, c.color) }}>
                 <IconBuilding size={20} />
               </div>
               <CardMenu onEdit={() => setEditing(c)} onDelete={() => setConfirm(c)} />
@@ -224,7 +224,7 @@ export default function ClientsView({ clients, tasks, onUpdate, onDelete, onOpen
         const stats = statsFor(c.id)
         return (
           <div className="client-row" key={c.id} onClick={() => onOpenClient(c.id)}>
-            <div className="client-row-avatar" style={{ background: assigneeColor(c.id) }}>
+            <div className="client-row-avatar" style={{ background: assigneeColor(c.id, c.color) }}>
               {initials(c.name)}
             </div>
             <div className="client-row-id">
@@ -265,7 +265,7 @@ export default function ClientsView({ clients, tasks, onUpdate, onDelete, onOpen
               <tr key={c.id} onClick={() => onOpenClient(c.id)}>
                 <td>
                   <div className="clients-table-client">
-                    <span className="client-row-avatar sm" style={{ background: assigneeColor(c.id) }}>
+                    <span className="client-row-avatar sm" style={{ background: assigneeColor(c.id, c.color) }}>
                       {initials(c.name)}
                     </span>
                     <strong>{c.name || 'Cliente sem nome'}</strong>

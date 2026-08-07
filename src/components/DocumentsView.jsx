@@ -852,7 +852,7 @@ export default function DocumentsView({
     ...clients.map((c) => ({
       id: c.id,
       name: c.name || 'Cliente sem nome',
-      color: assigneeColor(c.id),
+      color: assigneeColor(c.id, c.color),
       roots: rootFolders.filter((f) => f.client_id === c.id),
     })),
   ]
