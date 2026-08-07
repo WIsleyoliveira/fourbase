@@ -35,7 +35,7 @@ Ou conecte o repositório no painel da Vercel. O `vercel.json` já:
 
 | Nome | Valor |
 |---|---|
-| `SUPABASE_URL` | `https://uokpmlzdwnilqaujohov.supabase.co` |
+| `SUPABASE_URL` | `https://uamjgaeawwkfdlrlpmfc.supabase.co` |
 | `SUPABASE_ANON_KEY` | chave publishable do projeto (veja `.env.example`) |
 
 O código tem fallback para esses valores, então o deploy funciona mesmo sem configurá-las — mas configure-as para poder trocar de projeto sem alterar código.

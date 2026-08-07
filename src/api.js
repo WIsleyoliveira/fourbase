@@ -49,10 +49,10 @@ export const api = {
 
   // tarefas
   getTasks: () => request('/api/tasks'),
-  addTask: (title, priority, due_date, assigned_to, description) =>
+  addTask: (title, priority, due_date, assigned_to, description, client_id = null) =>
     request('/api/tasks', {
       method: 'POST',
-      body: JSON.stringify({ title, priority, due_date, assigned_to, description }),
+      body: JSON.stringify({ title, priority, due_date, assigned_to, description, client_id }),
     }),
   moveTask: (id, column_key) =>
     request(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ column_key }) }),
@@ -62,7 +62,19 @@ export const api = {
 
   // membros
   getMembers: () => request('/api/members'),
+  createMember: (member) =>
+    request('/api/members', { method: 'POST', body: JSON.stringify(member) }),
   deleteMember: (id) => request(`/api/members/${id}`, { method: 'DELETE' }),
+
+  // clientes
+  getClients: () => request('/api/clients'),
+  createClient: (client) =>
+    request('/api/clients', { method: 'POST', body: JSON.stringify(client) }),
+  updateClient: (id, updates) =>
+    request(`/api/clients/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+  // mode: 'archive' (desvincula as pastas) | 'cascade' (exclui as pastas)
+  deleteClient: (id, mode = 'archive') =>
+    request(`/api/clients/${id}?folders=${mode}`, { method: 'DELETE' }),
 
   // notas
   getNotes: () => request('/api/notes'),
@@ -96,8 +108,11 @@ export const api = {
 
   // pastas de documentos
   getFolders: () => request('/api/folders'),
-  createFolder: (name, color, parentId = null) =>
-    request('/api/folders', { method: 'POST', body: JSON.stringify({ name, color, parent_id: parentId || null }) }),
+  createFolder: (name, color, parentId = null, clientId = null) =>
+    request('/api/folders', {
+      method: 'POST',
+      body: JSON.stringify({ name, color, parent_id: parentId || null, client_id: clientId || null }),
+    }),
   updateFolder: (id, updates) =>
     request(`/api/folders/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
   deleteFolder: (id) => request(`/api/folders/${id}`, { method: 'DELETE' }),
@@ -109,4 +124,12 @@ export const api = {
     }),
   deleteFolderDocument: (folderId, docId) =>
     request(`/api/folders/${folderId}/documents/${docId}`, { method: 'DELETE' }),
+
+  // relatórios (planilha de atividades)
+  getReportActivities: () => request('/api/report-activities'),
+  createReportActivity: (fields = {}) =>
+    request('/api/report-activities', { method: 'POST', body: JSON.stringify(fields) }),
+  updateReportActivity: (id, updates) =>
+    request(`/api/report-activities/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
+  deleteReportActivity: (id) => request(`/api/report-activities/${id}`, { method: 'DELETE' }),
 }

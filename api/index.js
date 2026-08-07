@@ -2,13 +2,14 @@ import express from 'express'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
-import { createClient } from '@supabase/supabase-js'
+import { createLocalClient } from './localDb.js'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://uamjgaeawwkfdlrlpmfc.supabase.co'
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_RvGMiJo63JeC3euIiT9Iwg_dWSwuThZ'
 const JWT_SECRET = process.env.JWT_SECRET || 'fourbase-dev-secret-troque-em-producao'
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+// Banco de dados local mockado (data/db.json) — ver api/localDb.js.
+// Para trocar por um Postgres/Supabase real em produção, troque esta linha
+// por `createClient(SUPABASE_URL, SUPABASE_ANON_KEY)` do @supabase/supabase-js.
+const supabase = createLocalClient()
 
 const app = express()
 app.use(cors())
@@ -101,7 +102,7 @@ app.get('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
-  const { title, priority = 'Média', due_date = null, assigned_to, description = '' } = req.body
+  const { title, priority = 'Média', due_date = null, assigned_to, description = '', client_id = null } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
   const isGestor = req.user.role === 'gestor'
   const owner = isGestor && assigned_to ? assigned_to : req.user.id
@@ -115,6 +116,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       column_key: 'todo',
       user_id: req.user.id,
       assigned_to: owner,
+      client_id: client_id || null,
     })
     .select()
     .single()
@@ -123,7 +125,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { column_key, title, priority, due_date, assigned_to, description, logged_time_seconds, attachments } = req.body
+  const { column_key, title, priority, due_date, assigned_to, description, logged_time_seconds, attachments, client_id } = req.body
   const updates = {}
   if (column_key) updates.column_key = column_key
   if (title) updates.title = title
@@ -133,6 +135,7 @@ app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   if (assigned_to && req.user.role === 'gestor') updates.assigned_to = assigned_to
   if (logged_time_seconds !== undefined) updates.logged_time_seconds = Math.max(0, Math.floor(Number(logged_time_seconds)) || 0)
   if (attachments !== undefined) updates.attachments = Array.isArray(attachments) ? attachments : []
+  if (client_id !== undefined) updates.client_id = client_id || null
 
   const query = supabase.from('fourbase_tasks').update(updates).eq('id', req.params.id)
   if (req.user.role !== 'gestor') query.eq('assigned_to', req.user.id)
@@ -159,6 +162,35 @@ app.get('/api/members', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
+// Criação de membro pelo gestor (Central de Cadastros → "Cadastrar Membro da Equipe")
+app.post('/api/members', auth, gestorOnly, asyncRoute(async (req, res) => {
+  const { name, email, password, role = 'funcionario', job_title = '' } = req.body
+  if (!name?.trim() || !email?.trim() || !password) {
+    return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' })
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'A senha precisa ter pelo menos 6 caracteres' })
+  }
+  const roleValue = role === 'gestor' ? 'gestor' : 'funcionario'
+  const password_hash = bcrypt.hashSync(password, 10)
+  const { data, error } = await supabase
+    .from('fourbase_users')
+    .insert({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password_hash,
+      role: roleValue,
+      job_title: job_title.trim() || null,
+    })
+    .select('id, name, email, role')
+    .single()
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Este e-mail já está cadastrado' })
+    throw error
+  }
+  res.status(201).json(data)
+}))
+
 app.delete('/api/members/:id', auth, gestorOnly, asyncRoute(async (req, res) => {
   const { id } = req.params
 
@@ -179,7 +211,7 @@ app.delete('/api/members/:id', auth, gestorOnly, asyncRoute(async (req, res) => 
     return res.status(403).json({ error: 'Não é possível remover um Gestor' })
   }
 
-  // Reatribui tarefas ao gestor que está realizando a ação (evita violação de FK)
+  // Reatribui tarefas ao gestor que está realizando a ação (evita órfãos)
   const { error: taskAssignErr } = await supabase
     .from('fourbase_tasks')
     .update({ assigned_to: req.user.id })
@@ -192,7 +224,6 @@ app.delete('/api/members/:id', auth, gestorOnly, asyncRoute(async (req, res) => 
     .eq('user_id', id)
   if (taskUserErr) throw taskUserErr
 
-  // Remove o usuário (outras tabelas limpas por CASCADE no Supabase)
   const { error: deleteErr } = await supabase
     .from('fourbase_users')
     .delete()
@@ -349,17 +380,7 @@ app.delete('/api/media', auth, asyncRoute(async (req, res) => {
   res.status(204).end()
 }))
 
-// ---------- Pastas de documentos (hierárquicas) ----------
-//
-// Execute no Supabase SQL Editor para adicionar suporte a hierarquia:
-//
-//   ALTER TABLE fourbase_folders
-//     ADD COLUMN IF NOT EXISTS parent_id UUID
-//     REFERENCES fourbase_folders(id) ON DELETE CASCADE;
-//
-// Isso permite pastas dentro de pastas (estilo ClickUp).
-// A coluna é nullable — pastas raiz têm parent_id = NULL.
-
+// ---------- Pastas de documentos (hierárquicas, com vínculo a clientes) ----------
 app.get('/api/folders', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_folders')
@@ -370,11 +391,23 @@ app.get('/api/folders', auth, asyncRoute(async (req, res) => {
 }))
 
 app.post('/api/folders', auth, asyncRoute(async (req, res) => {
-  const { name, color = '#14b8c4', parent_id = null } = req.body
+  const { name, color = '#14b8c4', parent_id = null, client_id = null } = req.body
   if (!name || !name.trim()) return res.status(400).json({ error: 'Nome da pasta obrigatório' })
+
+  // Subpasta herda o cliente da pasta-pai (mantém a árvore coerente)
+  let owner = client_id || null
+  if (parent_id) {
+    const { data: parent } = await supabase
+      .from('fourbase_folders')
+      .select('client_id')
+      .eq('id', parent_id)
+      .maybeSingle()
+    if (parent && parent.client_id) owner = parent.client_id
+  }
+
   const { data, error } = await supabase
     .from('fourbase_folders')
-    .insert({ name: name.trim(), color, parent_id: parent_id || null, created_by: req.user.id })
+    .insert({ name: name.trim(), color, parent_id: parent_id || null, client_id: owner, created_by: req.user.id })
     .select()
     .single()
   if (error) throw error
@@ -382,11 +415,12 @@ app.post('/api/folders', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/folders/:id', auth, asyncRoute(async (req, res) => {
-  const { name, color, parent_id } = req.body
+  const { name, color, parent_id, client_id } = req.body
   const updates = {}
   if (name !== undefined && name.trim()) updates.name = name.trim()
   if (color !== undefined) updates.color = color
   if (parent_id !== undefined) updates.parent_id = parent_id || null
+  if (client_id !== undefined) updates.client_id = client_id || null
   const { data, error } = await supabase
     .from('fourbase_folders')
     .update(updates)
@@ -437,24 +471,6 @@ app.delete('/api/folders/:folderId/documents/:docId', auth, asyncRoute(async (re
 }))
 
 // ---------- Colunas do Kanban ----------
-// Para persistência no banco, execute no Supabase SQL Editor:
-//
-//   CREATE TABLE IF NOT EXISTS fourbase_columns (
-//     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-//     key        TEXT NOT NULL UNIQUE,
-//     label      TEXT NOT NULL,
-//     position   INTEGER NOT NULL DEFAULT 0,
-//     color      TEXT NOT NULL DEFAULT '#14b8c4',
-//     created_at TIMESTAMPTZ DEFAULT NOW()
-//   );
-//   INSERT INTO fourbase_columns (key, label, position, color) VALUES
-//     ('todo',  'A Fazer',       0, '#9ca3af'),
-//     ('doing', 'Em Progresso',  1, '#14b8c4'),
-//     ('done',  'Concluído',     2, '#2ec27e')
-//   ON CONFLICT (key) DO NOTHING;
-//
-// Enquanto a tabela não existir, o frontend usa localStorage como fallback.
-
 app.get('/api/columns', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_columns')
@@ -525,18 +541,140 @@ app.get('/api/team/overview', auth, gestorOnly, asyncRoute(async (req, res) => {
 }))
 
 app.get('/api/team/tasks', auth, gestorOnly, asyncRoute(async (req, res) => {
+  // Join manual (nome/e-mail do responsável) — o banco local mockado não
+  // interpreta a sintaxe de recurso embutido do supabase-js (`fk!join(...)`).
+  const [{ data: tasks, error: tErr }, { data: users, error: uErr }] = await Promise.all([
+    supabase.from('fourbase_tasks').select('*').order('created_at', { ascending: false }),
+    supabase.from('fourbase_users').select('id, name, email'),
+  ])
+  if (tErr) throw tErr
+  if (uErr) throw uErr
+  const byId = Object.fromEntries(users.map((u) => [u.id, u]))
+  res.json(
+    tasks.map((t) => {
+      const assignee = byId[t.assigned_to]
+      return { ...t, owner_name: assignee?.name || 'Sem dono', owner_email: assignee?.email || '' }
+    })
+  )
+}))
+
+// ---------- Clientes ----------
+// Compartilhados no workspace (visíveis a todos os autenticados), no mesmo
+// modelo das pastas de documentos.
+app.get('/api/clients', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
-    .from('fourbase_tasks')
-    .select('*, assignee:fourbase_users!fourbase_tasks_assigned_to_fkey(name, email)')
+    .from('fourbase_clients')
+    .select('*')
     .order('created_at', { ascending: false })
   if (error) throw error
-  res.json(
-    data.map(({ assignee, ...task }) => ({
-      ...task,
-      owner_name: assignee?.name || 'Sem dono',
-      owner_email: assignee?.email || '',
-    }))
-  )
+  res.json(data)
+}))
+
+app.post('/api/clients', auth, asyncRoute(async (req, res) => {
+  const { name = '', cnpj = '', phone = '', email = '', contact_name = '', address = '' } = req.body
+  const { data, error } = await supabase
+    .from('fourbase_clients')
+    .insert({
+      name: name.trim() || null,
+      cnpj: cnpj.trim() || null,
+      phone: phone.trim() || null,
+      email: email.trim().toLowerCase() || null,
+      contact_name: contact_name.trim() || null,
+      address: address.trim() || null,
+      created_by: req.user.id,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  res.status(201).json(data)
+}))
+
+app.patch('/api/clients/:id', auth, asyncRoute(async (req, res) => {
+  const updates = { updated_at: new Date().toISOString() }
+  for (const key of ['name', 'cnpj', 'phone', 'email', 'contact_name', 'address']) {
+    if (req.body[key] !== undefined) {
+      const v = String(req.body[key]).trim()
+      updates[key] = key === 'email' ? (v.toLowerCase() || null) : (v || null)
+    }
+  }
+  const { data, error } = await supabase
+    .from('fourbase_clients')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) throw error
+  res.json(data)
+}))
+
+// Exclusão de cliente. O parâmetro ?folders= define o destino das pastas de
+// documentação vinculadas:
+//   archive (padrão) — mantém as pastas, apenas desvincula (client_id = NULL)
+//   cascade          — exclui as pastas do cliente e seu conteúdo
+app.delete('/api/clients/:id', auth, asyncRoute(async (req, res) => {
+  const mode = req.query.folders === 'cascade' ? 'cascade' : 'archive'
+  const clientId = req.params.id
+
+  if (mode === 'cascade') {
+    await supabase.from('fourbase_folders').delete().eq('client_id', clientId)
+  } else {
+    await supabase.from('fourbase_folders').update({ client_id: null }).eq('client_id', clientId)
+  }
+
+  const { error } = await supabase.from('fourbase_clients').delete().eq('id', clientId)
+  if (error) throw error
+  res.status(204).end()
+}))
+
+// ---------- Relatórios (planilha de atividades) ----------
+const REPORT_STATUSES = ['A fazer', 'Em progresso', 'Pendente', 'Concluído']
+
+const reportFields = (body) => {
+  const fields = {}
+  if (body.activity_name !== undefined) fields.activity_name = (body.activity_name || '').trim() || null
+  if (body.date !== undefined) fields.date = body.date || null
+  if (body.status !== undefined) fields.status = REPORT_STATUSES.includes(body.status) ? body.status : 'A fazer'
+  if (body.assigned_to !== undefined) fields.assigned_to = body.assigned_to || null
+  if (body.client_id !== undefined) fields.client_id = body.client_id || null
+  return fields
+}
+
+app.get('/api/report-activities', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_report_activities')
+    .select('*')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  res.json(data)
+}))
+
+app.post('/api/report-activities', auth, asyncRoute(async (req, res) => {
+  const fields = { activity_name: '', date: null, status: 'A fazer', assigned_to: null, client_id: null, ...reportFields(req.body) }
+  const { data, error } = await supabase
+    .from('fourbase_report_activities')
+    .insert({ ...fields, created_by: req.user.id })
+    .select()
+    .single()
+  if (error) throw error
+  res.status(201).json(data)
+}))
+
+app.patch('/api/report-activities/:id', auth, asyncRoute(async (req, res) => {
+  const updates = { ...reportFields(req.body), updated_at: new Date().toISOString() }
+  const { data, error } = await supabase
+    .from('fourbase_report_activities')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single()
+  if (error) throw error
+  res.json(data)
+}))
+
+app.delete('/api/report-activities/:id', auth, asyncRoute(async (req, res) => {
+  const { error } = await supabase.from('fourbase_report_activities').delete().eq('id', req.params.id)
+  if (error) throw error
+  res.status(204).end()
 }))
 
 export default app

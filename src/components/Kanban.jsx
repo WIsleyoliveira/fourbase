@@ -8,6 +8,7 @@ import {
   IconCalendar,
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
+import { assigneeColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
 const PRIORITY_RANK  = { Urgente: 0, Alta: 1, Média: 2, Baixa: 3 }
@@ -226,9 +227,12 @@ export default function Kanban({ tasks, members, currentUser, columns, onAdd, on
                   const due = dueState(task.due_date)
                   const isDone = task.column_key === 'done'
                   const initials = memberName(task.assigned_to).charAt(0).toUpperCase()
+                  // Código de cores único por responsável — identifica a tarefa por pessoa
+                  const ownerColor = assigneeColor(task.assigned_to)
                   return (
                     <div
                       className={`card ${PRIORITY_CLASS[task.priority] || 'p-media'}${dragId === task.id ? ' dragging' : ''}`}
+                      style={{ borderLeft: `3px solid ${ownerColor}` }}
                       key={task.id}
                       draggable
                       onDragStart={() => setDragId(task.id)}
@@ -292,6 +296,7 @@ export default function Kanban({ tasks, members, currentUser, columns, onAdd, on
                           {task.assigned_to && (
                             <div
                               className="assignee-avatar"
+                              style={{ background: ownerColor }}
                               title={memberName(task.assigned_to)}
                             >
                               {initials}

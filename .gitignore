@@ -3,3 +3,6 @@ dist
 .env
 .vercel
 .DS_Store
+
+# Banco de dados local mockado (api/localDb.js) — estado de desenvolvimento
+data/db.json

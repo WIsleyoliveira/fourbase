@@ -213,10 +213,6 @@ export default function TeamView({ onError }) {
                   <small>Feitas</small>
                 </div>
                 <div className="member-stat">
-                  <strong>{member.todos.done}/{member.todos.total}</strong>
-                  <small>Checklist</small>
-                </div>
-                <div className="member-stat">
                   <strong>{member.notes}</strong>
                   <small>Notas</small>
                 </div>

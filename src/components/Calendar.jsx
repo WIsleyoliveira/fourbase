@@ -11,6 +11,7 @@ import {
   IconClose,
   IconCheckPlain,
 } from '../icons.jsx'
+import { assigneeColor } from '../colors.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -272,14 +273,14 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                       className={assigneeFilter === m.id ? 'active' : ''}
                       onClick={() => { setAssigneeFilter(m.id); setAssigneeMenuOpen(false) }}
                     >
-                      <span className="member-avatar sm">{getInitials(m.name)}</span>
+                      <span className="member-avatar sm" style={{ background: assigneeColor(m.id) }}>{getInitials(m.name)}</span>
                       {m.name}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <div className="member-avatar calview-avatar" title={currentUser?.name}>
+            <div className="member-avatar calview-avatar" style={{ background: assigneeColor(currentUser?.id) }} title={currentUser?.name}>
               {getInitials(currentUser?.name)}
             </div>
             {searchOpen ? (
@@ -342,12 +343,13 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                   {dayTasks.slice(0, 3).map((t) => (
                     <button
                       key={t.id}
-                      className={`calview-task-badge ${PRIORITY_CLASS[t.priority] || 'p-media'}`}
+                      className="calview-task-badge"
+                      style={{ background: `${assigneeColor(t.assigned_to)}22` }}
                       onClick={(e) => openDetail(e, t)}
                       draggable
                       onDragStart={(e) => { e.stopPropagation(); dragTask(e, t.id) }}
                     >
-                      <span className="calview-task-dot" />
+                      <span className="calview-task-dot" style={{ background: assigneeColor(t.assigned_to) }} />
                       <span className="calview-task-title">{t.title}</span>
                     </button>
                   ))}
@@ -389,7 +391,7 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                   onDragStart={(e) => dragTask(e, t.id)}
                   onClick={() => setDetailTask(t)}
                 >
-                  <span className={`calview-task-dot ${PRIORITY_CLASS[t.priority] || 'p-media'}`} />
+                  <span className="calview-task-dot" style={{ background: assigneeColor(t.assigned_to) }} />
                   <span>{t.title}</span>
                 </div>
               ))}
@@ -405,7 +407,7 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                   onDragStart={(e) => dragTask(e, t.id)}
                   onClick={() => setDetailTask(t)}
                 >
-                  <span className={`calview-task-dot ${PRIORITY_CLASS[t.priority] || 'p-media'}`} />
+                  <span className="calview-task-dot" style={{ background: assigneeColor(t.assigned_to) }} />
                   <span>{t.title}</span>
                 </div>
               ))}
@@ -459,6 +461,7 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                         </span>
                         <div
                           className={`member-avatar sm${assignee ? '' : ' empty'}`}
+                          style={assignee ? { background: assigneeColor(assignee.id) } : undefined}
                           title={assignee?.name || 'Sem responsável'}
                         >
                           {assignee ? getInitials(assignee.name) : '—'}

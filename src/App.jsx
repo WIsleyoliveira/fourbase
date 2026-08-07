@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, getAuth, setAuth } from './api.js'
 
 // Colunas padrão — usadas como fallback antes de qualquer persistência
@@ -28,8 +28,11 @@ import Kanban from './components/Kanban.jsx'
 import Calendar from './components/Calendar.jsx'
 import NotesView from './components/NotesView.jsx'
 import DocumentsView from './components/DocumentsView.jsx'
-import Checklist from './components/Checklist.jsx'
 import TeamView from './components/TeamView.jsx'
+import RegistryView from './components/RegistryView.jsx'
+import ClientsView from './components/ClientsView.jsx'
+import ClientWorkspace from './components/ClientWorkspace.jsx'
+import ReportsView from './components/ReportsView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
 import {
   IconDashboard,
@@ -37,9 +40,11 @@ import {
   IconCalendar,
   IconNotes,
   IconFolder,
-  IconCheck,
   IconRefresh,
   IconTeam,
+  IconUserPlus,
+  IconBuilding,
+  IconFileSpreadsheet,
   IconLogout,
 } from './icons.jsx'
 
@@ -49,8 +54,10 @@ const VIEWS = [
   { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
   { key: 'midia', label: 'Documentações', icon: IconFolder, title: 'Documentações', subtitle: 'Gerencie e organize a documentação da sua equipe.' },
-  { key: 'checklist', label: 'Checklist', icon: IconCheck, title: 'Checklist rápido', subtitle: 'Acompanhamento operacional do dia a dia' },
+  { key: 'cadastro', label: 'Cadastro', icon: IconUserPlus, title: 'Central de Cadastros', subtitle: 'Inicie o cadastro de membros da equipe e clientes' },
+  { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
+  { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente' },
 ]
 
 export default function App() {
@@ -58,8 +65,10 @@ export default function App() {
   const [view, setView] = useState('painel')
   const [tasks, setTasks] = useState([])
   const [notes, setNotes] = useState([])
-  const [todos, setTodos] = useState([])
   const [members, setMembers] = useState([])
+  const [clients, setClients] = useState([])
+  // Cliente aberto no "Espaço dos Clientes" (null = listagem)
+  const [selectedClientId, setSelectedClientId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [online, setOnline] = useState(true)
   const [toast, setToast] = useState('')
@@ -90,15 +99,13 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [t, n, q, mb] = await Promise.all([
+      const [t, n, mb] = await Promise.all([
         api.getTasks(),
         api.getNotes(),
-        api.getTodos(),
         api.getMembers(),
       ])
       setTasks(t)
       setNotes(n)
-      setTodos(q)
       setMembers(mb)
       setOnline(true)
     } catch (err) {
@@ -107,6 +114,11 @@ export default function App() {
     } finally {
       setLoading(false)
     }
+
+    // Clientes — tabela pode não existir ainda (antes da migração); falha silenciosa
+    api.getClients()
+      .then((c) => { if (Array.isArray(c)) setClients(c) })
+      .catch(() => { /* tabela fourbase_clients ainda não criada */ })
 
     // Tenta carregar colunas da API (tabela pode não existir ainda — falha silenciosa)
     api.getColumns()
@@ -138,7 +150,6 @@ export default function App() {
     setSession(null)
     setTasks([])
     setNotes([])
-    setTodos([])
   }
 
   // ---- colunas ----
@@ -159,9 +170,9 @@ export default function App() {
   }
 
   // ---- tarefas ----
-  const addTask = (title, priority, due_date, assigned_to, description) =>
+  const addTask = (title, priority, due_date, assigned_to, description, client_id = null) =>
     api
-      .addTask(title, priority, due_date, assigned_to, description)
+      .addTask(title, priority, due_date, assigned_to, description, client_id)
       .then((t) => setTasks((prev) => [...prev, t]))
       .catch(handleError)
 
@@ -252,27 +263,60 @@ export default function App() {
     setView('notas')
   }
 
-  // ---- checklist ----
-  const addTodo = (text, priority, due_at) =>
-    api
-      .addTodo(text, priority, due_at)
-      .then((item) => setTodos((prev) => [...prev, item]))
-      .catch(handleError)
-
-  const toggleTodo = (id, done) => {
-    setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done } : t)))
-    api.toggleTodo(id, done).catch((err) => {
-      handleError(err)
-      loadAll()
+  // ---- cadastro de membro (gestor) ----
+  const createMember = (member) =>
+    api.createMember(member).then((m) => {
+      setMembers((prev) => [...prev, { id: m.id, name: m.name }])
+      showToast('Membro cadastrado.')
+      return m
     })
+    // erro propagado para o modal exibir a mensagem
+
+  // ---- clientes ----
+  const createClient = (client) =>
+    api.createClient(client).then((c) => {
+      setClients((prev) => [c, ...prev])
+      showToast('Cliente cadastrado.')
+      return c
+    }).catch((err) => { handleError(err); throw err })
+
+  const updateClient = (id, updates) =>
+    api.updateClient(id, updates).then((c) => {
+      setClients((prev) => prev.map((x) => (x.id === id ? c : x)))
+      showToast('Cliente atualizado.')
+      return c
+    }).catch((err) => { handleError(err); throw err })
+
+  // mode: 'archive' mantém as pastas de documentação (desvinculadas) |
+  //       'cascade' exclui as pastas do cliente
+  const deleteClient = (id, mode = 'archive') => {
+    setClients((prev) => prev.filter((c) => c.id !== id))
+    // Se o cliente aberto foi excluído, volta para a listagem
+    setSelectedClientId((prev) => (prev === id ? null : prev))
+    return api.deleteClient(id, mode)
+      .then(() => showToast(mode === 'cascade' ? 'Cliente e pastas excluídos.' : 'Cliente excluído; pastas arquivadas.'))
+      .catch((err) => {
+        handleError(err)
+        loadAll()
+      })
   }
 
-  const deleteTodo = (id) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id))
-    api.deleteTodo(id).catch((err) => {
-      handleError(err)
-      loadAll()
-    })
+  // Cliente aberto no workspace
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === selectedClientId) || null,
+    [clients, selectedClientId]
+  )
+
+  // Backlog do Kanban do cliente — estritamente as tarefas daquele client_id
+  const clientTasks = useMemo(
+    () => (selectedClientId ? tasks.filter((t) => t.client_id === selectedClientId) : []),
+    [tasks, selectedClientId]
+  )
+
+  // Trocar de aba sempre volta o módulo de clientes para a listagem
+  const changeView = (next) => {
+    setSelectedClientId(null)
+    setView(next)
   }
 
   if (!session) return <Login onLogin={login} />
@@ -280,7 +324,11 @@ export default function App() {
   const user = session.user
   const isGestor = user.role === 'gestor'
   const visibleViews = VIEWS.filter((v) => !v.gestorOnly || isGestor)
-  const current = VIEWS.find((v) => v.key === view) || VIEWS[0]
+  const baseView = VIEWS.find((v) => v.key === view) || VIEWS[0]
+  // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
+  const current = selectedClient
+    ? { title: selectedClient.name || 'Cliente sem nome', subtitle: 'Espaço do cliente · Kanban dedicado' }
+    : baseView
 
   const renderView = () => {
     switch (view) {
@@ -328,6 +376,7 @@ export default function App() {
       case 'midia':
         return (
           <DocumentsView
+            clients={clients}
             onError={handleError}
             targetFolderId={targetFolderId}
             onConsumeTarget={() => setTargetFolderId(null)}
@@ -335,28 +384,61 @@ export default function App() {
             onUnlinkNote={(id) => linkNoteFolder(id, null)}
           />
         )
-      case 'checklist':
+      case 'cadastro':
         return (
-          <Checklist
-            todos={todos}
-            onAdd={addTodo}
-            onToggle={toggleTodo}
-            onDelete={deleteTodo}
-            onSendToKanban={openSendToKanban}
+          <RegistryView
+            isGestor={isGestor}
+            onCreateMember={createMember}
+            onCreateClient={createClient}
+          />
+        )
+      case 'clientes':
+        return selectedClient ? (
+          <ClientWorkspace
+            client={selectedClient}
+            tasks={clientTasks}
+            members={members}
+            currentUser={user}
+            columns={columns}
+            onBack={() => setSelectedClientId(null)}
+            onAdd={addTask}
+            onMove={moveTask}
+            onUpdate={updateTask}
+            onDelete={deleteTask}
+            onAddColumn={addColumn}
+            onError={handleError}
+            onOpenNote={navigateToNote}
+            onUnlinkNote={(id) => linkNoteFolder(id, null)}
+          />
+        ) : (
+          <ClientsView
+            clients={clients}
+            tasks={tasks}
+            onUpdate={updateClient}
+            onDelete={deleteClient}
+            onOpenClient={setSelectedClientId}
           />
         )
       case 'equipe':
         return isGestor ? <TeamView onError={handleError} /> : null
+      case 'relatorios':
+        return (
+          <ReportsView
+            members={members}
+            clients={clients}
+            currentUser={user}
+            onError={handleError}
+          />
+        )
       default:
         return (
           <Dashboard
             tasks={tasks}
-            todos={todos}
             notes={notes}
             members={members}
             currentUser={user}
             columns={columns}
-            onNavigate={setView}
+            onNavigate={changeView}
             onCreateTask={() => openSendToKanban('', '')}
             onUpdateTask={updateTask}
             onMoveTask={moveTask}
@@ -383,7 +465,7 @@ export default function App() {
               <button
                 key={v.key}
                 className={view === v.key ? 'active' : ''}
-                onClick={() => setView(v.key)}
+                onClick={() => changeView(v.key)}
               >
                 <Ico />
                 <span>{v.label}</span>

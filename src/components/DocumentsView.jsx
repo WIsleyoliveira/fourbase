@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   IconFolderFilled,
@@ -12,10 +12,23 @@ import {
   IconNotes,
   IconCheckPlain,
   IconClose,
+  IconBuilding,
+  IconChevronDown,
+  IconCalendar,
+  IconFilePdf,
+  IconPresentation,
+  IconSheet,
+  IconFileText,
+  IconStack,
+  IconSearch,
 } from '../icons.jsx'
 import { getPreview } from '../textPreview.js'
 import { supabase, CLIENT_MEDIA_BUCKET, storagePathFromUrl } from '../supabase.js'
 import { api } from '../api.js'
+import { assigneeColor } from '../colors.js'
+
+// Grupo das pastas sem cliente vinculado (legado / criadas antes da migração)
+const NO_CLIENT = '__none__'
 
 const LIMIT_MB = 25
 
@@ -31,6 +44,67 @@ const FOLDER_COLORS = [
 
 const KIND_ICON  = { image: IconMedia, video: IconPlay, document: IconNotes }
 const KIND_LABEL = { image: 'Imagem', video: 'Vídeo', document: 'Documento' }
+
+// ── Filtros da galeria ──────────────────────────────────────────────────────
+const FILE_TYPES = [
+  { key: 'all',    label: 'Todos os tipos',      short: 'Todos',         icon: IconStack,        exts: null },
+  { key: 'pdf',    label: 'Documentos PDF',      short: 'PDF',           icon: IconFilePdf,      exts: ['pdf'] },
+  { key: 'slides', label: 'Apresentações',       short: 'Apresentações', icon: IconPresentation, exts: ['pptx', 'ppt'] },
+  { key: 'text',   label: 'Documentos de Texto', short: 'Texto',         icon: IconFileText,     exts: ['docx', 'doc', 'txt'] },
+  { key: 'sheets', label: 'Planilhas',           short: 'Planilhas',     icon: IconSheet,        exts: ['xlsx', 'csv'] },
+  { key: 'images', label: 'Imagens',             short: 'Imagens',       icon: IconMedia,        exts: ['png', 'jpg', 'jpeg', 'webp'] },
+]
+
+const DATE_RANGES = [
+  { key: 'all',    label: 'Todas as datas',  short: 'Todas as datas' },
+  { key: '7d',     label: 'Últimos 7 dias',  short: 'Últimos 7 dias' },
+  { key: '30d',    label: 'Últimos 30 dias', short: 'Últimos 30 dias' },
+  { key: 'month',  label: 'Este mês',        short: 'Este mês' },
+  { key: 'custom', label: 'Personalizado',   short: 'Período personalizado' },
+]
+
+const extOf = (name = '') => {
+  const parts = String(name).split('.')
+  return parts.length > 1 ? parts.pop().toLowerCase() : ''
+}
+
+// Casa o documento com a categoria escolhida — pela extensão do nome e,
+// quando o arquivo não tem extensão, pelo "kind" registrado no upload
+function matchesType(doc, typeKey) {
+  if (typeKey === 'all') return true
+  const def = FILE_TYPES.find((t) => t.key === typeKey)
+  if (!def?.exts) return true
+  const ext = extOf(doc.name)
+  if (ext) return def.exts.includes(ext)
+  if (typeKey === 'images') return doc.kind === 'image'
+  return false
+}
+
+// Início do intervalo para as opções rápidas (null = sem limite inferior)
+function rangeStart(key) {
+  const now = new Date()
+  if (key === 'month') return new Date(now.getFullYear(), now.getMonth(), 1)
+  const days = key === '7d' ? 7 : key === '30d' ? 30 : null
+  if (days === null) return null
+  const d = new Date(now)
+  d.setDate(d.getDate() - days)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function matchesDate(stamp, key, from, to) {
+  if (key === 'all') return true
+  if (!stamp) return false
+  const t = new Date(stamp)
+  if (Number.isNaN(t.getTime())) return false
+  if (key === 'custom') {
+    if (from && t < new Date(`${from}T00:00:00`)) return false
+    if (to && t > new Date(`${to}T23:59:59`)) return false
+    return true
+  }
+  const start = rangeStart(key)
+  return !start || t >= start
+}
 
 const kindFromFile = (f) =>
   f.type.startsWith('image/') ? 'image' : f.type.startsWith('video/') ? 'video' : 'document'
@@ -74,6 +148,57 @@ function ColorSwatches({ value, onChange }) {
           {value === c.value && <IconCheckPlain size={11} />}
         </button>
       ))}
+    </div>
+  )
+}
+
+// ── Dropdown de filtro com ícones por opção ─────────────────────────────────
+function FilterDropdown({ value, options, onChange, triggerIcon: TriggerIcon, ariaLabel }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const current = options.find((o) => o.key === value) || options[0]
+  const CurrentIcon = TriggerIcon || current.icon
+
+  return (
+    <div className="docs-filter" ref={ref}>
+      <button
+        type="button"
+        className={`docs-filter-trigger${value !== 'all' ? ' is-active' : ''}`}
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {CurrentIcon && <CurrentIcon size={14} />}
+        <span>{current.label}</span>
+        <IconChevronDown size={13} />
+      </button>
+      {open && (
+        <div className="docs-filter-menu">
+          {options.map((o) => {
+            const Ico = o.icon
+            return (
+              <button
+                key={o.key}
+                type="button"
+                className={o.key === value ? 'active' : ''}
+                onClick={() => { onChange(o.key); setOpen(false) }}
+              >
+                {Ico ? <Ico size={14} /> : <span className="docs-filter-dot" />}
+                <span>{o.label}</span>
+                {o.key === value && <IconCheckPlain size={12} />}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -286,10 +411,15 @@ function FolderNode({ folder }) {
 }
 
 // ── Modal de criação de pasta ────────────────────────────────────────────────
-function CreateFolderModal({ onClose, onSubmit }) {
+// `lockedClientId` — quando definido (ex: dentro do Espaço do Cliente), o seletor
+// de cliente é omitido e a pasta nasce vinculada àquele cliente.
+function CreateFolderModal({ onClose, onSubmit, clients = [], lockedClientId = null }) {
   const [name, setName]   = useState('')
   const [color, setColor] = useState(FOLDER_COLORS[0].value)
+  const [clientId, setClientId] = useState(lockedClientId || clients[0]?.id || '')
   const [loading, setLoading] = useState(false)
+
+  const showClientPicker = !lockedClientId && clients.length > 0
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose() }
@@ -302,7 +432,7 @@ function CreateFolderModal({ onClose, onSubmit }) {
     if (!name.trim() || loading) return
     setLoading(true)
     try {
-      await onSubmit(name.trim(), color)
+      await onSubmit(name.trim(), color, lockedClientId || clientId || null)
       onClose()
     } finally {
       setLoading(false)
@@ -330,6 +460,21 @@ function CreateFolderModal({ onClose, onSubmit }) {
               disabled={loading}
             />
           </label>
+          {showClientPicker && (
+            <label>
+              Cliente
+              <select
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                disabled={loading}
+              >
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
+                ))}
+                <option value="">Sem cliente</option>
+              </select>
+            </label>
+          )}
           <label>
             Cor da pasta
             <ColorSwatches value={color} onChange={setColor} />
@@ -360,11 +505,26 @@ function ancestorIds(folders, id) {
 }
 
 // ── Componente principal ────────────────────────────────────────────────────
-export default function DocumentsView({ onError, targetFolderId, onConsumeTarget, onOpenNote, onUnlinkNote }) {
+// `clients`  — lista de clientes para agrupar a árvore
+// `clientId` — quando definido, o painel opera no escopo de um único cliente
+//              (usado pela aba "Documentos" dentro do Espaço do Cliente)
+export default function DocumentsView({
+  onError, targetFolderId, onConsumeTarget, onOpenNote, onUnlinkNote,
+  clients = [], clientId = null,
+}) {
   const [folders, setFolders]           = useState([])
+  // Clientes expandidos na árvore (no modo escopo não é usado)
+  const [expandedClients, setExpandedClients] = useState(() => new Set())
   const [notes, setNotes]               = useState([])
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
+
+  // ── Filtros da galeria (aplicados em memória, sem novas requisições) ──
+  const [fileTypeFilter, setFileTypeFilter] = useState('all')
+  const [dateFilter, setDateFilter]         = useState('all')
+  const [customFrom, setCustomFrom]         = useState('')
+  const [customTo, setCustomTo]             = useState('')
+  const [docSearch, setDocSearch]           = useState('')
 
   const [expandedIds, setExpandedIds]   = useState(() => new Set())
   const [docsByFolder, setDocsByFolder] = useState({})
@@ -392,14 +552,18 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
   useEffect(() => {
     api.getNotes().then(setNotes).catch(() => {})
     api.getFolders()
-      .then((list) => {
+      .then((all) => {
+        // No modo escopo, trabalha apenas com as pastas do cliente ativo
+        const list = clientId ? all.filter((f) => f.client_id === clientId) : all
         setFolders(list)
         // Se chegamos aqui vindos de uma nota relacionada, abre direto naquela pasta
         // (expandindo toda a cadeia de pastas-pai para que ela fique visível na árvore)
-        if (targetFolderId && list.some((f) => f.id === targetFolderId)) {
+        const target = list.find((f) => f.id === targetFolderId)
+        if (target) {
           setSelectedFolderId(targetFolderId)
           setSelectedDocId(null)
           setExpandedIds(new Set([targetFolderId, ...ancestorIds(list, targetFolderId)]))
+          setExpandedClients(new Set([target.client_id || NO_CLIENT]))
           onConsumeTarget?.()
           return
         }
@@ -407,6 +571,7 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
         if (roots.length) {
           setSelectedFolderId(roots[0].id)
           setExpandedIds(new Set([roots[0].id]))
+          setExpandedClients(new Set([roots[0].client_id || NO_CLIENT]))
         }
       })
       .catch(onError)
@@ -446,9 +611,18 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
   }, [selectedFolderId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── CRUD de pastas ────────────────────────────────────────────────────────
-  const createFolder = async (name, color, parentId = null) => {
-    const folder = await api.createFolder(name, color, parentId)
+  const createFolder = async (name, color, parentId = null, ownerClientId = null) => {
+    // No modo escopo a pasta sempre pertence ao cliente ativo
+    const wantedClientId = clientId || ownerClientId
+    const folder = await api.createFolder(name, color, parentId, wantedClientId)
+
     setFolders((prev) => [...prev, folder])
+    // Garante que o grupo do cliente esteja aberto para a nova pasta aparecer
+    if (folder.client_id) {
+      setExpandedClients((prev) => new Set(prev).add(folder.client_id))
+    } else {
+      setExpandedClients((prev) => new Set(prev).add(NO_CLIENT))
+    }
     setSelectedFolderId(folder.id)
     setSelectedDocId(null)
     setExpandedIds((prev) => {
@@ -520,6 +694,15 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
     setSelectedDocId(null)
     setExpandedIds((prev) => new Set(prev).add(id))
     ensureDocsLoaded(id)
+  }
+
+  // Expande/recolhe o grupo de um cliente no nível raiz da árvore
+  const toggleClient = (id) => {
+    setExpandedClients((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   // ── Upload ────────────────────────────────────────────────────────────────
@@ -615,6 +798,43 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
     return parts.join(' › ')
   }
 
+  // ── Filtragem da galeria ──────────────────────────────────────────────────
+  // Roda sobre os documentos já carregados em memória — trocar de filtro não
+  // dispara nenhuma chamada à API.
+  const docTerm = docSearch.trim().toLowerCase()
+
+  const visibleDocs = useMemo(() => {
+    const list = selectedFolderId ? (docsByFolder[selectedFolderId] || []) : []
+    return list.filter((d) => {
+      if (!matchesType(d, fileTypeFilter)) return false
+      if (!matchesDate(d.created_at, dateFilter, customFrom, customTo)) return false
+      if (!docTerm) return true
+      const label = `${d.name || ''} ${KIND_LABEL[d.kind] || ''}`.toLowerCase()
+      return label.includes(docTerm)
+    })
+  }, [docsByFolder, selectedFolderId, fileTypeFilter, dateFilter, customFrom, customTo, docTerm])
+
+  const visibleNotes = useMemo(() => {
+    // Notas não são arquivos — saem da listagem quando há filtro de tipo ativo
+    if (fileTypeFilter !== 'all') return []
+    const list = selectedFolderId ? notes.filter((n) => n.folder_id === selectedFolderId) : []
+    return list.filter((n) => {
+      if (!matchesDate(n.updated_at || n.created_at, dateFilter, customFrom, customTo)) return false
+      if (!docTerm) return true
+      return (n.title || 'Sem título').toLowerCase().includes(docTerm)
+    })
+  }, [notes, selectedFolderId, fileTypeFilter, dateFilter, customFrom, customTo, docTerm])
+
+  const hasActiveFilters = fileTypeFilter !== 'all' || dateFilter !== 'all' || docTerm !== ''
+
+  const clearFilters = () => {
+    setFileTypeFilter('all')
+    setDateFilter('all')
+    setCustomFrom('')
+    setCustomTo('')
+    setDocSearch('')
+  }
+
   // ── Renderização ──────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -626,6 +846,21 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
   }
 
   const rootFolders        = childrenOf(folders, null)
+
+  // Nível raiz da árvore: um grupo por cliente + grupo das pastas sem vínculo
+  const clientGroups = [
+    ...clients.map((c) => ({
+      id: c.id,
+      name: c.name || 'Cliente sem nome',
+      color: assigneeColor(c.id),
+      roots: rootFolders.filter((f) => f.client_id === c.id),
+    })),
+  ]
+  const orphanRoots = rootFolders.filter((f) => !f.client_id)
+  if (orphanRoots.length) {
+    clientGroups.push({ id: NO_CLIENT, name: 'Sem cliente', color: '#94a3b8', roots: orphanRoots })
+  }
+
   const selectedFolder     = folders.find((f) => f.id === selectedFolderId) || null
   const selectedFolderDocs = selectedFolderId ? (docsByFolder[selectedFolderId] || []) : []
   const selectedDoc        = selectedDocId
@@ -716,13 +951,53 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
                   </div>
                 ))
               )
-            ) : (
-              /* ── Modo de árvore hierárquica ── */
+            ) : clientId ? (
+              /* ── Escopo de um único cliente (Espaço do Cliente) ── */
               rootFolders.length === 0 ? (
-                <div className="empty-hint">Nenhuma pasta criada ainda.</div>
+                <div className="empty-hint">
+                  Nenhuma pasta para este cliente ainda — crie a primeira em "Nova Pasta".
+                </div>
               ) : (
                 rootFolders.map((f) => <FolderNode key={f.id} folder={f} />)
               )
+            ) : clientGroups.length === 0 ? (
+              <div className="empty-hint">
+                Nenhum cliente cadastrado ainda. Cadastre um cliente para organizar as documentações.
+              </div>
+            ) : (
+              /* ── Árvore agrupada por cliente ── */
+              clientGroups.map((g) => {
+                const isOpen = expandedClients.has(g.id)
+                return (
+                  <div className="client-group" key={g.id}>
+                    <div className="client-group-row" onClick={() => toggleClient(g.id)}>
+                      <button className="folder-chevron" onClick={(e) => { e.stopPropagation(); toggleClient(g.id) }}>
+                        <IconChevronRight
+                          size={13}
+                          style={{
+                            transform: isOpen ? 'rotate(90deg)' : 'none',
+                            transition: 'transform 0.15s ease',
+                          }}
+                        />
+                      </button>
+                      <span className="client-group-avatar" style={{ background: g.color }}>
+                        <IconBuilding size={12} />
+                      </span>
+                      <span className="folder-name">{g.name}</span>
+                      <small className="client-group-count">{g.roots.length}</small>
+                    </div>
+                    {isOpen && (
+                      <div className="client-group-children">
+                        {g.roots.length === 0 ? (
+                          <div className="folder-child-empty">Nenhuma pasta para este cliente</div>
+                        ) : (
+                          g.roots.map((f) => <FolderNode key={f.id} folder={f} />)
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
             )}
           </div>
         </FolderCtx.Provider>
@@ -730,8 +1005,10 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
 
       {isCreateModalOpen && (
         <CreateFolderModal
+          clients={clients}
+          lockedClientId={clientId}
           onClose={() => setIsCreateModalOpen(false)}
-          onSubmit={(name, color) => createFolder(name, color, null)}
+          onSubmit={(name, color, ownerClientId) => createFolder(name, color, null, ownerClientId)}
         />
       )}
 
@@ -804,13 +1081,118 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
               {uploading ? 'Enviando...' : 'Adicionar documento'}
             </button>
           </div>
+          {/* ── Barra de filtros ── */}
+          <div className="docs-filter-bar">
+            <div className="docs-search">
+              <IconSearch size={14} />
+              <input
+                type="text"
+                placeholder="Buscar documento por nome..."
+                value={docSearch}
+                onChange={(e) => setDocSearch(e.target.value)}
+              />
+              {docSearch && (
+                <button type="button" title="Limpar busca" onClick={() => setDocSearch('')}>
+                  <IconClose size={12} />
+                </button>
+              )}
+            </div>
+
+            <FilterDropdown
+              value={fileTypeFilter}
+              options={FILE_TYPES}
+              onChange={setFileTypeFilter}
+              ariaLabel="Filtrar por tipo de documento"
+            />
+            <FilterDropdown
+              value={dateFilter}
+              options={DATE_RANGES}
+              onChange={setDateFilter}
+              triggerIcon={IconCalendar}
+              ariaLabel="Filtrar por data"
+            />
+
+            {dateFilter === 'custom' && (
+              <div className="docs-filter-range">
+                <label>
+                  De
+                  <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                </label>
+                <label>
+                  Até
+                  <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                </label>
+              </div>
+            )}
+
+            {hasActiveFilters && (
+              <button type="button" className="docs-filter-clear" onClick={clearFilters}>
+                <IconClose size={12} />
+                Limpar filtros
+              </button>
+            )}
+
+            <span className="docs-filter-count">
+              {visibleDocs.length + visibleNotes.length} de {selectedFolderDocs.length + selectedFolderNotes.length}
+            </span>
+          </div>
+
+          {/* ── Badges dos filtros ativos ── */}
+          {hasActiveFilters && (
+            <div className="docs-filter-badges">
+              {docTerm && (
+                <span className="docs-filter-badge">
+                  Nome: “{docSearch.trim()}”
+                  <button type="button" title="Limpar busca por nome" onClick={() => setDocSearch('')}>
+                    <IconClose size={11} />
+                  </button>
+                </span>
+              )}
+              {fileTypeFilter !== 'all' && (
+                <span className="docs-filter-badge">
+                  {FILE_TYPES.find((t) => t.key === fileTypeFilter)?.short}
+                  <button type="button" title="Remover filtro de tipo" onClick={() => setFileTypeFilter('all')}>
+                    <IconClose size={11} />
+                  </button>
+                </span>
+              )}
+              {dateFilter !== 'all' && (
+                <span className="docs-filter-badge">
+                  {dateFilter === 'custom' && (customFrom || customTo)
+                    ? `${customFrom || '…'} → ${customTo || '…'}`
+                    : DATE_RANGES.find((d) => d.key === dateFilter)?.short}
+                  <button
+                    type="button"
+                    title="Remover filtro de data"
+                    onClick={() => { setDateFilter('all'); setCustomFrom(''); setCustomTo('') }}
+                  >
+                    <IconClose size={11} />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="gallery-grid">
-            {selectedFolderDocs.length === 0 && selectedFolderNotes.length === 0 && (
+            {selectedFolderDocs.length === 0 && selectedFolderNotes.length === 0 ? (
               <div className="empty-hint">
                 Nenhum documento nesta pasta ainda — envie o primeiro arquivo.
               </div>
-            )}
-            {selectedFolderNotes.map((n) => (
+            ) : visibleDocs.length === 0 && visibleNotes.length === 0 ? (
+              <div className="docs-filter-empty">
+                <div className="docs-filter-empty-icon"><IconStack size={26} /></div>
+                <strong>Nenhum documento encontrado</strong>
+                <p>
+                  Nenhum documento encontrado para os filtros selecionados.
+                  Tente alterar a busca ou limpar os filtros.
+                </p>
+                <button type="button" onClick={clearFilters}>
+                  <IconClose size={13} />
+                  Limpar filtros
+                </button>
+              </div>
+            ) : null}
+            {visibleNotes.map((n) => (
               <div className="gallery-item gallery-item-note" key={`note-${n.id}`}>
                 <button className="gallery-doc" onClick={() => onOpenNote(n.id)} title="Abrir nota">
                   <IconNotes size={26} />
@@ -827,7 +1209,7 @@ export default function DocumentsView({ onError, targetFolderId, onConsumeTarget
                 </button>
               </div>
             ))}
-            {selectedFolderDocs.map((item) => (
+            {visibleDocs.map((item) => (
               <div className="gallery-item" key={item.id}>
                 {item.kind === 'image' && (
                   <img

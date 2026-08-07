@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { IconKanban, IconNotes, IconFolder, IconCheck, IconArrowRight, IconPlus } from '../icons.jsx'
+import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { api } from '../api.js'
+import { assigneeColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
 const MAX_UPCOMING = 4
@@ -29,7 +30,7 @@ const dueLabel = (due_date) => {
 }
 
 export default function Dashboard({
-  tasks, todos, notes, members, currentUser, columns,
+  tasks, notes, members, currentUser, columns,
   onNavigate, onCreateTask, onUpdateTask, onMoveTask, onDeleteTask,
 }) {
   const [detailTaskId, setDetailTaskId] = useState(null)
@@ -47,15 +48,13 @@ export default function Dashboard({
     doing: tasks.filter((t) => t.column_key === 'doing').length,
     done: tasks.filter((t) => t.column_key === 'done').length,
   }
-  const todosDone = todos.filter((t) => t.done).length
   const taskProgress = tasks.length ? Math.round((counts.done / tasks.length) * 100) : 0
-  const todoProgress = todos.length ? Math.round((todosDone / todos.length) * 100) : 0
 
   const stats = [
     { label: 'A fazer', value: counts.todo, tone: 'info' },
     { label: 'Em progresso', value: counts.doing, tone: 'warn' },
     { label: 'Concluídas', value: counts.done, tone: 'ok' },
-    { label: 'Checklist', value: `${todosDone}/${todos.length}`, tone: 'brand' },
+    { label: 'Total', value: tasks.length, tone: 'brand' },
   ]
 
   // Tarefas do usuário atual (a API já filtra por assigned_to), não concluídas, com prazo —
@@ -68,7 +67,7 @@ export default function Dashboard({
   const detailTask = detailTaskId ? tasks.find((t) => t.id === detailTaskId) : null
   const latestNote = notes[0] || null
 
-  // Os 4 atalhos/widgets da coluna direita — mesma estrutura visual para todos,
+  // Atalhos/widgets da coluna direita — mesma estrutura visual para todos,
   // cada um mantendo seus próprios dados/contadores dinâmicos no subtítulo
   const sideWidgets = [
     {
@@ -92,12 +91,6 @@ export default function Dashboard({
       icon: <IconKanban size={18} />,
       title: 'Kanban',
       subtitle: `${tasks.length} tarefa${tasks.length === 1 ? '' : 's'} · ${taskProgress}% concluído`,
-    },
-    {
-      key: 'checklist',
-      icon: <IconCheck size={18} />,
-      title: 'Checklist',
-      subtitle: todos.length ? `${todosDone}/${todos.length} · ${todoProgress}% concluído` : 'Nenhum item ainda',
     },
   ]
 
@@ -148,6 +141,7 @@ export default function Dashboard({
               <button
                 key={t.id}
                 className="upcoming-item"
+                style={{ borderLeft: `3px solid ${assigneeColor(t.assigned_to)}`, paddingLeft: 10 }}
                 onClick={() => setDetailTaskId(t.id)}
               >
                 <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>
