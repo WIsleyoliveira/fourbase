@@ -11,7 +11,7 @@ import {
   IconClose,
   IconCheckPlain,
 } from '../icons.jsx'
-import { assigneeColor, memberColor } from '../colors.js'
+import { assigneeColor, memberColor, tagColor } from '../colors.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -41,7 +41,7 @@ const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 // o desmonte do painel de detalhes é adiado até o fim da transição para não interrompê-la.
 const COLLAPSE_MS = 280
 
-export default function Calendar({ tasks, members, currentUser, columns, onAdd, onUpdate, onMove, onDelete }) {
+export default function Calendar({ tasks, members, currentUser, columns, tags = [], onAdd, onUpdate, onMove, onDelete, onCreateTag }) {
   const today = useMemo(() => new Date(), [])
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDate, setSelectedDate] = useState(today)
@@ -54,11 +54,14 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
   const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false)
   const [assigneeFilter, setAssigneeFilter] = useState('all')
+  const [tagMenuOpen, setTagMenuOpen] = useState(false)
+  const [tagFilter, setTagFilter] = useState(() => new Set())
   const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
 
   const viewMenuRef = useRef(null)
   const assigneeMenuRef = useRef(null)
+  const tagMenuRef = useRef(null)
   const collapseTimerRef = useRef(null)
 
   // Recolhe o painel de detalhes com animação: a largura do popover começa a encolher
@@ -84,11 +87,15 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
       if (assigneeMenuOpen && assigneeMenuRef.current && !assigneeMenuRef.current.contains(e.target)) {
         setAssigneeMenuOpen(false)
       }
+      if (tagMenuOpen && tagMenuRef.current && !tagMenuRef.current.contains(e.target)) {
+        setTagMenuOpen(false)
+      }
     }
     const handleKey = (e) => {
       if (e.key === 'Escape') {
         setViewMenuOpen(false)
         setAssigneeMenuOpen(false)
+        setTagMenuOpen(false)
         // Primeiro ESC recolhe o painel de detalhes; segundo ESC fecha o popover do dia
         if (selectedTaskId) {
           collapseDetailPanel()
@@ -103,16 +110,25 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
       document.removeEventListener('mousedown', handleClick)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [viewMenuOpen, assigneeMenuOpen, selectedTaskId, collapsing])
+  }, [viewMenuOpen, assigneeMenuOpen, tagMenuOpen, selectedTaskId, collapsing])
+
+  const toggleTagFilter = (name) => {
+    setTagFilter((prev) => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
+  }
 
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase()
     return tasks.filter((t) => {
       if (assigneeFilter !== 'all' && t.assigned_to !== assigneeFilter) return false
+      if (tagFilter.size > 0 && !(t.tags || []).some((name) => tagFilter.has(name))) return false
       if (q && !t.title.toLowerCase().includes(q)) return false
       return true
     })
-  }, [tasks, search, assigneeFilter])
+  }, [tasks, search, assigneeFilter, tagFilter])
 
   const tasksByDay = useMemo(() => {
     const map = {}
@@ -243,10 +259,42 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
             </h2>
           </div>
           <div className="calview-toolbar-right">
-            <button className="calview-ghost-btn">
-              <IconFilter size={14} />
-              Filtro
-            </button>
+            <div className="calview-view-select" ref={tagMenuRef}>
+              <button
+                className={`calview-ghost-btn${tagFilter.size > 0 ? ' active' : ''}`}
+                onClick={() => setTagMenuOpen((v) => !v)}
+              >
+                <IconFilter size={14} />
+                {tagFilter.size === 0 ? 'Etiquetas' : `Etiquetas (${tagFilter.size})`}
+                <IconChevronDown size={14} />
+              </button>
+              {tagMenuOpen && (
+                <div className="calview-view-menu calview-assignee-menu calview-tag-menu">
+                  {tags.length === 0 && (
+                    <p className="calview-tag-menu-empty">Nenhuma etiqueta cadastrada.</p>
+                  )}
+                  {tags.map((t) => {
+                    const active = tagFilter.has(t.name)
+                    return (
+                      <button
+                        key={t.id}
+                        className={active ? 'active' : ''}
+                        onClick={() => toggleTagFilter(t.name)}
+                      >
+                        <span className="calview-tag-menu-dot" style={{ background: t.color }} />
+                        {t.name}
+                        {active && <IconCheckPlain size={12} style={{ marginLeft: 'auto' }} />}
+                      </button>
+                    )
+                  })}
+                  {tagFilter.size > 0 && (
+                    <button className="calview-tag-menu-clear" onClick={() => setTagFilter(new Set())}>
+                      Limpar filtro
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             <button className="calview-ghost-btn">Fechado</button>
             <div className="calview-view-select" ref={assigneeMenuRef}>
               <button
@@ -351,6 +399,13 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                     >
                       <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
                       <span className="calview-task-title">{t.title}</span>
+                      {t.tags?.length > 0 && (
+                        <span className="calview-task-tags">
+                          {t.tags.slice(0, 3).map((name) => (
+                            <span key={name} className="calview-task-tag-dot" style={{ background: tagColor(name, tags) }} title={name} />
+                          ))}
+                        </span>
+                      )}
                     </button>
                   ))}
                   {dayTasks.length > 3 && (
@@ -443,29 +498,43 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                         className={`daydetail-item${selectedTaskId === t.id ? ' active' : ''}`}
                         key={t.id}
                       >
-                        <button
-                          className={`daydetail-checkbox${done ? ' checked' : ''}`}
-                          onClick={() => toggleComplete(t)}
-                          title={done ? 'Reabrir tarefa' : 'Concluir tarefa'}
-                        >
-                          {done && <IconCheckPlain size={11} />}
-                        </button>
-                        <button
-                          className={`daydetail-item-title${done ? ' done' : ''}`}
-                          onClick={() => { clearTimeout(collapseTimerRef.current); setCollapsing(false); setSelectedTaskId(t.id) }}
-                        >
-                          {t.title}
-                        </button>
-                        <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>
-                          {t.priority}
-                        </span>
-                        <div
-                          className={`member-avatar sm${assignee ? '' : ' empty'}`}
-                          style={assignee ? { background: assigneeColor(assignee.id, assignee.color) } : undefined}
-                          title={assignee?.name || 'Sem responsável'}
-                        >
-                          {assignee ? getInitials(assignee.name) : '—'}
+                        <div className="daydetail-item-row">
+                          <button
+                            className={`daydetail-checkbox${done ? ' checked' : ''}`}
+                            onClick={() => toggleComplete(t)}
+                            title={done ? 'Reabrir tarefa' : 'Concluir tarefa'}
+                          >
+                            {done && <IconCheckPlain size={11} />}
+                          </button>
+                          <button
+                            className={`daydetail-item-title${done ? ' done' : ''}`}
+                            onClick={() => { clearTimeout(collapseTimerRef.current); setCollapsing(false); setSelectedTaskId(t.id) }}
+                          >
+                            {t.title}
+                          </button>
+                          <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>
+                            {t.priority}
+                          </span>
+                          <div
+                            className={`member-avatar sm${assignee ? '' : ' empty'}`}
+                            style={assignee ? { background: assigneeColor(assignee.id, assignee.color) } : undefined}
+                            title={assignee?.name || 'Sem responsável'}
+                          >
+                            {assignee ? getInitials(assignee.name) : '—'}
+                          </div>
                         </div>
+                        {t.tags?.length > 0 && (
+                          <div className="daydetail-item-tags">
+                            {t.tags.map((name) => {
+                              const color = tagColor(name, tags)
+                              return (
+                                <span key={name} className="card-tag-pill" style={{ background: `${color}1f`, color }}>
+                                  {name}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     )
                   })
@@ -492,6 +561,8 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
                   members={members}
                   currentUser={currentUser}
                   columns={columns}
+                  tags={tags}
+                  onCreateTag={onCreateTag}
                   onClose={collapseDetailPanel}
                   onUpdate={onUpdate}
                   onMove={onMove}
@@ -509,6 +580,8 @@ export default function Calendar({ tasks, members, currentUser, columns, onAdd, 
           members={members}
           currentUser={currentUser}
           columns={columns}
+          tags={tags}
+          onCreateTag={onCreateTag}
           onClose={() => setDetailTask(null)}
           onUpdate={onUpdate}
           onMove={onMove}

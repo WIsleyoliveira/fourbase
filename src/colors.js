@@ -47,3 +47,25 @@ export function assigneeColor(id, overrideColor) {
 export function memberColor(id, list = []) {
   return assigneeColor(id, list.find((m) => m.id === id)?.color)
 }
+
+// Paleta para etiquetas (tags) — tons mais suaves/pastel, distintos da paleta
+// de responsáveis para não competir visualmente com o borda-esquerda dos cards.
+const TAG_PALETTE = [
+  '#4f8ff7', // azul
+  '#e85d75', // rosa/vermelho
+  '#9333ea', // roxo
+  '#2ec27e', // verde
+  '#f2a93b', // laranja
+  '#14b8c4', // teal (cor da marca)
+  '#d97706', // âmbar
+  '#0891b2', // ciano
+]
+
+// Cor de uma etiqueta pelo nome. Se `list` (registro de etiquetas vindo da
+// API) tiver uma cor cadastrada para esse nome, ela prevalece; senão cai no
+// hash — garante uma cor estável mesmo para tags ainda não persistidas.
+export function tagColor(name, list = []) {
+  const found = list.find((t) => t.name === name)?.color
+  if (found) return found
+  return TAG_PALETTE[hashString(String(name)) % TAG_PALETTE.length]
+}

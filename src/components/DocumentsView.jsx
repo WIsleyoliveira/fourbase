@@ -494,6 +494,54 @@ function CreateFolderModal({ onClose, onSubmit, clients = [], lockedClientId = n
 }
 
 // Retorna os IDs de todos os ancestrais (pai, avô, ...) de uma pasta
+function RemoveDocConfirmModal({ doc, onCancel, onConfirm, removing }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape' && !removing) onCancel() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onCancel, removing])
+
+  return (
+    <div className="modal-backdrop" onClick={() => !removing && onCancel()}>
+      <div className="modal remove-confirm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="remove-confirm-header">
+          <div className="remove-confirm-icon">
+            <IconTrash size={20} />
+          </div>
+          <button className="icon-btn" title="Fechar" onClick={onCancel} disabled={removing}>
+            <IconClose size={16} />
+          </button>
+        </div>
+        <div className="remove-confirm-body">
+          <h3>Remover documento</h3>
+          <p>
+            Tem certeza que deseja remover <strong>{doc.name || 'este documento'}</strong>?{' '}
+            Esta ação não poderá ser desfeita.
+          </p>
+        </div>
+        <div className="remove-confirm-actions">
+          <button className="secondary" onClick={onCancel} disabled={removing}>
+            Cancelar
+          </button>
+          <button className="remove-confirm-btn" onClick={onConfirm} disabled={removing}>
+            {removing ? (
+              <>
+                <span className="remove-spinner" />
+                Removendo…
+              </>
+            ) : (
+              <>
+                <IconTrash size={14} />
+                Sim, remover
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ancestorIds(folders, id) {
   const result = []
   let cur = folders.find((f) => f.id === id)
@@ -531,6 +579,8 @@ export default function DocumentsView({
   const [selectedFolderId, setSelectedFolderId] = useState(null)
   const [selectedDocId, setSelectedDocId]       = useState(null)
   const [lightboxImage, setLightboxImage]       = useState(null)
+  const [docToRemove, setDocToRemove]           = useState(null) // { folderId, doc } aguardando confirmação
+  const [removingDoc, setRemovingDoc]           = useState(false)
 
   const [menuFolderId, setMenuFolderId]               = useState(null)
   const [colorPickerFolderId, setColorPickerFolderId] = useState(null)
@@ -750,8 +800,16 @@ export default function DocumentsView({
     onUnlinkNote(noteId)
   }
 
-  const removeDoc = async (folderId, doc) => {
-    if (!confirm('Remover este documento?')) return
+  // Abre o modal de confirmação em vez de depender do confirm() nativo do
+  // navegador — browsers suprimem/auto-rejeitam diálogos nativos repetidos
+  // (ex.: após "Impedir que esta página crie caixas de diálogo adicionais"),
+  // fazendo a remoção parecer que "não faz nada" ao clicar.
+  const removeDoc = (folderId, doc) => setDocToRemove({ folderId, doc })
+
+  const confirmRemoveDoc = async () => {
+    if (!docToRemove) return
+    const { folderId, doc } = docToRemove
+    setRemovingDoc(true)
     try {
       await api.deleteFolderDocument(folderId, doc.id)
       setDocsByFolder((prev) => ({
@@ -761,8 +819,11 @@ export default function DocumentsView({
       if (selectedDocId === doc.id) setSelectedDocId(null)
       const path = storagePathFromUrl(doc.url, CLIENT_MEDIA_BUCKET)
       if (path) supabase.storage.from(CLIENT_MEDIA_BUCKET).remove([path]).catch(() => {})
+      setDocToRemove(null)
     } catch (err) {
       onError(err)
+    } finally {
+      setRemovingDoc(false)
     }
   }
 
@@ -1009,6 +1070,15 @@ export default function DocumentsView({
           lockedClientId={clientId}
           onClose={() => setIsCreateModalOpen(false)}
           onSubmit={(name, color, ownerClientId) => createFolder(name, color, null, ownerClientId)}
+        />
+      )}
+
+      {docToRemove && (
+        <RemoveDocConfirmModal
+          doc={docToRemove.doc}
+          removing={removingDoc}
+          onCancel={() => { if (!removingDoc) setDocToRemove(null) }}
+          onConfirm={confirmRemoveDoc}
         />
       )}
 

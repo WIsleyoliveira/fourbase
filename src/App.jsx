@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, getAuth, setAuth } from './api.js'
+import { tagColor } from './colors.js'
 
 // Colunas padrão — usadas como fallback antes de qualquer persistência
 const DEFAULT_COLUMNS = [
@@ -67,6 +68,7 @@ export default function App() {
   const [notes, setNotes] = useState([])
   const [members, setMembers] = useState([])
   const [clients, setClients] = useState([])
+  const [tags, setTags] = useState([])
   // Cliente aberto no "Espaço dos Clientes" (null = listagem)
   const [selectedClientId, setSelectedClientId] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -120,6 +122,11 @@ export default function App() {
       .then((c) => { if (Array.isArray(c)) setClients(c) })
       .catch(() => { /* tabela fourbase_clients ainda não criada */ })
 
+    // Etiquetas — tabela pode não existir ainda (antes da migração); falha silenciosa
+    api.getTags()
+      .then((tg) => { if (Array.isArray(tg)) setTags(tg) })
+      .catch(() => { /* tabela fourbase_tags ainda não criada */ })
+
     // Tenta carregar colunas da API (tabela pode não existir ainda — falha silenciosa)
     api.getColumns()
       .then((cols) => {
@@ -170,9 +177,9 @@ export default function App() {
   }
 
   // ---- tarefas ----
-  const addTask = (title, priority, due_date, assigned_to, description, client_id = null) =>
+  const addTask = (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
     api
-      .addTask(title, priority, due_date, assigned_to, description, client_id)
+      .addTask(title, priority, due_date, assigned_to, description, client_id, tags)
       .then((t) => setTasks((prev) => [...prev, t]))
       .catch(handleError)
 
@@ -211,6 +218,14 @@ export default function App() {
       loadAll()
     })
   }
+
+  // Cria uma etiqueta nova (usada pelo TagPicker ao digitar um nome inexistente).
+  // Se o nome já existir, a API devolve a etiqueta existente em vez de duplicar.
+  const createTag = (name) =>
+    api.createTag(name.trim(), tagColor(name.trim(), tags)).then((tag) => {
+      setTags((prev) => (prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]))
+      return tag
+    }).catch((err) => { handleError(err); throw err })
 
   // ---- notas ----
   const createNote = () =>
@@ -339,11 +354,13 @@ export default function App() {
             members={members}
             currentUser={user}
             columns={columns}
+            tags={tags}
             onAdd={addTask}
             onMove={moveTask}
             onUpdate={updateTask}
             onDelete={deleteTask}
             onAddColumn={addColumn}
+            onCreateTag={createTag}
           />
         )
       case 'calendario':
@@ -353,10 +370,12 @@ export default function App() {
             members={members}
             currentUser={user}
             columns={columns}
+            tags={tags}
             onAdd={addTask}
             onUpdate={updateTask}
             onMove={moveTask}
             onDelete={deleteTask}
+            onCreateTag={createTag}
           />
         )
       case 'notas':
@@ -400,12 +419,14 @@ export default function App() {
             members={members}
             currentUser={user}
             columns={columns}
+            tags={tags}
             onBack={() => setSelectedClientId(null)}
             onAdd={addTask}
             onMove={moveTask}
             onUpdate={updateTask}
             onDelete={deleteTask}
             onAddColumn={addColumn}
+            onCreateTag={createTag}
             onError={handleError}
             onOpenNote={navigateToNote}
             onUnlinkNote={(id) => linkNoteFolder(id, null)}
@@ -438,11 +459,13 @@ export default function App() {
             members={members}
             currentUser={user}
             columns={columns}
+            tags={tags}
             onNavigate={changeView}
             onCreateTask={() => openSendToKanban('', '')}
             onUpdateTask={updateTask}
             onMoveTask={moveTask}
             onDeleteTask={deleteTask}
+            onCreateTag={createTag}
           />
         )
     }

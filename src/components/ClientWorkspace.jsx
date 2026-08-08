@@ -12,8 +12,8 @@ const TABS = [
 // Workspace de um cliente: cabeçalho com dados + métricas, Kanban filtrado
 // estritamente pelas tarefas daquele client_id e as documentações do cliente.
 export default function ClientWorkspace({
-  client, tasks, members, currentUser, columns,
-  onBack, onAdd, onMove, onUpdate, onDelete, onAddColumn,
+  client, tasks, members, currentUser, columns, tags,
+  onBack, onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag,
   onError, onOpenNote, onUnlinkNote,
 }) {
   const [tab, setTab] = useState('kanban')
@@ -32,8 +32,8 @@ export default function ClientWorkspace({
   const color = assigneeColor(client.id, client.color)
 
   // Toda tarefa criada neste quadro nasce vinculada ao cliente ativo
-  const handleAdd = (title, priority, due_date, assigned_to, description) =>
-    onAdd(title, priority, due_date, assigned_to, description, client.id)
+  const handleAdd = (title, priority, due_date, assigned_to, description, _clientId, tags) =>
+    onAdd(title, priority, due_date, assigned_to, description, client.id, tags)
 
   return (
     <div className="client-workspace">
@@ -107,11 +107,13 @@ export default function ClientWorkspace({
           members={members}
           currentUser={currentUser}
           columns={columns}
+          tags={tags}
           onAdd={handleAdd}
           onMove={onMove}
           onUpdate={onUpdate}
           onDelete={onDelete}
           onAddColumn={onAddColumn}
+          onCreateTag={onCreateTag}
         />
       ) : (
         /* Documentações no escopo deste cliente — a chave força remontagem ao

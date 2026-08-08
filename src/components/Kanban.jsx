@@ -8,7 +8,8 @@ import {
   IconCalendar,
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
-import { memberColor } from '../colors.js'
+import TagPicker from './TagPicker.jsx'
+import { memberColor, tagColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
 const PRIORITY_RANK  = { Urgente: 0, Alta: 1, Média: 2, Baixa: 3 }
@@ -123,12 +124,13 @@ function AddGroupButton({ onAdd }) {
 }
 
 // ─── Componente principal ──────────────────────────────────────────────────────
-export default function Kanban({ tasks, members, currentUser, columns, onAdd, onMove, onUpdate, onDelete, onAddColumn }) {
+export default function Kanban({ tasks, members, currentUser, columns, tags = [], onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('Média')
   const [dueDate, setDueDate] = useState('')
   const [assignedTo, setAssignedTo] = useState(currentUser?.id || '')
+  const [newTaskTags, setNewTaskTags] = useState([])
   const [dragId, setDragId] = useState(null)
   const [overColumn, setOverColumn] = useState(null)
   // Armazena apenas o ID para que o modal sempre leia os dados mais recentes de `tasks`
@@ -143,10 +145,11 @@ export default function Kanban({ tasks, members, currentUser, columns, onAdd, on
   const submit = (e) => {
     e.preventDefault()
     if (!title.trim()) return
-    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim())
+    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim(), undefined, newTaskTags)
     setTitle('')
     setDueDate('')
     setDescription('')
+    setNewTaskTags([])
   }
 
   const step = (task, direction) => {
@@ -196,6 +199,15 @@ export default function Kanban({ tasks, members, currentUser, columns, onAdd, on
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+        <div className="task-form-tags">
+          <TagPicker
+            value={newTaskTags}
+            availableTags={tags}
+            onCreateTag={onCreateTag}
+            onChange={setNewTaskTags}
+            placeholder="Etiquetas (opcional)..."
+          />
+        </div>
         <button type="submit">
           <IconPlus size={16} />
           <span>Adicionar</span>
@@ -264,6 +276,20 @@ export default function Kanban({ tasks, members, currentUser, columns, onAdd, on
                         <p className="card-description">{task.description}</p>
                       )}
 
+                      {/* ── Etiquetas ── */}
+                      {task.tags?.length > 0 && (
+                        <div className="card-tags">
+                          {task.tags.map((name) => {
+                            const color = tagColor(name, tags)
+                            return (
+                              <span key={name} className="card-tag-pill" style={{ background: `${color}1f`, color }}>
+                                {name}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+
                       {/* ── Rodapé: prazo | setas (hover) + avatar ── */}
                       <div className="card-footer">
                         {task.due_date ? (
@@ -326,6 +352,8 @@ export default function Kanban({ tasks, members, currentUser, columns, onAdd, on
             members={members}
             currentUser={currentUser}
             columns={columns}
+            tags={tags}
+            onCreateTag={onCreateTag}
             onClose={() => setDetailTaskId(null)}
             onUpdate={onUpdate}
             onMove={onMove}

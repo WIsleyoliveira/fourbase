@@ -21,6 +21,7 @@ import {
   IconExpandSearch,
 } from '../icons.jsx'
 import { assigneeColor } from '../colors.js'
+import TagPicker from './TagPicker.jsx'
 
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
@@ -36,16 +37,6 @@ const PRIORITIES = [
   { value: 'Alta', color: '#f2a93b' },
   { value: 'Média', color: '#4f8ff7' },
   { value: 'Baixa', color: '#2ec27e' },
-]
-
-// Etiquetas pré-definidas — persistidas em localStorage enquanto o DB não tem a coluna
-const LABEL_OPTIONS = [
-  { id: 'urg', label: 'Urgente', color: '#e85d75', bg: '#fdedf0' },
-  { id: 'rev', label: 'Em Revisão', color: '#f2a93b', bg: '#fdf4e3' },
-  { id: 'bug', label: 'Bug', color: '#d63384', bg: '#fce7f3' },
-  { id: 'feat', label: 'Feature', color: '#4f8ff7', bg: '#ecf3fe' },
-  { id: 'mkt', label: 'Marketing', color: '#a855f7', bg: '#f5e8ff' },
-  { id: 'vendas', label: 'Vendas', color: '#14b8c4', bg: '#e6fafb' },
 ]
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
@@ -99,73 +90,6 @@ function TimeEstimateField({ taskId }) {
     >
       {value || 'Vazio'}
     </span>
-  )
-}
-
-// ─── Sub-componente: widget de etiquetas ──────────────────────────────────────
-function LabelPicker({ taskId }) {
-  const key = `fb_labels_${taskId}`
-  const [activeIds, setActiveIds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(key)) || [] } catch { return [] }
-  })
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  const toggle = (id) => {
-    const next = activeIds.includes(id) ? activeIds.filter((x) => x !== id) : [...activeIds, id]
-    setActiveIds(next)
-    localStorage.setItem(key, JSON.stringify(next))
-  }
-
-  const activeLabels = LABEL_OPTIONS.filter((l) => activeIds.includes(l.id))
-
-  return (
-    <div className="tdv2-labels-container" ref={containerRef}>
-      {activeLabels.map((l) => (
-        <button
-          key={l.id}
-          className="tdv2-label-pill"
-          style={{ background: l.bg, color: l.color }}
-          onClick={() => toggle(l.id)}
-          title="Clique para remover"
-        >
-          {l.label}
-        </button>
-      ))}
-      <div style={{ position: 'relative' }}>
-        <button className="tdv2-label-add" onClick={() => setOpen(!open)}>
-          <IconPlus size={10} />
-          Adicionar
-        </button>
-        {open && (
-          <div className="tdv2-label-dropdown">
-            {LABEL_OPTIONS.map((l) => {
-              const active = activeIds.includes(l.id)
-              return (
-                <button
-                  key={l.id}
-                  className={`tdv2-label-option${active ? ' active' : ''}`}
-                  onClick={() => toggle(l.id)}
-                >
-                  <span className="tdv2-label-dot" style={{ background: l.color }} />
-                  <span>{l.label}</span>
-                  {active && <IconCheckPlain size={12} style={{ marginLeft: 'auto', color: l.color }} />}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -292,7 +216,7 @@ function AttachmentsSection({ taskId, attachments, onChange }) {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-export default function TaskDetailModal({ task, members, currentUser, columns: colsProp, onClose, onUpdate, onMove, onDelete, embedded = false }) {
+export default function TaskDetailModal({ task, members, currentUser, columns: colsProp, tags = [], onCreateTag, onClose, onUpdate, onMove, onDelete, embedded = false }) {
   // Usa as colunas recebidas do Kanban (inclui customizadas) com fallback para o padrão
   const COLUMNS = colsProp || DEFAULT_COLUMNS
   const isGestor = currentUser?.role === 'gestor'
@@ -451,7 +375,12 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
                   <IconTag size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
                   Etiquetas
                 </span>
-                <LabelPicker taskId={task.id} />
+                <TagPicker
+                  value={local.tags || []}
+                  availableTags={tags}
+                  onCreateTag={onCreateTag}
+                  onChange={(next) => updateField('tags', next)}
+                />
               </div>
             </div>
 

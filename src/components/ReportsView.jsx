@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { IconPlus, IconTrash, IconDownload, IconClose, IconChevronDown } from '../icons.jsx'
+import { IconPlus, IconTrash, IconDownload, IconChevronDown } from '../icons.jsx'
 import { api } from '../api.js'
 import { memberColor } from '../colors.js'
 
@@ -19,6 +19,9 @@ const formatDateBR = (iso) => {
 
 // Escapa um campo para CSV (aspas duplas + separador vírgula)
 const csvField = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+
+const introTemplate = (clientName, dateFromBR, dateToBR) =>
+  `Prezado(a) ${clientName || '[Nome do Cliente]'}, apresentamos a seguir o relatório consolidado das atividades executadas pela equipe Fourbase durante o período de ${dateFromBR || '[Data Início]'} a ${dateToBR || '[Data Fim]'}. Abaixo estão discriminadas as tarefas entregues, status de andamento e respectivos responsáveis.`
 
 // ── Botão "Exportar" com opções CSV/PDF ─────────────────────────────────────
 function ExportMenu({ onExportCsv, onExportPdf }) {
@@ -57,11 +60,23 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
   const [activities, setActivities] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // ── Filtros do topo — aplicados em memória sobre os dados já carregados ──
-  const [assigneeFilter, setAssigneeFilter] = useState('all')
-  const [clientFilter, setClientFilter] = useState('all')
+  // ── Metadados do relatório — definem para quem, quando e por quem o relatório é gerado ──
+  const [clientId, setClientId] = useState('')
+  const [managerId, setManagerId] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+
+  // ── Texto de apresentação — editável, com sugestão automática baseada nos metadados acima ──
+  const [introText, setIntroText] = useState('')
+  const [introEdited, setIntroEdited] = useState(false)
+
+  // ── Aviso discreto quando atividades sem cliente são vinculadas automaticamente ──
+  const [reassignNotice, setReassignNotice] = useState('')
+  useEffect(() => {
+    if (!reassignNotice) return
+    const t = setTimeout(() => setReassignNotice(''), 4000)
+    return () => clearTimeout(t)
+  }, [reassignNotice])
 
   useEffect(() => {
     api.getReportActivities()
@@ -70,33 +85,57 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
       .finally(() => setLoading(false))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (currentUser?.id) setManagerId((prev) => prev || currentUser.id)
+  }, [currentUser])
+
   const memberName = (id) => members.find((m) => m.id === id)?.name || ''
   const clientName = (id) => clients.find((c) => c.id === id)?.name || ''
 
-  const hasActiveFilters = assigneeFilter !== 'all' || clientFilter !== 'all' || dateFrom || dateTo
+  useEffect(() => {
+    if (introEdited) return
+    setIntroText(introTemplate(clientName(clientId), formatDateBR(dateFrom), formatDateBR(dateTo)))
+  }, [clientId, dateFrom, dateTo, introEdited]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clearFilters = () => {
-    setAssigneeFilter('all')
-    setClientFilter('all')
-    setDateFrom('')
-    setDateTo('')
+  const resetIntroText = () => {
+    setIntroEdited(false)
+    setIntroText(introTemplate(clientName(clientId), formatDateBR(dateFrom), formatDateBR(dateTo)))
   }
 
-  const filtered = useMemo(() => {
+  // Atividades dentro do escopo do relatório: cliente atendido + período de execução
+  const scoped = useMemo(() => {
     return activities.filter((a) => {
-      if (assigneeFilter !== 'all' && a.assigned_to !== assigneeFilter) return false
-      if (clientFilter !== 'all' && a.client_id !== clientFilter) return false
-      if (dateFrom && (!a.date || a.date < dateFrom)) return false
-      if (dateTo && (!a.date || a.date > dateTo)) return false
+      if (clientId && a.client_id !== clientId) return false
+      if (dateFrom && a.date && a.date < dateFrom) return false
+      if (dateTo && a.date && a.date > dateTo) return false
       return true
     })
-  }, [activities, assigneeFilter, clientFilter, dateFrom, dateTo])
+  }, [activities, clientId, dateFrom, dateTo])
+
+  // Ao trocar o cliente atendido, preserva a planilha e vincula ao novo cliente
+  // apenas as linhas ainda sem cliente (rascunhos digitados antes da seleção) —
+  // atividades já gravadas para outro cliente permanecem intactas.
+  const handleClientChange = (newClientId) => {
+    setClientId(newClientId)
+    if (!newClientId) return
+
+    const orphans = activities.filter((a) => !a.client_id)
+    if (orphans.length === 0) return
+
+    setActivities((prev) => prev.map((a) => (!a.client_id ? { ...a, client_id: newClientId } : a)))
+    orphans.forEach((a) => {
+      api.updateReportActivity(a.id, { client_id: newClientId }).catch(onError)
+    })
+    setReassignNotice(
+      `${orphans.length} atividade${orphans.length > 1 ? 's' : ''} sem cliente vinculada${orphans.length > 1 ? 's' : ''} a ${clientName(newClientId)}.`
+    )
+  }
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
   const addActivity = () => {
     const draft = {
-      client_id: clientFilter !== 'all' ? clientFilter : null,
-      assigned_to: assigneeFilter !== 'all' ? assigneeFilter : (currentUser?.id || null),
+      client_id: clientId || null,
+      assigned_to: currentUser?.id || null,
     }
     api.createReportActivity(draft)
       .then((row) => setActivities((prev) => [...prev, row]))
@@ -123,7 +162,7 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
   // ── Exportação ───────────────────────────────────────────────────────────
   const exportCsv = () => {
     const header = ['Atividade', 'Data', 'Status', 'Responsável', 'Cliente']
-    const rows = filtered.map((a) => [
+    const rows = scoped.map((a) => [
       a.activity_name || '',
       formatDateBR(a.date),
       a.status,
@@ -140,7 +179,7 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
     URL.revokeObjectURL(url)
   }
 
-  // Impressão focada na planilha (o usuário escolhe "Salvar como PDF" no diálogo do navegador)
+  // Impressão focada no documento do relatório (o usuário escolhe "Salvar como PDF" no diálogo do navegador)
   const exportPdf = () => window.print()
 
   if (loading) {
@@ -154,50 +193,66 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
 
   return (
     <div className="reports-view">
-      {/* ── Painel de filtros ── */}
-      <div className="panel reports-filters">
-        <div className="reports-filters-fields">
+      {/* ── Metadados do relatório ── */}
+      <div className="panel reports-meta no-print">
+        <div className="panel-header">
+          <h3>Dados do Relatório</h3>
+        </div>
+        <div className="reports-meta-fields">
           <label>
-            Responsável
-            <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
-              <option value="all">Todos os responsáveis</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Cliente
-            <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)}>
-              <option value="all">Todos os clientes</option>
+            Cliente Atendido
+            <select value={clientId} onChange={(e) => handleClientChange(e.target.value)}>
+              <option value="">Selecione o cliente...</option>
               {clients.map((c) => (
                 <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
               ))}
             </select>
           </label>
           <label>
-            Data de início
+            Período de Execução — Início
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </label>
           <label>
-            Data de fim
+            Período de Execução — Fim
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
+          <label>
+            Responsável pelo Relatório
+            <select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+              <option value="">Sem responsável</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </label>
         </div>
+        {reassignNotice && <div className="reports-reassign-notice">{reassignNotice}</div>}
+      </div>
 
-        <div className="reports-filters-actions">
-          {hasActiveFilters && (
-            <button type="button" className="reports-clear-btn" onClick={clearFilters}>
-              <IconClose size={12} />
-              Limpar filtros
+      {/* ── Texto de apresentação ── */}
+      <div className="panel reports-intro no-print">
+        <div className="panel-header">
+          <h3>Texto de Apresentação / Introdução ao Cliente</h3>
+          {introEdited && (
+            <button type="button" className="reports-intro-reset" onClick={resetIntroText}>
+              Restaurar texto padrão
             </button>
           )}
-          <ExportMenu onExportCsv={exportCsv} onExportPdf={exportPdf} />
         </div>
+        <textarea
+          className="reports-intro-textarea"
+          value={introText}
+          onChange={(e) => { setIntroText(e.target.value); setIntroEdited(true) }}
+          rows={4}
+        />
       </div>
 
       {/* ── Planilha editável ── */}
       <div className="panel reports-grid-panel">
+        <div className="panel-header no-print reports-grid-header">
+          <h3>Atividades do Período</h3>
+          <ExportMenu onExportCsv={exportCsv} onExportPdf={exportPdf} />
+        </div>
         <div className="reports-grid-wrap">
           <table className="reports-grid">
             <thead>
@@ -206,20 +261,20 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
                 <th className="reports-col-date">Data</th>
                 <th className="reports-col-status">Status</th>
                 <th className="reports-col-assignee">Responsável</th>
-                <th aria-label="Ações" className="reports-col-actions" />
+                <th aria-label="Ações" className="reports-col-actions no-print" />
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {scoped.length === 0 ? (
                 <tr className="reports-empty-row">
                   <td colSpan={5}>
                     {activities.length === 0
                       ? 'Nenhuma atividade ainda — clique em "Nova Atividade" para começar.'
-                      : 'Nenhuma atividade encontrada para os filtros selecionados.'}
+                      : 'Nenhuma atividade encontrada para o cliente/período selecionados.'}
                   </td>
                 </tr>
               ) : (
-                filtered.map((a) => (
+                scoped.map((a) => (
                   <tr className="reports-row" key={a.id}>
                     <td>
                       <input
@@ -269,7 +324,7 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
                         </select>
                       </div>
                     </td>
-                    <td className="reports-row-actions">
+                    <td className="reports-row-actions no-print">
                       <button
                         type="button"
                         className="reports-row-delete"
@@ -286,10 +341,57 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
           </table>
         </div>
 
-        <button type="button" className="reports-add-row-btn" onClick={addActivity}>
+        <button type="button" className="reports-add-row-btn no-print" onClick={addActivity}>
           <IconPlus size={15} />
           Nova Atividade
         </button>
+      </div>
+
+      {/* ── Documento — visível apenas na impressão / exportação em PDF ── */}
+      <div className="reports-print-doc print-only">
+        <div className="reports-print-header">
+          <div className="brand-logo">4B</div>
+          <h1>Relatório de Atividades</h1>
+        </div>
+        <div className="reports-print-infobox">
+          <div>
+            <span>Cliente</span>
+            <strong>{clientName(clientId) || '—'}</strong>
+          </div>
+          <div>
+            <span>Período do Relatório</span>
+            <strong>
+              {dateFrom || dateTo
+                ? `${formatDateBR(dateFrom) || '—'} até ${formatDateBR(dateTo) || '—'}`
+                : '—'}
+            </strong>
+          </div>
+          <div>
+            <span>Emitido por</span>
+            <strong>{memberName(managerId) || '—'}</strong>
+          </div>
+        </div>
+        <p className="reports-print-intro">{introText}</p>
+        <table className="reports-print-table">
+          <thead>
+            <tr>
+              <th>Atividades</th>
+              <th>Data</th>
+              <th>Status</th>
+              <th>Responsável</th>
+            </tr>
+          </thead>
+          <tbody>
+            {scoped.map((a) => (
+              <tr key={a.id}>
+                <td>{a.activity_name || ''}</td>
+                <td>{formatDateBR(a.date)}</td>
+                <td>{a.status}</td>
+                <td>{memberName(a.assigned_to)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )

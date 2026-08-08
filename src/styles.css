@@ -600,6 +600,13 @@ textarea:focus {
   font-size: 13px;
   resize: none;
 }
+.task-form-tags {
+  flex-basis: 100%;
+}
+.task-form-tags .tag-picker-pills {
+  background: var(--white);
+  border-color: var(--primary-soft);
+}
 .card-description {
   color: var(--muted);
   font-size: 12.5px;
@@ -609,6 +616,20 @@ textarea:focus {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.card-tag-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .task-detail-description {
   display: flex;
@@ -2794,6 +2815,27 @@ textarea:focus {
   max-height: 260px;
   overflow-y: auto;
 }
+.calview-tag-menu {
+  min-width: 240px;
+}
+.calview-tag-menu-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.calview-tag-menu-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.calview-tag-menu-clear {
+  margin-top: 4px;
+  padding-top: 8px !important;
+  border-top: 1px solid var(--border) !important;
+  color: var(--danger) !important;
+  justify-content: center !important;
+}
 .calview-avatar {
   width: 32px;
   height: 32px;
@@ -2960,6 +3002,18 @@ textarea:focus {
   flex-shrink: 0;
   background: currentColor;
 }
+.calview-task-tags {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.calview-task-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
 .calview-task-badge.p-baixa   { background: #f1f2f4; color: #8a9099; }
 .calview-task-badge.p-media   { background: #e2e5e9; color: #5c636b; }
 .calview-task-badge.p-alta    { background: #c7ccd2; color: #333940; }
@@ -3042,10 +3096,21 @@ textarea:focus {
 }
 .daydetail-item {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px 6px;
   border-radius: var(--radius-sm);
+}
+.daydetail-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.daydetail-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 30px;
 }
 .daydetail-item.active {
   background: var(--primary-light);
@@ -3954,58 +4019,81 @@ textarea:focus {
   font-style: italic;
 }
 
-/* ── Etiquetas (labels) ──────────────────────────────────────────────────────── */
-.tdv2-labels-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-items: center;
+/* ── Etiquetas (tags) — multi-select criável (TagPicker) ──────────────────── */
+.tag-picker {
+  position: relative;
   flex: 1;
+  min-width: 0;
 }
 
-.tdv2-label-pill {
+.tag-picker-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: text;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tag-picker-pills:hover,
+.tag-picker-pills:focus-within {
+  background: var(--white);
+  border-color: var(--border);
+}
+
+.tag-pill {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  gap: 5px;
+  padding: 3px 6px 3px 10px;
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 600;
-  cursor: pointer;
-  border: none;
-  font-family: inherit;
-  transition: opacity 0.12s ease;
+  white-space: nowrap;
 }
 
-.tdv2-label-pill:hover {
+.tag-pill button {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 50%;
+  color: inherit;
   opacity: 0.75;
 }
 
-.tdv2-label-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--muted);
-  border: 1.5px dashed var(--border);
+.tag-pill button:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.tag-picker-input {
+  flex: 1;
+  min-width: 90px;
+  border: none;
   background: transparent;
-  cursor: pointer;
+  font-size: 13px;
   font-family: inherit;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  color: var(--text);
+  padding: 3px 4px;
 }
 
-.tdv2-label-add:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+.tag-picker-input:focus {
+  outline: none;
 }
 
-.tdv2-label-dropdown {
+.tag-picker-menu {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  background: white;
+  right: 0;
+  background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
@@ -4014,14 +4102,15 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 170px;
+  max-height: 220px;
+  overflow-y: auto;
 }
 
-.tdv2-label-option {
+.tag-picker-option {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 7px 9px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
@@ -4034,15 +4123,25 @@ textarea:focus {
   transition: background 0.1s ease;
 }
 
-.tdv2-label-option:hover {
+.tag-picker-option:hover {
   background: var(--primary-light);
 }
 
-.tdv2-label-dot {
-  width: 10px;
-  height: 10px;
+.tag-picker-dot {
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.tag-picker-create {
+  color: var(--primary-deep);
+  font-weight: 600;
+}
+
+.tag-picker-create:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* ── Responsável ─────────────────────────────────────────────────────────────── */
@@ -5334,22 +5433,14 @@ textarea:focus {
   gap: 20px;
 }
 
-/* ── Painel de filtros ── */
-.reports-filters {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.reports-filters-fields {
+/* ── Painel de metadados do relatório ── */
+.reports-meta-fields {
   display: flex;
   align-items: flex-end;
   gap: 14px;
   flex-wrap: wrap;
-  flex: 1;
 }
-.reports-filters-fields label {
+.reports-meta-fields label {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -5357,34 +5448,54 @@ textarea:focus {
   font-weight: 700;
   color: var(--muted);
   min-width: 170px;
+  flex: 1;
 }
-.reports-filters-fields label:has(input[type='date']) {
+.reports-meta-fields label:has(input[type='date']) {
   min-width: 150px;
 }
-.reports-filters-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-.reports-clear-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px dashed var(--border);
-  color: var(--muted);
+.reports-reassign-notice {
+  margin-top: 14px;
+  background: var(--primary-light);
+  color: var(--primary-deep);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
   padding: 10px 14px;
-  border-radius: 999px;
   font-size: 12.5px;
   font-weight: 600;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-  white-space: nowrap;
 }
-.reports-clear-btn:hover {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: var(--danger-soft);
+
+/* ── Texto de apresentação ── */
+.reports-intro-textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+  font-family: inherit;
+  background: var(--bg);
+}
+.reports-intro-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(20, 184, 196, 0.12);
+  background: var(--white);
+}
+.reports-intro-reset {
+  background: transparent;
+  border: none;
+  color: var(--primary-deep);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.reports-intro-reset:hover {
+  text-decoration: underline;
+}
+
+.reports-grid-header {
+  padding: 22px 22px 0;
 }
 
 /* ── Botão / menu de exportação ── */
@@ -5617,31 +5728,99 @@ textarea:focus {
   background: var(--primary-light);
 }
 
+/* ── Documento impresso (Exportar PDF) ── */
+.print-only {
+  display: none;
+}
+.reports-print-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.reports-print-header h1 {
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.reports-print-infobox {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  background: var(--primary-light);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px 20px;
+  margin-bottom: 22px;
+}
+.reports-print-infobox > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+}
+.reports-print-infobox span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--primary-deep);
+}
+.reports-print-infobox strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.reports-print-intro {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text);
+  margin-bottom: 22px;
+  white-space: pre-wrap;
+}
+.reports-print-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.reports-print-table th {
+  text-align: left;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary-deep);
+  font-weight: 700;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--primary);
+}
+.reports-print-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
 /* ── Exportar PDF via impressão do navegador ── */
 @media print {
-  .sidebar, .topbar, .reports-filters, .reports-add-row-btn, .toast {
+  .sidebar, .topbar, .toast, .no-print {
     display: none !important;
   }
   .main, .view {
     padding: 0 !important;
     margin: 0 !important;
   }
-  .reports-grid-panel {
-    box-shadow: none !important;
-    border: none !important;
+  .reports-view {
+    gap: 0;
   }
-  .reports-row-delete {
+  .reports-grid-panel {
     display: none !important;
+  }
+  .print-only {
+    display: block !important;
   }
 }
 
 @media (max-width: 900px) {
-  .reports-filters {
+  .reports-meta-fields {
     flex-direction: column;
     align-items: stretch;
-  }
-  .reports-filters-actions {
-    justify-content: space-between;
   }
 }
 

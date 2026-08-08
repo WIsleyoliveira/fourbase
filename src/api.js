@@ -49,16 +49,21 @@ export const api = {
 
   // tarefas
   getTasks: () => request('/api/tasks'),
-  addTask: (title, priority, due_date, assigned_to, description, client_id = null) =>
+  addTask: (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
     request('/api/tasks', {
       method: 'POST',
-      body: JSON.stringify({ title, priority, due_date, assigned_to, description, client_id }),
+      body: JSON.stringify({ title, priority, due_date, assigned_to, description, client_id, tags }),
     }),
   moveTask: (id, column_key) =>
     request(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ column_key }) }),
   updateTask: (id, updates) =>
     request(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(updates) }),
   deleteTask: (id) => request(`/api/tasks/${id}`, { method: 'DELETE' }),
+
+  // etiquetas de tarefas (registro global — pré-cadastradas + criadas sob demanda)
+  getTags: () => request('/api/tags'),
+  createTag: (name, color) =>
+    request('/api/tags', { method: 'POST', body: JSON.stringify({ name, color }) }),
 
   // membros
   getMembers: () => request('/api/members'),

@@ -102,7 +102,7 @@ app.get('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
-  const { title, priority = 'Média', due_date = null, assigned_to, description = '', client_id = null } = req.body
+  const { title, priority = 'Média', due_date = null, assigned_to, description = '', client_id = null, tags = [] } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
   const isGestor = req.user.role === 'gestor'
   const owner = isGestor && assigned_to ? assigned_to : req.user.id
@@ -117,6 +117,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       user_id: req.user.id,
       assigned_to: owner,
       client_id: client_id || null,
+      tags: Array.isArray(tags) ? tags : [],
     })
     .select()
     .single()
@@ -125,7 +126,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { column_key, title, priority, due_date, assigned_to, description, logged_time_seconds, attachments, client_id } = req.body
+  const { column_key, title, priority, due_date, assigned_to, description, logged_time_seconds, attachments, client_id, tags } = req.body
   const updates = {}
   if (column_key) updates.column_key = column_key
   if (title) updates.title = title
@@ -136,6 +137,7 @@ app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   if (logged_time_seconds !== undefined) updates.logged_time_seconds = Math.max(0, Math.floor(Number(logged_time_seconds)) || 0)
   if (attachments !== undefined) updates.attachments = Array.isArray(attachments) ? attachments : []
   if (client_id !== undefined) updates.client_id = client_id || null
+  if (tags !== undefined) updates.tags = Array.isArray(tags) ? tags : []
 
   const query = supabase.from('fourbase_tasks').update(updates).eq('id', req.params.id)
   if (req.user.role !== 'gestor') query.eq('assigned_to', req.user.id)
@@ -512,6 +514,37 @@ app.delete('/api/columns/:key', auth, asyncRoute(async (req, res) => {
     .eq('key', req.params.key)
   if (error) throw error
   res.status(204).end()
+}))
+
+// ---------- Etiquetas de tarefas (registro global: pré-cadastradas + criadas sob demanda) ----------
+app.get('/api/tags', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_tags')
+    .select('*')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  res.json(data)
+}))
+
+app.post('/api/tags', auth, asyncRoute(async (req, res) => {
+  const { name, color } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Nome da etiqueta obrigatório' })
+  const { data, error } = await supabase
+    .from('fourbase_tags')
+    .insert({ name: name.trim(), color: color || '#14b8c4' })
+    .select()
+    .single()
+  if (error) {
+    if (error.code === '23505') {
+      // Etiqueta com esse nome já existe — devolve a existente em vez de erro,
+      // já que criar uma tag "nova" com nome repetido deve apenas reutilizá-la.
+      const existing = await supabase.from('fourbase_tags').select('*').eq('name', name.trim()).single()
+      if (existing.error) throw existing.error
+      return res.status(200).json(existing.data)
+    }
+    throw error
+  }
+  res.status(201).json(data)
 }))
 
 // ---------- Equipe (somente gestor) ----------

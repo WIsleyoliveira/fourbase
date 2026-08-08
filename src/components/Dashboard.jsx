@@ -30,8 +30,8 @@ const dueLabel = (due_date) => {
 }
 
 export default function Dashboard({
-  tasks, notes, members, currentUser, columns,
-  onNavigate, onCreateTask, onUpdateTask, onMoveTask, onDeleteTask,
+  tasks, notes, members, currentUser, columns, tags,
+  onNavigate, onCreateTask, onUpdateTask, onMoveTask, onDeleteTask, onCreateTag,
 }) {
   const [detailTaskId, setDetailTaskId] = useState(null)
   // null = ainda carregando — mantém o widget com o mesmo layout enquanto busca
@@ -178,6 +178,8 @@ export default function Dashboard({
           members={members}
           currentUser={currentUser}
           columns={columns}
+          tags={tags}
+          onCreateTag={onCreateTag}
           onClose={() => setDetailTaskId(null)}
           onUpdate={onUpdateTask}
           onMove={onMoveTask}

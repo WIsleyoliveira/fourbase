@@ -28,6 +28,7 @@ const TABLES = [
   'fourbase_columns',
   'fourbase_clients',
   'fourbase_report_activities',
+  'fourbase_tags',
 ]
 
 // Colunas com restrição de unicidade, por tabela — usado para simular o erro
@@ -35,13 +36,25 @@ const TABLES = [
 const UNIQUE_COLUMNS = {
   fourbase_users: ['email'],
   fourbase_columns: ['key'],
+  fourbase_tags: ['name'],
 }
 
 // Tabelas com created_at/updated_at automáticos ao inserir/atualizar.
 const TIMESTAMPED = new Set([
   'fourbase_notes', 'fourbase_media', 'fourbase_folders', 'fourbase_folder_media',
   'fourbase_columns', 'fourbase_clients', 'fourbase_report_activities', 'fourbase_tasks',
+  'fourbase_tags',
 ])
+
+// Etiquetas padrão enviadas pela Amanda — pré-cadastradas na primeira execução.
+const DEFAULT_TAGS = [
+  { name: 'Reuniões', color: '#4f8ff7' },
+  { name: 'Ensaio fotográfico', color: '#e85d75' },
+  { name: 'Captação de vídeos para os calendários', color: '#9333ea' },
+  { name: 'Treinamentos (PDI e PFL)', color: '#2ec27e' },
+  { name: 'Viagens', color: '#f2a93b' },
+  { name: 'Plantão Psicológico', color: '#14b8c4' },
+]
 
 function seedDb() {
   const now = new Date().toISOString()
@@ -74,6 +87,7 @@ function seedDb() {
       { id: randomUUID(), name: 'Nordeste Logística', cnpj: '', phone: '(85) 99777-4455', email: 'comercial@nordestelog.com', contact_name: 'Juliana Rocha', address: 'Fortaleza/CE', created_by: null, created_at: now, updated_at: now },
     ],
     fourbase_report_activities: [],
+    fourbase_tags: DEFAULT_TAGS.map((t) => ({ id: randomUUID(), ...t, created_at: now })),
   }
 }
 
@@ -90,6 +104,13 @@ function loadDb() {
     let touched = false
     for (const t of TABLES) {
       if (!Array.isArray(parsed[t])) { parsed[t] = []; touched = true }
+    }
+    // Backfill das etiquetas padrão para bancos locais já existentes (criados
+    // antes desta feature) — só roda se a tabela ainda não tinha nenhuma linha.
+    if (parsed.fourbase_tags.length === 0) {
+      const now = new Date().toISOString()
+      parsed.fourbase_tags = DEFAULT_TAGS.map((t) => ({ id: randomUUID(), ...t, created_at: now }))
+      touched = true
     }
     if (touched) persist(parsed)
     return parsed
