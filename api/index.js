@@ -25,7 +25,17 @@ const asyncRoute = (fn) => (req, res) =>
 const signToken = (user) =>
   jwt.sign({ sub: user.id, name: user.name, role: user.role }, JWT_SECRET, { expiresIn: '7d' })
 
-const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, role: u.role })
+const publicUser = (u) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  job_title: u.job_title ?? null,
+  phone: u.phone ?? null,
+  color: u.color ?? null,
+  avatar_url: u.avatar_url ?? null,
+  created_at: u.created_at ?? null,
+})
 
 const auth = (req, res, next) => {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
@@ -82,12 +92,66 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
 app.get('/api/auth/me', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_users')
-    .select('id, name, email, role')
+    .select('*')
     .eq('id', req.user.id)
     .maybeSingle()
   if (error) throw error
   if (!data) return res.status(401).json({ error: 'Usuário não encontrado' })
-  res.json(data)
+  res.json(publicUser(data))
+}))
+
+// ---------- Meu Perfil (o próprio usuário logado) ----------
+// Edita apenas a própria linha (req.user.id) — e-mail e role ficam de fora de
+// propósito: e-mail é o identificador de login e role é prerrogativa do gestor.
+app.patch('/api/profile', auth, asyncRoute(async (req, res) => {
+  const { name, job_title, phone, color, avatar_url } = req.body
+  const updates = {}
+  if (name !== undefined) {
+    if (!name.trim()) return res.status(400).json({ error: 'O nome não pode ficar em branco' })
+    updates.name = name.trim()
+  }
+  if (job_title !== undefined) updates.job_title = job_title.trim() || null
+  if (phone !== undefined) updates.phone = phone.trim() || null
+  if (color !== undefined) updates.color = normalizeColor(color)
+  if (avatar_url !== undefined) updates.avatar_url = avatar_url || null
+
+  const { data, error } = await supabase
+    .from('fourbase_users')
+    .update(updates)
+    .eq('id', req.user.id)
+    .select('*')
+    .single()
+  if (error) throw error
+  // Novo token: o nome vai assinado no JWT e é lido em outras telas
+  res.json({ token: signToken(data), user: publicUser(data) })
+}))
+
+app.patch('/api/profile/password', auth, asyncRoute(async (req, res) => {
+  const { current_password, new_password } = req.body
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: 'Informe a senha atual e a nova senha' })
+  }
+  if (new_password.length < 6) {
+    return res.status(400).json({ error: 'A nova senha precisa ter pelo menos 6 caracteres' })
+  }
+
+  const { data: user, error: fetchErr } = await supabase
+    .from('fourbase_users')
+    .select('*')
+    .eq('id', req.user.id)
+    .maybeSingle()
+  if (fetchErr) throw fetchErr
+  if (!user) return res.status(401).json({ error: 'Usuário não encontrado' })
+  if (!bcrypt.compareSync(current_password, user.password_hash)) {
+    return res.status(400).json({ error: 'A senha atual está incorreta' })
+  }
+
+  const { error } = await supabase
+    .from('fourbase_users')
+    .update({ password_hash: bcrypt.hashSync(new_password, 10) })
+    .eq('id', req.user.id)
+  if (error) throw error
+  res.json({ ok: true })
 }))
 
 // ---------- Tarefas (atribuídas ao usuário logado) ----------
@@ -102,7 +166,10 @@ app.get('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
-  const { title, priority = 'Média', due_date = null, assigned_to, description = '', client_id = null, tags = [] } = req.body
+  const {
+    title, priority = 'Média', due_date = null, assigned_to, description = '',
+    client_id = null, tags = [], column_key = 'todo', attachments = [],
+  } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
   const isGestor = req.user.role === 'gestor'
   const owner = isGestor && assigned_to ? assigned_to : req.user.id
@@ -113,11 +180,12 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       description: description.trim(),
       priority,
       due_date,
-      column_key: 'todo',
+      column_key: column_key || 'todo',
       user_id: req.user.id,
       assigned_to: owner,
       client_id: client_id || null,
       tags: Array.isArray(tags) ? tags : [],
+      attachments: Array.isArray(attachments) ? attachments : [],
     })
     .select()
     .single()
@@ -292,6 +360,21 @@ app.patch('/api/notes/:id/folder', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_notes')
     .update({ folder_id: folder_id || null })
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id)
+    .select()
+    .single()
+  if (error) throw error
+  res.json(data)
+}))
+
+// Atualiza a lista de anexos de uma nota — o upload em si vai direto para o
+// Supabase Storage a partir do browser; esta rota só persiste os metadados.
+app.patch('/api/notes/:id/attachments', auth, asyncRoute(async (req, res) => {
+  const { attachments } = req.body
+  const { data, error } = await supabase
+    .from('fourbase_notes')
+    .update({ attachments: Array.isArray(attachments) ? attachments : [] })
     .eq('id', req.params.id)
     .eq('user_id', req.user.id)
     .select()

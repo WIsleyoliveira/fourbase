@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   IconPlus, IconTrash, IconNotes, IconKanban, IconCheckPlain,
   IconBold, IconItalic, IconUnderline, IconStrikethrough,
   IconList, IconListOrdered, IconQuote,
   IconLink, IconCalendar, IconType,
   IconHeading, IconParagraph,
-  IconFolderFilled, IconClose,
+  IconFolderFilled, IconClose, IconPaperclip, IconBuilding,
 } from '../icons.jsx'
 import { api } from '../api.js'
 import { getPreview } from '../textPreview.js'
+import { supabase, NOTE_FILES_BUCKET, storagePathFromUrl } from '../supabase.js'
+import NoteAttachments, { extOf, isImageAttachment } from './NoteAttachments.jsx'
+
+const ATTACHMENT_LIMIT_MB = 25
+const ATTACHMENT_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv']
+const ATTACHMENT_ACCEPT = ATTACHMENT_EXTS.map((e) => `.${e}`).join(',')
 
 const formatDate = (iso) => {
   const d = new Date(iso)
@@ -38,10 +45,14 @@ function ToolDivider() {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function NotesView({
-  notes, onCreate, onSave, onDelete, onSendToKanban, onLinkFolder, onNavigateToFolder,
+  notes, onCreate, onSave, onDelete, onSendToKanban, onLinkFolder, onUpdateAttachments, onNavigateToFolder,
   targetNoteId, onConsumeNoteTarget,
 }) {
   const editorRef = useRef(null)
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [dragActive, setDragActive] = useState(false)
+  const [previewImage, setPreviewImage] = useState(null)
   // Se chegamos aqui vindos de um documento relacionado (aba Documentações), abre direto naquela nota
   const [activeId, setActiveId] = useState(() =>
     targetNoteId && notes.some((n) => n.id === targetNoteId) ? targetNoteId : notes[0]?.id ?? null,
@@ -55,6 +66,7 @@ export default function NotesView({
 
   // Pastas de Documentações (carregadas à parte, só para o seletor "Relacionar")
   const [folders, setFolders]         = useState([])
+  const [clients, setClients]         = useState([])
   const [relateOpen, setRelateOpen]   = useState(false)
   const [relateSearch, setRelateSearch] = useState('')
   const relateRef = useRef(null)
@@ -71,6 +83,17 @@ export default function NotesView({
       cur = folders.find((f) => f.id === cur.parent_id) || null
     }
     return parts.join(' › ')
+  }
+
+  // Cliente dono da pasta — sobe a cadeia de pais até achar um client_id
+  // (subpastas herdam o client_id do pai na criação, mas caímos aqui como reforço)
+  const clientNameFor = (folder) => {
+    let cur = folder
+    while (cur) {
+      if (cur.client_id) return clients.find((c) => c.id === cur.client_id)?.name || null
+      cur = folders.find((f) => f.id === cur.parent_id) || null
+    }
+    return null
   }
 
   const visibleNotes = notes
@@ -103,10 +126,23 @@ export default function NotesView({
     api.getFolders().then(setFolders).catch(() => {})
   }, [])
 
+  // Carrega os clientes — só para mostrar de quem é a pasta no seletor "Relacionar"
+  useEffect(() => {
+    api.getClients().then(setClients).catch(() => {})
+  }, [])
+
   // Consome o alvo de navegação vindo de Documentações (só precisa disparar uma vez, ao montar)
   useEffect(() => {
     if (targetNoteId) onConsumeNoteTarget?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fecha o lightbox de preview de imagem com ESC
+  useEffect(() => {
+    if (!previewImage) return
+    const handler = (e) => { if (e.key === 'Escape') setPreviewImage(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [previewImage])
 
   // Fecha o seletor de pastas ao clicar fora ou pressionar ESC
   useEffect(() => {
@@ -154,6 +190,61 @@ export default function NotesView({
   const removeNote = (id) => {
     if (!confirm('Excluir esta nota?')) return
     onDelete(id)
+  }
+
+  // ── Anexos ───────────────────────────────────────────────────────────────
+  const uploadFiles = async (fileList) => {
+    if (!active) return
+    const files = Array.from(fileList || []).filter((f) => {
+      if (!ATTACHMENT_EXTS.includes(extOf(f.name))) return false
+      if (f.size > ATTACHMENT_LIMIT_MB * 1024 * 1024) return false
+      return true
+    })
+    if (!files.length) return
+    setUploading(true)
+    try {
+      const uploaded = []
+      for (const file of files) {
+        const ext = extOf(file.name) || 'bin'
+        const path = `notes/${active.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const { error } = await supabase.storage
+          .from(NOTE_FILES_BUCKET)
+          .upload(path, file, { cacheControl: '3600', contentType: file.type || 'application/octet-stream' })
+        if (error) throw error
+        const { data } = supabase.storage.from(NOTE_FILES_BUCKET).getPublicUrl(path)
+        uploaded.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          file_name: file.name,
+          file_url: data.publicUrl,
+          file_size: file.size,
+          file_type: file.type || '',
+          created_at: new Date().toISOString(),
+        })
+      }
+      onUpdateAttachments(active.id, [...(active.attachments || []), ...uploaded])
+    } catch (err) {
+      alert(err.message || 'Falha ao enviar arquivo')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleFileSelect = (e) => {
+    uploadFiles(e.target.files)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setDragActive(false)
+    uploadFiles(e.dataTransfer.files)
+  }
+
+  const removeAttachment = (att) => {
+    if (!active || !confirm(`Remover "${att.file_name}"?`)) return
+    onUpdateAttachments(active.id, (active.attachments || []).filter((a) => a.id !== att.id))
+    const path = storagePathFromUrl(att.file_url, NOTE_FILES_BUCKET)
+    if (path) supabase.storage.from(NOTE_FILES_BUCKET).remove([path]).catch(() => {})
   }
 
   const linkFolder = (folderId) => {
@@ -226,39 +317,54 @@ export default function NotesView({
           )}
           {visibleNotes.map((n) => {
             const preview = getPreview(n.content)
+            const noteAttachments = n.attachments || []
+            const coverImage = noteAttachments.find(isImageAttachment)
             return (
               <div
                 key={n.id}
                 className={`note-item${n.id === activeId ? ' active' : ''}`}
                 onClick={() => selectNote(n.id)}
               >
-                <div className="note-item-body">
-                  <strong>{n.title || 'Sem título'}</strong>
-                  {preview && <small className="note-preview">{preview}</small>}
-                  <small className="note-date">{formatDate(n.updated_at)}</small>
+                {coverImage && (
+                  <div className="note-item-cover">
+                    <img src={coverImage.file_url} alt="" />
+                  </div>
+                )}
+                <div className="note-item-main">
+                  <div className="note-item-body">
+                    <strong>{n.title || 'Sem título'}</strong>
+                    {preview && <small className="note-preview">{preview}</small>}
+                    <small className="note-date">{formatDate(n.updated_at)}</small>
+                  </div>
+                  <div className="note-item-actions">
+                    <button
+                      className="icon-btn"
+                      title="Enviar para o Kanban"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSendToKanban(n.title || 'Sem título', getPreview(n.content))
+                      }}
+                    >
+                      <IconKanban size={14} />
+                    </button>
+                    <button
+                      className="icon-btn danger"
+                      title="Excluir nota"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeNote(n.id)
+                      }}
+                    >
+                      <IconTrash size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="note-item-actions">
-                  <button
-                    className="icon-btn"
-                    title="Enviar para o Kanban"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSendToKanban(n.title || 'Sem título', getPreview(n.content))
-                    }}
-                  >
-                    <IconKanban size={14} />
-                  </button>
-                  <button
-                    className="icon-btn danger"
-                    title="Excluir nota"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeNote(n.id)
-                    }}
-                  >
-                    <IconTrash size={14} />
-                  </button>
-                </div>
+                {noteAttachments.length > 0 && (
+                  <div className="note-item-attachments-badge">
+                    <IconPaperclip size={11} />
+                    {noteAttachments.length} anexo{noteAttachments.length > 1 ? 's' : ''}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -267,7 +373,19 @@ export default function NotesView({
 
       {/* ══ Painel de edição ════════════════════════════════════════════════ */}
       {active ? (
-        <div className="panel editor-panel" onKeyDown={onKeyDown}>
+        <div
+          className={`panel editor-panel${dragActive ? ' drag-active' : ''}`}
+          onKeyDown={onKeyDown}
+          onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragActive(false) }}
+          onDrop={handleDrop}
+        >
+          {dragActive && (
+            <div className="editor-dropzone-overlay">
+              <IconPaperclip size={22} />
+              <span>Solte para anexar à nota</span>
+            </div>
+          )}
 
           {/* ── Cabeçalho: título + relacionar pasta + botão Virar tarefa ── */}
           <div className="editor-panel-header">
@@ -291,6 +409,9 @@ export default function NotesView({
               >
                 <IconFolderFilled size={13} style={{ color: linkedFolder.color }} />
                 <span>{linkedFolder.name}</span>
+                {clientNameFor(linkedFolder) && (
+                  <small className="note-folder-badge-client">{clientNameFor(linkedFolder)}</small>
+                )}
                 <span
                   className="note-folder-badge-x"
                   title="Remover relação"
@@ -322,15 +443,28 @@ export default function NotesView({
                       {relateResults.length === 0 && (
                         <div className="empty-hint">Nenhuma pasta encontrada.</div>
                       )}
-                      {relateResults.map((f) => (
-                        <button key={f.id} className="relate-item" onClick={() => linkFolder(f.id)}>
-                          <IconFolderFilled size={15} style={{ color: f.color }} />
-                          <span className="relate-item-name">{f.name}</span>
-                          {f.parent_id && (
-                            <small className="relate-item-path">{folderPath(f.parent_id)}</small>
-                          )}
-                        </button>
-                      ))}
+                      {relateResults.map((f) => {
+                        const clientName = clientNameFor(f)
+                        return (
+                          <button key={f.id} className="relate-item" onClick={() => linkFolder(f.id)}>
+                            <IconFolderFilled size={15} style={{ color: f.color }} />
+                            <span className="relate-item-name">{f.name}</span>
+                            <span className="relate-item-meta">
+                              {f.parent_id && (
+                                <small className="relate-item-path">{folderPath(f.parent_id)}</small>
+                              )}
+                              {clientName ? (
+                                <small className="relate-item-client">
+                                  <IconBuilding size={10} />
+                                  {clientName}
+                                </small>
+                              ) : (
+                                <small className="relate-item-client relate-item-client-none">Sem cliente</small>
+                              )}
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -409,6 +543,29 @@ export default function NotesView({
                 <IconType size={15} />
               </ToolBtn>
             </div>
+
+            <ToolDivider />
+
+            {/* Bloco 5: Anexos */}
+            <div className="toolbar-group">
+              <button
+                type="button"
+                className="toolbar-attach-btn"
+                title="Anexar arquivo"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <IconPaperclip size={14} />
+                Anexar arquivo
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ATTACHMENT_ACCEPT}
+                multiple
+                hidden
+                onChange={handleFileSelect}
+              />
+            </div>
           </div>
 
           {/* ── Área do editor ── */}
@@ -423,6 +580,23 @@ export default function NotesView({
               updateCount()
             }}
           />
+
+          {/* ── Anexos da nota ── */}
+          {(uploading || (active.attachments || []).length > 0) && (
+            <div className="note-attachments">
+              {uploading && (
+                <div className="note-attachments-uploading">
+                  <span className="note-attachments-spinner" />
+                  Enviando arquivo…
+                </div>
+              )}
+              <NoteAttachments
+                attachments={active.attachments || []}
+                onRemove={removeAttachment}
+                onPreviewImage={setPreviewImage}
+              />
+            </div>
+          )}
 
           {/* ── Rodapé: contagem + status salvo ── */}
           <div className="editor-footer">
@@ -456,6 +630,16 @@ export default function NotesView({
             <span>Nova nota</span>
           </button>
         </div>
+      )}
+
+      {previewImage && createPortal(
+        <div className="lightbox-backdrop" onClick={() => setPreviewImage(null)}>
+          <img src={previewImage} alt="" />
+          <button className="lightbox-close" onClick={() => setPreviewImage(null)}>
+            <IconClose size={18} />
+          </button>
+        </div>,
+        document.body,
       )}
     </div>
   )

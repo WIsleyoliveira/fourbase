@@ -105,6 +105,7 @@ export default function ClientWorkspace({
         <Kanban
           tasks={tasks}
           members={members}
+          clients={[client]}
           currentUser={currentUser}
           columns={columns}
           tags={tags}

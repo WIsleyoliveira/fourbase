@@ -47,6 +47,16 @@ export const api = {
       body: JSON.stringify({ name, email, password }),
     }),
 
+  // perfil do usuário logado
+  getProfile: () => request('/api/auth/me'),
+  updateProfile: (updates) =>
+    request('/api/profile', { method: 'PATCH', body: JSON.stringify(updates) }),
+  changePassword: (current_password, new_password) =>
+    request('/api/profile/password', {
+      method: 'PATCH',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
   // tarefas
   getTasks: () => request('/api/tasks'),
   addTask: (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
@@ -54,6 +64,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ title, priority, due_date, assigned_to, description, client_id, tags }),
     }),
+  // Criação com o objeto completo — usada pelo modal de especificações da tarefa
+  // (o `addTask` posicional continua servindo os formulários rápidos)
+  createTask: (fields) =>
+    request('/api/tasks', { method: 'POST', body: JSON.stringify(fields) }),
   moveTask: (id, column_key) =>
     request(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify({ column_key }) }),
   updateTask: (id, updates) =>
@@ -90,6 +104,8 @@ export const api = {
   deleteNote: (id) => request(`/api/notes/${id}`, { method: 'DELETE' }),
   updateNoteFolder: (id, folderId) =>
     request(`/api/notes/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder_id: folderId }) }),
+  updateNoteAttachments: (id, attachments) =>
+    request(`/api/notes/${id}/attachments`, { method: 'PATCH', body: JSON.stringify({ attachments }) }),
 
   // checklist
   getTodos: () => request('/api/todos'),

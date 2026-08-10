@@ -19,6 +19,7 @@ import {
   IconArrowRight,
   IconPaperclip,
   IconExpandSearch,
+  IconBuilding,
 } from '../icons.jsx'
 import { assigneeColor } from '../colors.js'
 import TagPicker from './TagPicker.jsx'
@@ -216,22 +217,38 @@ function AttachmentsSection({ taskId, attachments, onChange }) {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-export default function TaskDetailModal({ task, members, currentUser, columns: colsProp, tags = [], onCreateTag, onClose, onUpdate, onMove, onDelete, embedded = false }) {
+export default function TaskDetailModal({
+  task, members, clients = [], currentUser, columns: colsProp, tags = [], onCreateTag,
+  onClose, onUpdate, onMove, onDelete, onCreate, embedded = false,
+}) {
   // Usa as colunas recebidas do Kanban (inclui customizadas) com fallback para o padrão
   const COLUMNS = colsProp || DEFAULT_COLUMNS
   const isGestor = currentUser?.role === 'gestor'
 
+  // Sem `id` = tarefa em rascunho: o modal vira formulário de criação e só
+  // persiste ao clicar em "Criar tarefa" (nada de PATCH campo a campo).
+  const creating = !task?.id
+
+  // Id efêmero só para os caminhos que precisam de uma chave estável antes de a
+  // tarefa existir (pasta dos anexos no storage e estimativa em localStorage).
+  const draftIdRef = useRef(null)
+  if (creating && !draftIdRef.current) {
+    draftIdRef.current = (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  }
+  const entityId = task?.id || draftIdRef.current
+
   // Estado local espelhando a tarefa para reflexo imediato das edições no UI
   const [local, setLocal] = useState({ ...task })
 
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState(task.title)
+  const [editingTitle, setEditingTitle] = useState(creating)
+  const [titleDraft, setTitleDraft] = useState(task.title || '')
   const [descDraft, setDescDraft] = useState(task.description || '')
   const [fullscreen, setFullscreen] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   // Hook de cronômetro — soma ao tempo já persistido na tarefa (logged_time_seconds)
   const { isTracking, toggle, display } = useTimeTracker(
-    task.id,
+    entityId,
     local.logged_time_seconds || 0,
     (total) => updateField('logged_time_seconds', total),
   )
@@ -243,26 +260,35 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Helpers para atualizar campo localmente e chamar onUpdate
+  // Helpers para atualizar campo localmente e chamar onUpdate.
+  // No modo criação as mudanças ficam só no rascunho local.
   const updateField = (field, value) => {
     setLocal((prev) => ({ ...prev, [field]: value }))
-    onUpdate(task.id, { [field]: value })
+    if (!creating) onUpdate(task.id, { [field]: value })
   }
 
   const moveColumn = (columnKey) => {
     setLocal((prev) => ({ ...prev, column_key: columnKey }))
-    onMove(task.id, columnKey)
+    if (!creating) onMove(task.id, columnKey)
   }
 
   const saveTitle = () => {
-    setEditingTitle(false)
     const trimmed = titleDraft.trim()
+    if (creating) {
+      setLocal((prev) => ({ ...prev, title: trimmed }))
+      return
+    }
+    setEditingTitle(false)
     if (trimmed && trimmed !== local.title) {
       updateField('title', trimmed)
     }
   }
 
   const saveDescription = () => {
+    if (creating) {
+      setLocal((prev) => ({ ...prev, description: descDraft }))
+      return
+    }
     if (descDraft !== (local.description || '')) {
       updateField('description', descDraft)
     }
@@ -272,6 +298,29 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
     if (!confirm('Excluir esta tarefa permanentemente?')) return
     onDelete(task.id)
     onClose()
+  }
+
+  // Cria a tarefa com tudo que foi preenchido no rascunho
+  const handleCreate = async () => {
+    const title = titleDraft.trim()
+    if (!title || saving) return
+    setSaving(true)
+    try {
+      await onCreate({
+        title,
+        description: descDraft.trim(),
+        priority: local.priority || 'Média',
+        due_date: local.due_date || null,
+        column_key: local.column_key || COLUMNS[0]?.key || 'todo',
+        assigned_to: local.assigned_to || null,
+        client_id: local.client_id || null,
+        tags: local.tags || [],
+        attachments: local.attachments || [],
+      })
+      onClose()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const currentPriority = PRIORITIES.find((p) => p.value === local.priority) || PRIORITIES[2]
@@ -284,16 +333,17 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
           <div className="tdv2-header-left">
             <span className="tdv2-type-tag">
               <IconKanban size={11} />
-              Tarefa
+              {creating ? 'Nova tarefa' : 'Tarefa'}
             </span>
 
             {editingTitle ? (
               <input
                 className="tdv2-title-input"
                 value={titleDraft}
+                placeholder={creating ? 'Título da tarefa…' : undefined}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={saveTitle}
-                onKeyDown={(e) => { if (e.key === 'Enter') saveTitle() }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { saveTitle(); if (creating) handleCreate() } }}
                 autoFocus
               />
             ) : (
@@ -363,10 +413,28 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
                 />
               </div>
 
+              {/* Cliente */}
+              <div className="tdv2-attr">
+                <span className="tdv2-label">
+                  <IconBuilding size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  Cliente
+                </span>
+                <select
+                  className="tdv2-select"
+                  value={local.client_id || ''}
+                  onChange={(e) => updateField('client_id', e.target.value || null)}
+                >
+                  <option value="">Sem cliente</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* Estimativa de tempo */}
               <div className="tdv2-attr">
                 <span className="tdv2-label">Estimativa</span>
-                <TimeEstimateField taskId={task.id} />
+                <TimeEstimateField taskId={entityId} />
               </div>
 
               {/* Etiquetas */}
@@ -438,32 +506,36 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
                 </div>
               </div>
 
-              {/* Rastrear Tempo */}
-              <div className="tdv2-attr">
-                <span className="tdv2-label">
-                  <IconClock size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                  Tempo
-                </span>
-                <div className="tdv2-tracker">
-                  <button
-                    className={`tdv2-tracker-btn${isTracking ? ' tracking' : ''}`}
-                    onClick={toggle}
-                    title={isTracking ? 'Pausar cronômetro' : 'Iniciar cronômetro'}
-                  >
-                    {isTracking ? <IconPause size={12} /> : <IconPlay size={12} />}
-                  </button>
-                  <span className={`tdv2-tracker-time${isTracking ? ' tracking' : ' paused'}`}>
-                    {display}
+              {/* Rastrear Tempo — só faz sentido depois que a tarefa existe */}
+              {!creating && (
+                <div className="tdv2-attr">
+                  <span className="tdv2-label">
+                    <IconClock size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                    Tempo
                   </span>
-                  {isTracking && <span className="tdv2-tracker-live-dot" />}
+                  <div className="tdv2-tracker">
+                    <button
+                      className={`tdv2-tracker-btn${isTracking ? ' tracking' : ''}`}
+                      onClick={toggle}
+                      title={isTracking ? 'Pausar cronômetro' : 'Iniciar cronômetro'}
+                    >
+                      {isTracking ? <IconPause size={12} /> : <IconPlay size={12} />}
+                    </button>
+                    <span className={`tdv2-tracker-time${isTracking ? ' tracking' : ' paused'}`}>
+                      {display}
+                    </span>
+                    {isTracking && <span className="tdv2-tracker-live-dot" />}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Criado em */}
-              <div className="tdv2-attr">
-                <span className="tdv2-label">Criado em</span>
-                <span className="tdv2-muted-text">{formatDate(local.created_at)}</span>
-              </div>
+              {!creating && (
+                <div className="tdv2-attr">
+                  <span className="tdv2-label">Criado em</span>
+                  <span className="tdv2-muted-text">{formatDate(local.created_at)}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -480,7 +552,7 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
 
           {/* ── Anexos e Imagens ───────────────────────────────────────────── */}
           <AttachmentsSection
-            taskId={task.id}
+            taskId={entityId}
             attachments={local.attachments || []}
             onChange={(next) => updateField('attachments', next)}
           />
@@ -488,10 +560,26 @@ export default function TaskDetailModal({ task, members, currentUser, columns: c
 
         {/* ══ Footer ══════════════════════════════════════════════════════════ */}
         <div className="tdv2-footer">
-          <button className="secondary danger-text" onClick={handleDelete}>
-            <IconTrash size={14} />
-            Excluir tarefa
-          </button>
+          {creating ? (
+            <div className="tdv2-footer-create">
+              <button className="secondary" onClick={onClose} disabled={saving}>
+                Cancelar
+              </button>
+              <button
+                className="tdv2-create-btn"
+                onClick={handleCreate}
+                disabled={saving || !titleDraft.trim()}
+              >
+                <IconCheckPlain size={14} />
+                {saving ? 'Criando…' : 'Criar tarefa'}
+              </button>
+            </div>
+          ) : (
+            <button className="secondary danger-text" onClick={handleDelete}>
+              <IconTrash size={14} />
+              Excluir tarefa
+            </button>
+          )}
         </div>
     </>
   )

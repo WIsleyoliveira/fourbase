@@ -203,6 +203,50 @@ export const IconUserCheck = (p) => (
   </Icon>
 )
 
+export const IconUserCog = (p) => (
+  <Icon {...p}>
+    <path d="M13 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="7.5" cy="7" r="4" />
+    <circle cx="18" cy="16" r="2.5" />
+    <path d="M18 12.2v1.3M18 18.5v1.3M21.3 14.1l-1.1.65M15.8 17.25l-1.1.65M21.3 17.9l-1.1-.65M15.8 14.75l-1.1-.65" />
+  </Icon>
+)
+
+export const IconCamera = (p) => (
+  <Icon {...p}>
+    <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.25-.67l.6-.9A1.5 1.5 0 0 1 9.8 4.8h4.4a1.5 1.5 0 0 1 1.25.67l.6.9A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z" />
+    <circle cx="12" cy="12.8" r="3.2" />
+  </Icon>
+)
+
+export const IconLock = (p) => (
+  <Icon {...p}>
+    <rect x="4" y="10" width="16" height="11" rx="2" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+  </Icon>
+)
+
+export const IconShield = (p) => (
+  <Icon {...p}>
+    <path d="M12 3l7.5 3v5.5c0 4.4-3.1 8.3-7.5 9.5-4.4-1.2-7.5-5.1-7.5-9.5V6z" />
+  </Icon>
+)
+
+export const IconEye = (p) => (
+  <Icon {...p}>
+    <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+    <circle cx="12" cy="12" r="3" />
+  </Icon>
+)
+
+export const IconEyeOff = (p) => (
+  <Icon {...p}>
+    <path d="M9.9 5.7A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.7 3.6M6.2 6.7A17 17 0 0 0 2.5 12S6 18.5 12 18.5c1.5 0 2.8-.4 4-1" />
+    <path d="M10 10a2.8 2.8 0 0 0 4 4" />
+    <line x1="3" y1="3" x2="21" y2="21" />
+  </Icon>
+)
+
 export const IconBuilding = (p) => (
   <Icon {...p}>
     <rect x="4" y="2" width="16" height="20" rx="2" />

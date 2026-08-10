@@ -1034,13 +1034,12 @@ textarea:focus {
 }
 .note-item {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: #fafeff;
   cursor: pointer;
+  overflow: hidden;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .note-item:hover {
@@ -1051,6 +1050,32 @@ textarea:focus {
   border-color: var(--primary);
   background: var(--primary-light);
   box-shadow: 0 0 0 3px rgba(20, 184, 196, 0.12);
+}
+.note-item-cover {
+  width: 100%;
+  height: 60px;
+  flex-shrink: 0;
+}
+.note-item-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.note-item-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+}
+.note-item-attachments-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px 10px;
+  margin-top: -4px;
+  font-size: 11px;
+  color: var(--muted);
 }
 .note-item-body {
   display: flex;
@@ -1099,9 +1124,31 @@ textarea:focus {
   opacity: 1;
 }
 .editor-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.editor-panel.drag-active {
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+.editor-dropzone-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(230, 250, 251, 0.92);
+  border-radius: var(--radius);
+  color: var(--primary-deep);
+  font-weight: 700;
+  font-size: 14px;
+  pointer-events: none;
 }
 .note-title {
   font-size: 27px;
@@ -1172,6 +1219,26 @@ textarea:focus {
 .toolbar-spacer {
   flex: 1;
 }
+.notes-toolbar .toolbar-attach-btn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  background: transparent !important;
+  color: var(--primary-deep) !important;
+  border: none;
+  padding: 6px 10px !important;
+  border-radius: 7px;
+  font-size: 12.5px !important;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background 0.12s ease;
+}
+.notes-toolbar .toolbar-attach-btn:hover {
+  background: var(--primary-soft) !important;
+  transform: none !important;
+}
 .editor h2 {
   font-size: 20px;
   margin: 14px 0 8px;
@@ -1192,6 +1259,114 @@ textarea:focus {
 .editor ol {
   padding-left: 22px;
 }
+
+/* ── Anexos da nota ──────────────────────────────────────────────────── */
+.note-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.note-attachments-uploading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--primary-deep);
+  font-weight: 600;
+}
+.note-attachments-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid var(--primary-light);
+  border-top-color: var(--primary);
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.note-attachments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.note-attachment-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+.note-attachment-card .note-attachment-thumb {
+  width: 40px !important;
+  height: 40px !important;
+  flex-shrink: 0;
+  border: none;
+  background: none !important;
+  border-radius: 8px;
+  overflow: hidden;
+  padding: 0 !important;
+  box-shadow: none !important;
+  cursor: zoom-in;
+}
+.note-attachment-card .note-attachment-thumb:hover {
+  transform: none !important;
+}
+.note-attachment-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.note-attachment-file {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--primary-light);
+  color: var(--primary-deep);
+  border-radius: 8px;
+}
+.note-attachment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.note-attachment-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.note-attachment-size {
+  font-size: 11px;
+  color: var(--muted);
+}
+.note-attachment-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.note-attachment-actions .icon-btn {
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  background: var(--white) !important;
+  color: var(--muted) !important;
+  box-shadow: none !important;
+  font-size: inherit !important;
+  font-weight: normal !important;
+}
+.note-attachment-actions .icon-btn:hover {
+  transform: none !important;
+}
+
 .editor-empty {
   display: flex;
   flex-direction: column;
@@ -1322,12 +1497,31 @@ textarea:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.relate-item-path {
+.relate-item-meta {
   margin-left: auto;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.relate-item-path {
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
+}
+.relate-item-client {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--primary-deep);
+  font-size: 11px;
+  font-weight: 600;
+}
+.relate-item-client-none {
+  color: var(--muted);
+  font-weight: 500;
+  font-style: italic;
 }
 
 /* ── Badge de nota relacionada a uma pasta ───────────────────────────── */
@@ -1350,6 +1544,13 @@ textarea:focus {
 }
 .note-folder-badge:hover {
   background: color-mix(in srgb, var(--folder-color, var(--primary)) 20%, white);
+}
+.note-folder-badge-client {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, var(--folder-color, var(--primary)) 35%, white);
 }
 .note-folder-badge-x {
   display: inline-flex;
@@ -2378,6 +2579,33 @@ textarea:focus {
 }
 
 /* ---------- Usuário na sidebar ---------- */
+/* Botão "Meu Perfil" — bloco inferior da sidebar, acima do card do usuário */
+.sidebar-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #b9dde1;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+  margin-top: auto;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.sidebar-profile-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--white);
+}
+.sidebar-profile-btn.active {
+  background: var(--primary);
+  color: var(--white);
+  box-shadow: 0 8px 18px rgba(20, 184, 196, 0.35);
+}
+
 .user-box {
   display: flex;
   align-items: center;
@@ -2386,12 +2614,34 @@ textarea:focus {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 12px;
-  margin-top: auto;
+}
+.user-box-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  border-radius: 10px;
+  transition: opacity 0.15s ease;
+}
+.user-box-identity:hover {
+  opacity: 0.8;
 }
 .user-box .member-avatar {
   width: 36px;
   height: 36px;
   font-size: 15px;
+  overflow: hidden;
+}
+.member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 .user-box-id {
   display: flex;
@@ -3176,19 +3426,20 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  flex-shrink: 0;
-}
-.daydetail-quickadd input {
   border: none;
-  flex: 1;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--primary-deep);
   font-size: 13.5px;
-  padding: 4px 0;
+  font-weight: 600;
+  text-align: left;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
 }
-.daydetail-quickadd input::placeholder {
-  color: var(--muted);
+.daydetail-quickadd:hover {
+  background: var(--primary-light);
 }
 
 /* --- Barra lateral direita (drawer) --- */
@@ -4389,6 +4640,33 @@ textarea:focus {
   display: flex;
   justify-content: flex-end;
   flex-shrink: 0;
+}
+
+/* Rodapé no modo criação: Cancelar + Criar tarefa */
+.tdv2-footer-create {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tdv2-create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: var(--primary);
+  color: var(--white);
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 13.5px;
+  transition: background 0.15s ease;
+}
+.tdv2-create-btn:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+.tdv2-create-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Responsivo: colapsa para 1 coluna em telas pequenas ─────────────────────── */
@@ -5874,4 +6152,293 @@ textarea:focus {
 }
 .color-picker-reset:hover {
   color: var(--primary-dark);
+}
+
+/* ==========================================================================
+   Meu Perfil
+   ========================================================================== */
+.profile-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 860px;
+}
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.profile-card .panel-header {
+  margin-bottom: 0;
+}
+
+/* ── Foto de perfil ── */
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.profile-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.profile-avatar {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: var(--white);
+  font-weight: 800;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+  box-shadow: 0 8px 22px rgba(10, 46, 51, 0.16);
+}
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.profile-avatar-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.72);
+}
+.profile-spinner {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 3px solid var(--primary-light);
+  border-top-color: var(--primary);
+  animation: spin 0.8s linear infinite;
+}
+.profile-avatar-btn {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--white);
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--white);
+  box-shadow: 0 4px 12px rgba(20, 184, 196, 0.4);
+  transition: background 0.15s ease;
+}
+.profile-avatar-btn:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+.profile-avatar-btn:disabled {
+  opacity: 0.6;
+}
+.profile-identity-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.profile-identity-meta strong {
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+.profile-identity-meta > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.profile-avatar-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
+}
+.profile-avatar-remove:hover {
+  color: var(--danger);
+}
+
+/* ── Campos ── */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.profile-field,
+.profile-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 0;
+}
+.profile-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.profile-field input:disabled,
+.profile-field input[readonly] {
+  background: var(--bg);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.profile-field-hint {
+  font-weight: 500;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* ── Senha ── */
+.profile-password-wrap {
+  position: relative;
+}
+.profile-password-wrap input {
+  width: 100%;
+  padding-right: 40px;
+}
+.profile-password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+}
+.profile-password-toggle:hover {
+  color: var(--primary-dark);
+  background: var(--primary-light);
+}
+.profile-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.profile-strength-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.profile-strength-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease, background 0.25s ease;
+}
+.profile-strength small {
+  font-size: 11.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.profile-strength.weak .profile-strength-bar span { background: var(--danger); }
+.profile-strength.weak small { color: var(--danger); }
+.profile-strength.medium .profile-strength-bar span { background: #f2a93b; }
+.profile-strength.medium small { color: #c07f14; }
+.profile-strength.strong .profile-strength-bar span { background: var(--ok); }
+.profile-strength.strong small { color: #1d9a63; }
+.profile-mismatch {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--danger);
+}
+.profile-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #1d9a63;
+}
+
+/* ── Ações ── */
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.profile-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: var(--primary);
+  color: var(--white);
+  padding: 11px 18px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 13.5px;
+  transition: background 0.15s ease;
+}
+.profile-actions button:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+.profile-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Informações do sistema (somente leitura) ── */
+.profile-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+.profile-readonly-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.profile-readonly-item > span {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.profile-readonly-item > strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.profile-readonly-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px !important;
+  color: var(--muted) !important;
+  word-break: break-all;
+}
+.profile-readonly-note {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+@media (max-width: 720px) {
+  .profile-identity {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

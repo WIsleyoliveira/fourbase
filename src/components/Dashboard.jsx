@@ -30,7 +30,7 @@ const dueLabel = (due_date) => {
 }
 
 export default function Dashboard({
-  tasks, notes, members, currentUser, columns, tags,
+  tasks, notes, members, clients, currentUser, columns, tags,
   onNavigate, onCreateTask, onUpdateTask, onMoveTask, onDeleteTask, onCreateTag,
 }) {
   const [detailTaskId, setDetailTaskId] = useState(null)
@@ -176,6 +176,7 @@ export default function Dashboard({
         <TaskDetailModal
           task={detailTask}
           members={members}
+          clients={clients}
           currentUser={currentUser}
           columns={columns}
           tags={tags}

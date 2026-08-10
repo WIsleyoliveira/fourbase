@@ -10,6 +10,7 @@ import {
   IconSearch,
   IconClose,
   IconCheckPlain,
+  IconStack,
 } from '../icons.jsx'
 import { assigneeColor, memberColor, tagColor } from '../colors.js'
 
@@ -41,15 +42,16 @@ const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 // o desmonte do painel de detalhes é adiado até o fim da transição para não interrompê-la.
 const COLLAPSE_MS = 280
 
-export default function Calendar({ tasks, members, currentUser, columns, tags = [], onAdd, onUpdate, onMove, onDelete, onCreateTag }) {
+export default function Calendar({ tasks, members, clients = [], currentUser, columns, tags = [], onCreate, onUpdate, onMove, onDelete, onCreateTag }) {
   const today = useMemo(() => new Date(), [])
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDate, setSelectedDate] = useState(today)
   const [isDayDetailOpen, setIsDayDetailOpen] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [collapsing, setCollapsing] = useState(false)
-  const [quickAddTitle, setQuickAddTitle] = useState('')
   const [detailTask, setDetailTask] = useState(null)
+  // Rascunho de nova tarefa: abre o mesmo modal de especificações, já com a data
+  const [draftTask, setDraftTask] = useState(null)
   const [sideOpen, setSideOpen] = useState(false)
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
   const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false)
@@ -181,7 +183,6 @@ export default function Calendar({ tasks, members, currentUser, columns, tags = 
   const openDayDetail = (date) => {
     clearTimeout(collapseTimerRef.current)
     setSelectedDate(date)
-    setQuickAddTitle('')
     setSelectedTaskId(null)
     setCollapsing(false)
     setIsDayDetailOpen(true)
@@ -189,17 +190,25 @@ export default function Calendar({ tasks, members, currentUser, columns, tags = 
   const closeDayDetail = () => {
     clearTimeout(collapseTimerRef.current)
     setIsDayDetailOpen(false)
-    setQuickAddTitle('')
     setSelectedTaskId(null)
     setCollapsing(false)
   }
 
-  const submitQuickAdd = (e) => {
-    e.preventDefault()
-    const title = quickAddTitle.trim()
-    if (!title || !selectedDate) return
-    onAdd(title, 'Média', toKey(selectedDate))
-    setQuickAddTitle('')
+  // Abre o modal completo de especificações já com a data pré-preenchida
+  const openNewTask = (date) => {
+    const target = date || selectedDate || today
+    setSelectedDate(target)
+    setDraftTask({
+      title: '',
+      description: '',
+      priority: 'Média',
+      due_date: toKey(target),
+      column_key: columns?.[0]?.key || 'todo',
+      assigned_to: currentUser?.id || null,
+      client_id: null,
+      tags: [],
+      attachments: [],
+    })
   }
 
   const toggleComplete = (task) => {
@@ -347,14 +356,14 @@ export default function Calendar({ tasks, members, currentUser, columns, tags = 
             )}
             <button className="calview-ghost-btn">Personalizar</button>
             <div className="calview-add-split">
-              <button className="calview-add-btn" onClick={() => openDayDetail(selectedDate || today)}>
+              <button className="calview-add-btn" onClick={() => openNewTask(selectedDate || today)}>
                 <IconPlus size={14} />
                 Add Tarefa
               </button>
               <button
                 className="calview-add-caret"
                 onClick={() => openDayDetail(selectedDate || today)}
-                title="Nova tarefa"
+                title="Ver tarefas do dia"
               >
                 <IconChevronDown size={13} />
               </button>
@@ -377,13 +386,17 @@ export default function Calendar({ tasks, members, currentUser, columns, tags = 
               <div
                 key={i}
                 className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                onClick={() => openDayDetail(date)}
+                onClick={() => openNewTask(date)}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => dropOnDay(e, date)}
               >
                 <div className="calview-cell-top">
-                  <button className="calview-cell-add" tabIndex={-1} title="Ver tarefas do dia">
-                    <IconPlus size={12} />
+                  <button
+                    className="calview-cell-add"
+                    title="Ver tarefas do dia"
+                    onClick={(e) => { e.stopPropagation(); openDayDetail(date) }}
+                  >
+                    <IconStack size={12} />
                   </button>
                   <span className="calview-day-number">{date.getDate()}</span>
                 </div>
@@ -541,15 +554,14 @@ export default function Calendar({ tasks, members, currentUser, columns, tags = 
                 )}
               </div>
 
-              <form className="daydetail-quickadd" onSubmit={submitQuickAdd}>
+              <button
+                type="button"
+                className="daydetail-quickadd"
+                onClick={() => { closeDayDetail(); openNewTask(selectedDate) }}
+              >
                 <IconPlus size={13} />
-                <input
-                  type="text"
-                  placeholder="+ Adicionar tarefa rápida..."
-                  value={quickAddTitle}
-                  onChange={(e) => setQuickAddTitle(e.target.value)}
-                />
-              </form>
+                Nova tarefa neste dia
+              </button>
             </div>
 
             {selectedTask && (
@@ -559,6 +571,7 @@ export default function Calendar({ tasks, members, currentUser, columns, tags = 
                   embedded
                   task={selectedTask}
                   members={members}
+                  clients={clients}
                   currentUser={currentUser}
                   columns={columns}
                   tags={tags}
@@ -578,11 +591,30 @@ export default function Calendar({ tasks, members, currentUser, columns, tags = 
         <TaskDetailModal
           task={detailTask}
           members={members}
+          clients={clients}
           currentUser={currentUser}
           columns={columns}
           tags={tags}
           onCreateTag={onCreateTag}
           onClose={() => setDetailTask(null)}
+          onUpdate={onUpdate}
+          onMove={onMove}
+          onDelete={onDelete}
+        />
+      )}
+
+      {/* Criação: mesmo modal de especificações, em modo rascunho */}
+      {draftTask && (
+        <TaskDetailModal
+          task={draftTask}
+          members={members}
+          clients={clients}
+          currentUser={currentUser}
+          columns={columns}
+          tags={tags}
+          onCreateTag={onCreateTag}
+          onClose={() => setDraftTask(null)}
+          onCreate={onCreate}
           onUpdate={onUpdate}
           onMove={onMove}
           onDelete={onDelete}

@@ -34,6 +34,7 @@ import RegistryView from './components/RegistryView.jsx'
 import ClientsView from './components/ClientsView.jsx'
 import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
+import ProfileView from './components/ProfileView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
 import {
   IconDashboard,
@@ -47,6 +48,7 @@ import {
   IconBuilding,
   IconFileSpreadsheet,
   IconLogout,
+  IconUserCog,
 } from './icons.jsx'
 
 const VIEWS = [
@@ -60,6 +62,16 @@ const VIEWS = [
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
   { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente' },
 ]
+
+// Fica fora de VIEWS de propósito: é renderizado no bloco inferior da sidebar,
+// junto do card do usuário, e não na lista principal de navegação.
+const PROFILE_VIEW = {
+  key: 'perfil',
+  label: 'Meu Perfil',
+  icon: IconUserCog,
+  title: 'Meu Perfil',
+  subtitle: 'Seus dados pessoais, foto e segurança de acesso',
+}
 
 export default function App() {
   const [session, setSession] = useState(getAuth)
@@ -159,6 +171,18 @@ export default function App() {
     setNotes([])
   }
 
+  // Perfil salvo: o backend devolve {token, user} com um JWT novo (o nome vai
+  // assinado nele). Regrava a sessão para a sidebar refletir na hora, sem F5.
+  const applyProfileUpdate = ({ token, user: updated }) => {
+    const next = { token, user: updated }
+    setAuth(next)
+    setSession(next)
+    // A lista de membros alimenta avatares/cores em Kanban, Calendário etc.
+    setMembers((prev) =>
+      prev.map((m) => (m.id === updated.id ? { ...m, name: updated.name, color: updated.color } : m)),
+    )
+  }
+
   // ---- colunas ----
   const addColumn = (label) => {
     const key = toColKey(label)
@@ -181,6 +205,17 @@ export default function App() {
     api
       .addTask(title, priority, due_date, assigned_to, description, client_id, tags)
       .then((t) => setTasks((prev) => [...prev, t]))
+      .catch(handleError)
+
+  // Criação com o objeto completo, vinda do modal de especificações da tarefa
+  const createTask = (draft) =>
+    api
+      .createTask(draft)
+      .then((t) => {
+        setTasks((prev) => [...prev, t])
+        showToast('Tarefa criada.')
+        return t
+      })
       .catch(handleError)
 
   const openSendToKanban = (title, description = '') => setKanbanDraft({ title, description })
@@ -266,6 +301,12 @@ export default function App() {
       .then((n) => setNotes((prev) => prev.map((x) => (x.id === id ? n : x))))
       .catch(handleError)
 
+  const updateNoteAttachments = (id, attachments) =>
+    api
+      .updateNoteAttachments(id, attachments)
+      .then((n) => setNotes((prev) => prev.map((x) => (x.id === id ? n : x))))
+      .catch(handleError)
+
   // Navega para a aba Documentações já com a pasta indicada aberta/selecionada
   const navigateToFolder = (folderId) => {
     setTargetFolderId(folderId)
@@ -339,7 +380,7 @@ export default function App() {
   const user = session.user
   const isGestor = user.role === 'gestor'
   const visibleViews = VIEWS.filter((v) => !v.gestorOnly || isGestor)
-  const baseView = VIEWS.find((v) => v.key === view) || VIEWS[0]
+  const baseView = [...VIEWS, PROFILE_VIEW].find((v) => v.key === view) || VIEWS[0]
   // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
   const current = selectedClient
     ? { title: selectedClient.name || 'Cliente sem nome', subtitle: 'Espaço do cliente · Kanban dedicado' }
@@ -352,6 +393,7 @@ export default function App() {
           <Kanban
             tasks={tasks}
             members={members}
+            clients={clients}
             currentUser={user}
             columns={columns}
             tags={tags}
@@ -368,10 +410,11 @@ export default function App() {
           <Calendar
             tasks={tasks}
             members={members}
+            clients={clients}
             currentUser={user}
             columns={columns}
             tags={tags}
-            onAdd={addTask}
+            onCreate={createTask}
             onUpdate={updateTask}
             onMove={moveTask}
             onDelete={deleteTask}
@@ -387,6 +430,7 @@ export default function App() {
             onDelete={deleteNote}
             onSendToKanban={openSendToKanban}
             onLinkFolder={linkNoteFolder}
+            onUpdateAttachments={updateNoteAttachments}
             onNavigateToFolder={navigateToFolder}
             targetNoteId={targetNoteId}
             onConsumeNoteTarget={() => setTargetNoteId(null)}
@@ -442,6 +486,15 @@ export default function App() {
         )
       case 'equipe':
         return isGestor ? <TeamView onError={handleError} /> : null
+      case 'perfil':
+        return (
+          <ProfileView
+            currentUser={user}
+            onProfileSaved={applyProfileUpdate}
+            onToast={showToast}
+            onError={handleError}
+          />
+        )
       case 'relatorios':
         return (
           <ReportsView
@@ -457,6 +510,7 @@ export default function App() {
             tasks={tasks}
             notes={notes}
             members={members}
+            clients={clients}
             currentUser={user}
             columns={columns}
             tags={tags}
@@ -496,14 +550,31 @@ export default function App() {
             )
           })}
         </nav>
+        <button
+          className={`sidebar-profile-btn${view === 'perfil' ? ' active' : ''}`}
+          onClick={() => changeView('perfil')}
+        >
+          <IconUserCog size={17} />
+          <span>{PROFILE_VIEW.label}</span>
+        </button>
         <div className="user-box">
-          <div className="member-avatar">{user.name.charAt(0).toUpperCase()}</div>
-          <div className="user-box-id">
-            <strong>{user.name}</strong>
-            <span className={`role-badge ${user.role}`}>
-              {isGestor ? 'Gestor' : 'Funcionário'}
-            </span>
-          </div>
+          <button
+            className="user-box-identity"
+            title="Abrir Meu Perfil"
+            onClick={() => changeView('perfil')}
+          >
+            <div className="member-avatar">
+              {user.avatar_url
+                ? <img src={user.avatar_url} alt={user.name} />
+                : user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="user-box-id">
+              <strong>{user.name}</strong>
+              <span className={`role-badge ${user.role}`}>
+                {isGestor ? 'Gestor' : 'Funcionário'}
+              </span>
+            </div>
+          </button>
           <button className="icon-btn logout-btn" title="Sair" onClick={logout}>
             <IconLogout size={16} />
           </button>

@@ -124,7 +124,7 @@ function AddGroupButton({ onAdd }) {
 }
 
 // ─── Componente principal ──────────────────────────────────────────────────────
-export default function Kanban({ tasks, members, currentUser, columns, tags = [], onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag }) {
+export default function Kanban({ tasks, members, clients = [], currentUser, columns, tags = [], onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('Média')
@@ -350,6 +350,7 @@ export default function Kanban({ tasks, members, currentUser, columns, tags = []
           <TaskDetailModal
             task={detailTask}
             members={members}
+            clients={clients}
             currentUser={currentUser}
             columns={columns}
             tags={tags}
