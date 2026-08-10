@@ -21,8 +21,8 @@ import {
   IconExpandSearch,
   IconBuilding,
 } from '../icons.jsx'
-import { assigneeColor } from '../colors.js'
 import TagPicker from './TagPicker.jsx'
+import Avatar from './Avatar.jsx'
 
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
@@ -41,14 +41,6 @@ const PRIORITIES = [
 ]
 
 // ─── Utilitários ──────────────────────────────────────────────────────────────
-
-const getInitials = (name = '') =>
-  name
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
 
 const formatDate = (iso) => {
   if (!iso) return '—'
@@ -476,7 +468,7 @@ export default function TaskDetailModal({
                   <div className="tdv2-assignee">
                     {assigneeMember ? (
                       <>
-                        <div className="tdv2-avatar" style={{ background: assigneeColor(assigneeMember.id, assigneeMember.color) }}>{getInitials(assigneeMember.name)}</div>
+                        <Avatar id={assigneeMember.id} name={assigneeMember.name} list={members} className="tdv2-avatar" />
                         <span className="tdv2-assignee-name">{assigneeMember.name}</span>
                       </>
                     ) : (

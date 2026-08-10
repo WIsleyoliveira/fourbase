@@ -48,6 +48,13 @@ export function memberColor(id, list = []) {
   return assigneeColor(id, list.find((m) => m.id === id)?.color)
 }
 
+// Foto de perfil cadastrada pelo responsável (aba Perfil), quando houver —
+// usada para trocar o círculo de iniciais por uma imagem real nos avatares
+// do Kanban, Calendário, Equipe etc.
+export function memberAvatarUrl(id, list = []) {
+  return list.find((m) => m.id === id)?.avatar_url || null
+}
+
 // Paleta para etiquetas (tags) — tons mais suaves/pastel, distintos da paleta
 // de responsáveis para não competir visualmente com o borda-esquerda dos cards.
 const TAG_PALETTE = [

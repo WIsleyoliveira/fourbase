@@ -9,6 +9,7 @@ import {
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
+import Avatar from './Avatar.jsx'
 import { memberColor, tagColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -238,7 +239,6 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                 {colTasks.map((task) => {
                   const due = dueState(task.due_date)
                   const isDone = task.column_key === 'done'
-                  const initials = memberName(task.assigned_to).charAt(0).toUpperCase()
                   // Código de cores único por responsável — identifica a tarefa por pessoa
                   const ownerColor = memberColor(task.assigned_to, members)
                   return (
@@ -320,13 +320,12 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                           </div>
 
                           {task.assigned_to && (
-                            <div
+                            <Avatar
+                              id={task.assigned_to}
+                              name={memberName(task.assigned_to)}
+                              list={members}
                               className="assignee-avatar"
-                              style={{ background: ownerColor }}
-                              title={memberName(task.assigned_to)}
-                            >
-                              {initials}
-                            </div>
+                            />
                           )}
                         </div>
                       </div>

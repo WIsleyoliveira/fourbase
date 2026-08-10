@@ -179,7 +179,11 @@ export default function App() {
     setSession(next)
     // A lista de membros alimenta avatares/cores em Kanban, Calendário etc.
     setMembers((prev) =>
-      prev.map((m) => (m.id === updated.id ? { ...m, name: updated.name, color: updated.color } : m)),
+      prev.map((m) =>
+        m.id === updated.id
+          ? { ...m, name: updated.name, color: updated.color, avatar_url: updated.avatar_url }
+          : m,
+      ),
     )
   }
 
@@ -363,11 +367,73 @@ export default function App() {
     [clients, selectedClientId]
   )
 
-  // Backlog do Kanban do cliente — estritamente as tarefas daquele client_id
-  const clientTasks = useMemo(
-    () => (selectedClientId ? tasks.filter((t) => t.client_id === selectedClientId) : []),
-    [tasks, selectedClientId]
-  )
+  // Backlog do Kanban do cliente — TODAS as tarefas daquele client_id, de
+  // qualquer responsável (não só as do usuário logado). `GET /api/tasks`
+  // filtra por `assigned_to = usuário logado`, então o Kanban do cliente
+  // precisa de uma busca própria para que um funcionário veja as atividades
+  // que outro funcionário/gestor colocou no quadro do mesmo cliente.
+  const [clientTasks, setClientTasks] = useState([])
+
+  const fetchClientTasks = useCallback((id) => {
+    if (!id) { setClientTasks([]); return }
+    api.getTasksByClient(id).then(setClientTasks).catch(handleError)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchClientTasks(selectedClientId)
+  }, [selectedClientId, fetchClientTasks])
+
+  // Polling leve: mantém o quadro do cliente atualizado com o que outras
+  // pessoas da equipe adicionarem/moverem, sem precisar recarregar a página.
+  useEffect(() => {
+    if (!selectedClientId) return
+    const poll = setInterval(() => fetchClientTasks(selectedClientId), 6000)
+    const onFocus = () => fetchClientTasks(selectedClientId)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      clearInterval(poll)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [selectedClientId, fetchClientTasks])
+
+  // CRUD do Kanban do cliente — atua sobre `clientTasks` (visão compartilhada
+  // de todo mundo) e replica em `tasks` quando a tarefa também pertence à
+  // lista pessoal do usuário logado, mantendo Painel/Calendário coerentes.
+  const addClientTask = (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
+    api
+      .addTask(title, priority, due_date, assigned_to, description, client_id, tags)
+      .then((t) => {
+        setClientTasks((prev) => [...prev, t])
+        if (t.assigned_to === user?.id) setTasks((prev) => [...prev, t])
+      })
+      .catch(handleError)
+
+  const moveClientTask = (id, column_key) => {
+    setClientTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
+    api.moveTask(id, column_key).catch((err) => {
+      handleError(err)
+      fetchClientTasks(selectedClientId)
+    })
+  }
+
+  const updateClientTask = (id, updates) => {
+    setClientTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+    api.updateTask(id, updates).catch((err) => {
+      handleError(err)
+      fetchClientTasks(selectedClientId)
+    })
+  }
+
+  const deleteClientTask = (id) => {
+    setClientTasks((prev) => prev.filter((t) => t.id !== id))
+    setTasks((prev) => prev.filter((t) => t.id !== id))
+    api.deleteTask(id).catch((err) => {
+      handleError(err)
+      fetchClientTasks(selectedClientId)
+    })
+  }
 
   // Trocar de aba sempre volta o módulo de clientes para a listagem
   const changeView = (next) => {
@@ -465,10 +531,10 @@ export default function App() {
             columns={columns}
             tags={tags}
             onBack={() => setSelectedClientId(null)}
-            onAdd={addTask}
-            onMove={moveTask}
-            onUpdate={updateTask}
-            onDelete={deleteTask}
+            onAdd={addClientTask}
+            onMove={moveClientTask}
+            onUpdate={updateClientTask}
+            onDelete={deleteClientTask}
             onAddColumn={addColumn}
             onCreateTag={createTag}
             onError={handleError}
@@ -530,7 +596,7 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-logo">4B</div>
+          <img src="/fourbase-logo.png" alt="fourbase" className="brand-logo" />
           <div>
             <h1>fourbase</h1>
             <p>Gestão visual de tarefas</p>

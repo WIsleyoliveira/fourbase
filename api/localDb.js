@@ -67,6 +67,8 @@ function seedDb() {
         password_hash: bcrypt.hashSync('gestor123', 10),
         role: 'gestor',
         job_title: null,
+        color: null,
+        avatar_url: null,
         created_at: now,
       },
     ],

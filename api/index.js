@@ -244,7 +244,7 @@ const normalizeColor = (value) => (typeof value === 'string' && HEX_COLOR.test(v
 app.get('/api/members', auth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_users')
-    .select('id, name, color')
+    .select('id, name, color, avatar_url')
     .order('name')
   if (error) throw error
   res.json(data)
@@ -646,7 +646,7 @@ app.post('/api/tags', auth, asyncRoute(async (req, res) => {
 // ---------- Equipe (somente gestor) ----------
 app.get('/api/team/overview', auth, gestorOnly, asyncRoute(async (req, res) => {
   const [users, tasks, todos, notes] = await Promise.all([
-    supabase.from('fourbase_users').select('id, name, email, role').order('created_at'),
+    supabase.from('fourbase_users').select('id, name, email, role, avatar_url, color').order('created_at'),
     supabase.from('fourbase_tasks').select('user_id, column_key'),
     supabase.from('fourbase_todos').select('user_id, done'),
     supabase.from('fourbase_notes').select('user_id, updated_at'),
@@ -680,7 +680,7 @@ app.get('/api/team/tasks', auth, gestorOnly, asyncRoute(async (req, res) => {
   // interpreta a sintaxe de recurso embutido do supabase-js (`fk!join(...)`).
   const [{ data: tasks, error: tErr }, { data: users, error: uErr }] = await Promise.all([
     supabase.from('fourbase_tasks').select('*').order('created_at', { ascending: false }),
-    supabase.from('fourbase_users').select('id, name, email'),
+    supabase.from('fourbase_users').select('id, name, email, avatar_url, color'),
   ])
   if (tErr) throw tErr
   if (uErr) throw uErr
@@ -688,7 +688,13 @@ app.get('/api/team/tasks', auth, gestorOnly, asyncRoute(async (req, res) => {
   res.json(
     tasks.map((t) => {
       const assignee = byId[t.assigned_to]
-      return { ...t, owner_name: assignee?.name || 'Sem dono', owner_email: assignee?.email || '' }
+      return {
+        ...t,
+        owner_name: assignee?.name || 'Sem dono',
+        owner_email: assignee?.email || '',
+        owner_avatar_url: assignee?.avatar_url || null,
+        owner_color: assignee?.color || null,
+      }
     })
   )
 }))

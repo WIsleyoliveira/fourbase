@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { IconTrash, IconClose } from '../icons.jsx'
+import Avatar from './Avatar.jsx'
 
 const COLUMN_LABEL = { todo: 'A Fazer', doing: 'Em Progresso', done: 'Concluído' }
 const PRIORITY_CLASS = { Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -177,7 +178,7 @@ export default function TeamView({ onError }) {
           return (
             <div className="panel member-card" key={member.id}>
               <div className="member-head">
-                <div className="member-avatar">{member.name.charAt(0).toUpperCase()}</div>
+                <Avatar id={member.id} name={member.name} list={[member]} className="member-avatar" />
                 <div className="member-id">
                   <strong>{member.name}</strong>
                   <small>{member.email}</small>

@@ -12,7 +12,8 @@ import {
   IconCheckPlain,
   IconStack,
 } from '../icons.jsx'
-import { assigneeColor, memberColor, tagColor } from '../colors.js'
+import Avatar from './Avatar.jsx'
+import { memberColor, tagColor } from '../colors.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -32,9 +33,6 @@ const toKey = (date) => {
 
 const isSameDay = (a, b) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-
-const getInitials = (name = '') =>
-  name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
 
 const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
@@ -330,16 +328,19 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
                       className={assigneeFilter === m.id ? 'active' : ''}
                       onClick={() => { setAssigneeFilter(m.id); setAssigneeMenuOpen(false) }}
                     >
-                      <span className="member-avatar sm" style={{ background: assigneeColor(m.id, m.color) }}>{getInitials(m.name)}</span>
+                      <Avatar id={m.id} name={m.name} list={members} className="member-avatar sm" />
                       {m.name}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-            <div className="member-avatar calview-avatar" style={{ background: memberColor(currentUser?.id, members) }} title={currentUser?.name}>
-              {getInitials(currentUser?.name)}
-            </div>
+            <Avatar
+              id={currentUser?.id}
+              name={currentUser?.name}
+              list={members}
+              className="member-avatar calview-avatar"
+            />
             {searchOpen ? (
               <input
                 className="calview-search-input"
@@ -528,13 +529,16 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
                           <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>
                             {t.priority}
                           </span>
-                          <div
-                            className={`member-avatar sm${assignee ? '' : ' empty'}`}
-                            style={assignee ? { background: assigneeColor(assignee.id, assignee.color) } : undefined}
-                            title={assignee?.name || 'Sem responsável'}
-                          >
-                            {assignee ? getInitials(assignee.name) : '—'}
-                          </div>
+                          {assignee ? (
+                            <Avatar
+                              id={assignee.id}
+                              name={assignee.name}
+                              list={members}
+                              className="member-avatar sm"
+                            />
+                          ) : (
+                            <div className="member-avatar sm empty" title="Sem responsável">—</div>
+                          )}
                         </div>
                         {t.tags?.length > 0 && (
                           <div className="daydetail-item-tags">

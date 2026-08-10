@@ -30,7 +30,7 @@ export default function Login({ onLogin }) {
     <div className="login-page">
       <div className="login-card">
         <div className="login-brand">
-          <div className="brand-logo">4B</div>
+          <img src="/fourbase-logo.png" alt="fourbase" className="brand-logo" />
           <div>
             <h1>fourbase</h1>
             <p>Gestão visual de tarefas</p>

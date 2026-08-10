@@ -518,7 +518,7 @@ export default function ReportsView({ members, clients, columns, currentUser, on
       {/* ── Documento — visível apenas na impressão / exportação em PDF ── */}
       <div className="reports-print-doc print-only">
         <div className="reports-print-header">
-          <div className="brand-logo">4B</div>
+          <img src="/fourbase-logo.png" alt="fourbase" className="brand-logo" />
           <h1>Relatório de Atividades</h1>
         </div>
         <div className="reports-print-infobox">
