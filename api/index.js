@@ -165,6 +165,19 @@ app.get('/api/tasks', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
+// Todas as tarefas de um cliente, independente de quem é o responsável —
+// usada pela aba Relatórios, que precisa exibir a atividade do cliente como
+// um todo (mesma regra de visibilidade já aplicada a fourbase_report_activities).
+app.get('/api/tasks/by-client/:clientId', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_tasks')
+    .select('*')
+    .eq('client_id', req.params.clientId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  res.json(data)
+}))
+
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
   const {
     title, priority = 'Média', due_date = null, assigned_to, description = '',

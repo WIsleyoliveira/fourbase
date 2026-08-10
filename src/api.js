@@ -59,6 +59,8 @@ export const api = {
 
   // tarefas
   getTasks: () => request('/api/tasks'),
+  // todas as tarefas de um cliente (qualquer responsável) — usada pela aba Relatórios
+  getTasksByClient: (clientId) => request(`/api/tasks/by-client/${clientId}`),
   addTask: (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
     request('/api/tasks', {
       method: 'POST',

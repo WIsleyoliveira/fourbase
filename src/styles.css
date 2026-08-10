@@ -5742,6 +5742,12 @@ textarea:focus {
   font-weight: 600;
 }
 
+.reports-hint {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 /* ── Texto de apresentação ── */
 .reports-intro-textarea {
   width: 100%;
@@ -5866,6 +5872,29 @@ textarea:focus {
 .reports-col-status { width: 20%; }
 .reports-col-assignee { width: 22%; }
 .reports-col-actions { width: 44px; }
+
+/* ── Linha sincronizada de fourbase_tasks (Kanban/Calendário/Espaço do Cliente) ── */
+.reports-activity-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.reports-activity-cell .reports-cell-input {
+  flex: 1;
+  min-width: 0;
+}
+.reports-task-badge {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--primary-deep);
+  background: var(--primary-light);
+  border-radius: 999px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
 
 /* ── Células editáveis (estilo Notion: sem borda até o foco) ── */
 .reports-cell-input {

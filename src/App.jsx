@@ -500,6 +500,7 @@ export default function App() {
           <ReportsView
             members={members}
             clients={clients}
+            columns={columns}
             currentUser={user}
             onError={handleError}
           />

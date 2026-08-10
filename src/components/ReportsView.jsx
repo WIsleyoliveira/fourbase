@@ -11,6 +11,10 @@ const STATUS_CLASS = {
   'Concluído': 'report-status-done',
 }
 
+// Intervalo do polling que mantém a planilha sincronizada com o Kanban/Calendário
+// sem exigir websockets — suficiente para o caso de uso (poucos usuários simultâneos).
+const TASKS_POLL_MS = 6000
+
 const formatDateBR = (iso) => {
   if (!iso) return ''
   const value = iso.length === 10 ? `${iso}T00:00:00` : iso
@@ -22,6 +26,20 @@ const csvField = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
 
 const introTemplate = (clientName, dateFromBR, dateToBR) =>
   `Prezado(a) ${clientName || '[Nome do Cliente]'}, apresentamos a seguir o relatório consolidado das atividades executadas pela equipe Fourbase durante o período de ${dateFromBR || '[Data Início]'} a ${dateToBR || '[Data Fim]'}. Abaixo estão discriminadas as tarefas entregues, status de andamento e respectivos responsáveis.`
+
+// Converte uma tarefa do Kanban/Calendário/Espaço do Cliente em uma linha da
+// planilha de Relatórios. A tarefa continua vivendo em fourbase_tasks — esta
+// função só normaliza o formato para renderização/edição na grade.
+const taskToRow = (task) => ({
+  id: `task:${task.id}`,
+  source: 'task',
+  taskId: task.id,
+  activity_name: task.title || '',
+  date: task.due_date || (task.created_at ? String(task.created_at).slice(0, 10) : null),
+  column_key: task.column_key,
+  assigned_to: task.assigned_to || null,
+  client_id: task.client_id || null,
+})
 
 // ── Botão "Exportar" com opções CSV/PDF ─────────────────────────────────────
 function ExportMenu({ onExportCsv, onExportPdf }) {
@@ -56,8 +74,9 @@ function ExportMenu({ onExportCsv, onExportPdf }) {
   )
 }
 
-export default function ReportsView({ members, clients, currentUser, onError }) {
+export default function ReportsView({ members, clients, columns, currentUser, onError }) {
   const [activities, setActivities] = useState([])
+  const [clientTasks, setClientTasks] = useState([])
   const [loading, setLoading] = useState(true)
 
   // ── Metadados do relatório — definem para quem, quando e por quem o relatório é gerado ──
@@ -91,6 +110,31 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
 
   const memberName = (id) => members.find((m) => m.id === id)?.name || ''
   const clientName = (id) => clients.find((c) => c.id === id)?.name || ''
+  const columnByKey = (key) => columns?.find((c) => c.key === key)
+
+  // ── Tarefas do cliente selecionado (view reativa sobre fourbase_tasks) ──
+  // Ao trocar o cliente ou periodicamente (polling leve), busca todas as
+  // tarefas vinculadas a ele — de qualquer responsável — para que criações
+  // feitas no Kanban, Calendário ou Espaço do Cliente apareçam aqui sozinhas.
+  const fetchClientTasks = (id) => {
+    if (!id) { setClientTasks([]); return }
+    api.getTasksByClient(id).then(setClientTasks).catch(onError)
+  }
+
+  useEffect(() => {
+    fetchClientTasks(clientId)
+  }, [clientId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!clientId) return
+    const poll = setInterval(() => fetchClientTasks(clientId), TASKS_POLL_MS)
+    const onFocus = () => fetchClientTasks(clientId)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      clearInterval(poll)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [clientId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (introEdited) return
@@ -102,8 +146,11 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
     setIntroText(introTemplate(clientName(clientId), formatDateBR(dateFrom), formatDateBR(dateTo)))
   }
 
-  // Atividades dentro do escopo do relatório: cliente atendido + período de execução
-  const scoped = useMemo(() => {
+  // Linhas derivadas de tarefas (fourbase_tasks) do cliente selecionado
+  const taskRows = useMemo(() => (clientId ? clientTasks.map(taskToRow) : []), [clientId, clientTasks])
+
+  // Atividades manuais dentro do escopo do relatório: cliente atendido + período de execução
+  const scopedActivities = useMemo(() => {
     return activities.filter((a) => {
       if (clientId && a.client_id !== clientId) return false
       if (dateFrom && a.date && a.date < dateFrom) return false
@@ -111,6 +158,28 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
       return true
     })
   }, [activities, clientId, dateFrom, dateTo])
+
+  const scopedTaskRows = useMemo(() => {
+    return taskRows.filter((r) => {
+      if (dateFrom && r.date && r.date < dateFrom) return false
+      if (dateTo && r.date && r.date > dateTo) return false
+      return true
+    })
+  }, [taskRows, dateFrom, dateTo])
+
+  // Planilha final: tarefas do cliente (sincronizadas) + registros manuais, ordenadas por data
+  const scoped = useMemo(() => {
+    const combined = [
+      ...scopedTaskRows.map((r) => ({ ...r, __kind: 'task' })),
+      ...scopedActivities.map((a) => ({ ...a, __kind: 'activity' })),
+    ]
+    return combined.sort((x, y) => {
+      if (!x.date && !y.date) return 0
+      if (!x.date) return 1
+      if (!y.date) return -1
+      return x.date < y.date ? -1 : x.date > y.date ? 1 : 0
+    })
+  }, [scopedTaskRows, scopedActivities])
 
   // Ao trocar o cliente atendido, preserva a planilha e vincula ao novo cliente
   // apenas as linhas ainda sem cliente (rascunhos digitados antes da seleção) —
@@ -131,7 +200,7 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
     )
   }
 
-  // ── CRUD ─────────────────────────────────────────────────────────────────
+  // ── CRUD: atividades manuais ────────────────────────────────────────────
   const addActivity = () => {
     const draft = {
       client_id: clientId || null,
@@ -159,13 +228,35 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
     })
   }
 
+  // ── CRUD: linhas vindas de tarefas — edita a tarefa original em fourbase_tasks ──
+  // Isso é o que fecha o sync bidirecional: mudar aqui reflete no Kanban/Calendário
+  // (e vice-versa, via o polling acima).
+  const updateTaskRow = (taskId, updates) => {
+    setClientTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)))
+    api.updateTask(taskId, updates).catch((err) => {
+      onError(err)
+      fetchClientTasks(clientId)
+    })
+  }
+
+  const removeTaskRow = (taskId) => {
+    setClientTasks((prev) => prev.filter((t) => t.id !== taskId))
+    api.deleteTask(taskId).catch((err) => {
+      onError(err)
+      fetchClientTasks(clientId)
+    })
+  }
+
   // ── Exportação ───────────────────────────────────────────────────────────
+  const rowStatusLabel = (row) =>
+    row.__kind === 'task' ? (columnByKey(row.column_key)?.label || row.column_key) : row.status
+
   const exportCsv = () => {
     const header = ['Atividade', 'Data', 'Status', 'Responsável', 'Cliente']
     const rows = scoped.map((a) => [
       a.activity_name || '',
       formatDateBR(a.date),
-      a.status,
+      rowStatusLabel(a),
       memberName(a.assigned_to),
       clientName(a.client_id),
     ])
@@ -227,6 +318,11 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
           </label>
         </div>
         {reassignNotice && <div className="reports-reassign-notice">{reassignNotice}</div>}
+        {!clientId && (
+          <div className="reports-hint">
+            Selecione um cliente para carregar automaticamente as tarefas dele vindas do Kanban, Calendário e Espaço do Cliente.
+          </div>
+        )}
       </div>
 
       {/* ── Texto de apresentação ── */}
@@ -268,74 +364,146 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
               {scoped.length === 0 ? (
                 <tr className="reports-empty-row">
                   <td colSpan={5}>
-                    {activities.length === 0
+                    {activities.length === 0 && taskRows.length === 0
                       ? 'Nenhuma atividade ainda — clique em "Nova Atividade" para começar.'
                       : 'Nenhuma atividade encontrada para o cliente/período selecionados.'}
                   </td>
                 </tr>
               ) : (
-                scoped.map((a) => (
-                  <tr className="reports-row" key={a.id}>
-                    <td>
-                      <input
-                        type="text"
-                        className="reports-cell-input"
-                        placeholder="Nome da atividade..."
-                        defaultValue={a.activity_name || ''}
-                        onBlur={(e) => {
-                          const v = e.target.value
-                          if (v !== (a.activity_name || '')) updateActivity(a.id, { activity_name: v })
-                        }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="date"
-                        className="reports-cell-input"
-                        value={a.date || ''}
-                        onChange={(e) => updateActivity(a.id, { date: e.target.value || null })}
-                      />
-                    </td>
-                    <td>
-                      <select
-                        className={`reports-status-select ${STATUS_CLASS[a.status] || 'report-status-todo'}`}
-                        value={a.status}
-                        onChange={(e) => updateActivity(a.id, { status: e.target.value })}
-                      >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <div className="reports-assignee-cell">
-                        {a.assigned_to && (
-                          <span className="reports-assignee-dot" style={{ background: memberColor(a.assigned_to, members) }} />
-                        )}
+                scoped.map((row) =>
+                  row.__kind === 'task' ? (
+                    <tr className="reports-row" key={row.id}>
+                      <td>
+                        <div className="reports-activity-cell">
+                          <input
+                            type="text"
+                            className="reports-cell-input"
+                            placeholder="Nome da atividade..."
+                            defaultValue={row.activity_name || ''}
+                            onBlur={(e) => {
+                              const v = e.target.value
+                              if (v !== (row.activity_name || '')) updateTaskRow(row.taskId, { title: v })
+                            }}
+                          />
+                          <span className="reports-task-badge" title="Sincronizado com uma tarefa do Kanban/Calendário">
+                            Tarefa
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <input
+                          type="date"
+                          className="reports-cell-input"
+                          value={row.date || ''}
+                          onChange={(e) => updateTaskRow(row.taskId, { due_date: e.target.value || null })}
+                        />
+                      </td>
+                      <td>
                         <select
-                          className="reports-cell-select"
-                          value={a.assigned_to || ''}
-                          onChange={(e) => updateActivity(a.id, { assigned_to: e.target.value || null })}
+                          className="reports-status-select"
+                          style={{
+                            backgroundColor: `${columnByKey(row.column_key)?.color || '#9ca3af'}22`,
+                            color: columnByKey(row.column_key)?.color || '#5c636b',
+                          }}
+                          value={row.column_key}
+                          onChange={(e) => updateTaskRow(row.taskId, { column_key: e.target.value })}
                         >
-                          <option value="">Sem responsável</option>
-                          {members.map((m) => (
-                            <option key={m.id} value={m.id}>{m.name}</option>
+                          {(columns || []).map((c) => (
+                            <option key={c.key} value={c.key}>{c.label}</option>
                           ))}
                         </select>
-                      </div>
-                    </td>
-                    <td className="reports-row-actions no-print">
-                      <button
-                        type="button"
-                        className="reports-row-delete"
-                        title="Excluir atividade"
-                        onClick={() => removeActivity(a.id)}
-                      >
-                        <IconTrash size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td>
+                        <div className="reports-assignee-cell">
+                          {row.assigned_to && (
+                            <span className="reports-assignee-dot" style={{ background: memberColor(row.assigned_to, members) }} />
+                          )}
+                          <select
+                            className="reports-cell-select"
+                            value={row.assigned_to || ''}
+                            onChange={(e) => updateTaskRow(row.taskId, { assigned_to: e.target.value || null })}
+                          >
+                            <option value="">Sem responsável</option>
+                            {members.map((m) => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </td>
+                      <td className="reports-row-actions no-print">
+                        <button
+                          type="button"
+                          className="reports-row-delete"
+                          title="Excluir tarefa"
+                          onClick={() => removeTaskRow(row.taskId)}
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr className="reports-row" key={row.id}>
+                      <td>
+                        <input
+                          type="text"
+                          className="reports-cell-input"
+                          placeholder="Nome da atividade..."
+                          defaultValue={row.activity_name || ''}
+                          onBlur={(e) => {
+                            const v = e.target.value
+                            if (v !== (row.activity_name || '')) updateActivity(row.id, { activity_name: v })
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="date"
+                          className="reports-cell-input"
+                          value={row.date || ''}
+                          onChange={(e) => updateActivity(row.id, { date: e.target.value || null })}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          className={`reports-status-select ${STATUS_CLASS[row.status] || 'report-status-todo'}`}
+                          value={row.status}
+                          onChange={(e) => updateActivity(row.id, { status: e.target.value })}
+                        >
+                          {STATUS_OPTIONS.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <div className="reports-assignee-cell">
+                          {row.assigned_to && (
+                            <span className="reports-assignee-dot" style={{ background: memberColor(row.assigned_to, members) }} />
+                          )}
+                          <select
+                            className="reports-cell-select"
+                            value={row.assigned_to || ''}
+                            onChange={(e) => updateActivity(row.id, { assigned_to: e.target.value || null })}
+                          >
+                            <option value="">Sem responsável</option>
+                            {members.map((m) => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </td>
+                      <td className="reports-row-actions no-print">
+                        <button
+                          type="button"
+                          className="reports-row-delete"
+                          title="Excluir atividade"
+                          onClick={() => removeActivity(row.id)}
+                        >
+                          <IconTrash size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                )
               )}
             </tbody>
           </table>
@@ -382,12 +550,12 @@ export default function ReportsView({ members, clients, currentUser, onError }) 
             </tr>
           </thead>
           <tbody>
-            {scoped.map((a) => (
-              <tr key={a.id}>
-                <td>{a.activity_name || ''}</td>
-                <td>{formatDateBR(a.date)}</td>
-                <td>{a.status}</td>
-                <td>{memberName(a.assigned_to)}</td>
+            {scoped.map((row) => (
+              <tr key={row.id}>
+                <td>{row.activity_name || ''}</td>
+                <td>{formatDateBR(row.date)}</td>
+                <td>{rowStatusLabel(row)}</td>
+                <td>{memberName(row.assigned_to)}</td>
               </tr>
             ))}
           </tbody>
