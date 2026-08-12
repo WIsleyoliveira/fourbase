@@ -178,6 +178,52 @@ app.get('/api/tasks/by-client/:clientId', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
+// Todas as tarefas vinculadas a QUALQUER cliente, de qualquer responsável —
+// usada pelo Calendário para juntar às tarefas pessoais do usuário logado.
+// Tarefas de cliente já são compartilhadas com toda a equipe em outros
+// pontos do app (Kanban do cliente, Relatórios, progresso da listagem de
+// clientes); sem isso, uma tarefa criada no Kanban de um cliente e atribuída
+// a outra pessoa só aparecia no calendário de quem estava marcado como
+// responsável, nunca no de quem apenas criou/acompanha o cliente.
+app.get('/api/tasks/client-linked', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_tasks')
+    .select('*')
+    .not('client_id', 'is', null)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  res.json(data)
+}))
+
+// Progresso consolidado por cliente. Conta as tarefas de TODA a equipe (não só
+// as do usuário logado), para que a barra de progresso e os contadores
+// ativas/total do cliente reflitam o trabalho de todo mundo — mesma regra de
+// visibilidade compartilhada já usada no Espaço do Cliente e em Relatórios.
+// Devolve o agregado pronto para não trafegar a base de tarefas inteira.
+app.get('/api/tasks/client-stats', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_tasks')
+    .select('client_id, column_key, created_at, updated_at')
+  if (error) throw error
+
+  const map = {}
+  for (const t of data) {
+    if (!t.client_id) continue
+    const s = map[t.client_id] || (map[t.client_id] = { total: 0, todo: 0, doing: 0, done: 0, lastActivity: null })
+    s.total += 1
+    if (t.column_key === 'done') s.done += 1
+    else if (t.column_key === 'todo') s.todo += 1
+    else s.doing += 1
+    const stamp = t.updated_at || t.created_at
+    if (stamp && (!s.lastActivity || stamp > s.lastActivity)) s.lastActivity = stamp
+  }
+  for (const s of Object.values(map)) {
+    s.active = s.total - s.done
+    s.progress = s.total ? Math.round((s.done / s.total) * 100) : 0
+  }
+  res.json(map)
+}))
+
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
   const {
     title, priority = 'Média', due_date = null, assigned_to, description = '',

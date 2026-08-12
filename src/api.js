@@ -61,6 +61,12 @@ export const api = {
   getTasks: () => request('/api/tasks'),
   // todas as tarefas de um cliente (qualquer responsável) — usada pela aba Relatórios
   getTasksByClient: (clientId) => request(`/api/tasks/by-client/${clientId}`),
+  // todas as tarefas vinculadas a QUALQUER cliente (qualquer responsável) — o
+  // Calendário junta isso às tarefas pessoais para mostrar o trabalho de toda
+  // a equipe nos clientes, e não só o que está atribuído ao usuário logado
+  getClientLinkedTasks: () => request('/api/tasks/client-linked'),
+  // Progresso por cliente considerando as tarefas de toda a equipe
+  getClientTaskStats: () => request('/api/tasks/client-stats'),
   addTask: (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
     request('/api/tasks', {
       method: 'POST',

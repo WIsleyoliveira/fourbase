@@ -6,17 +6,23 @@ import { assigneeColor } from '../colors.js'
 
 const TABS = [
   { key: 'kanban', label: 'Kanban', icon: IconKanban },
-  { key: 'docs',   label: 'Documentos', icon: IconFolder },
+  { key: 'docs',   label: 'Documentações', icon: IconFolder },
 ]
 
 // Workspace de um cliente: cabeçalho com dados + métricas, Kanban filtrado
 // estritamente pelas tarefas daquele client_id e as documentações do cliente.
+// A aba ativa pode ser controlada de fora (ex.: App.jsx abre direto em "docs"
+// ao navegar de uma pasta vinculada a este cliente); sem controle externo,
+// mantém estado próprio começando pelo Kanban.
 export default function ClientWorkspace({
   client, tasks, members, currentUser, columns, tags,
   onBack, onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag,
   onError, onOpenNote, onUnlinkNote,
+  tab: controlledTab, onTabChange, targetFolderId, onConsumeTarget,
 }) {
-  const [tab, setTab] = useState('kanban')
+  const [internalTab, setInternalTab] = useState('kanban')
+  const tab = controlledTab ?? internalTab
+  const setTab = onTabChange ?? setInternalTab
   // Métricas rápidas do quadro — memoizadas junto com as tarefas do cliente
   const metrics = useMemo(() => {
     const m = { todo: 0, doing: 0, done: 0, total: tasks.length }
@@ -124,6 +130,8 @@ export default function ClientWorkspace({
           clientId={client.id}
           clients={[client]}
           onError={onError}
+          targetFolderId={targetFolderId}
+          onConsumeTarget={onConsumeTarget}
           onOpenNote={onOpenNote}
           onUnlinkNote={onUnlinkNote}
         />

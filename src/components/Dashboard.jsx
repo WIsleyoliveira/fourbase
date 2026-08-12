@@ -79,12 +79,14 @@ export default function Dashboard({
         : 'Nenhuma nota criada ainda',
     },
     {
-      key: 'midia',
+      // Documentações agora vive dentro do Espaço de cada cliente — o widget
+      // leva para a listagem de Clientes, ponto de entrada da documentação.
+      key: 'clientes',
       icon: <IconFolder size={18} />,
       title: 'Documentações',
       subtitle: folderCount === null
         ? 'Carregando...'
-        : `${folderCount} pasta${folderCount === 1 ? '' : 's'} criada${folderCount === 1 ? '' : 's'}`,
+        : `${folderCount} pasta${folderCount === 1 ? '' : 's'} · por cliente`,
     },
     {
       key: 'kanban',

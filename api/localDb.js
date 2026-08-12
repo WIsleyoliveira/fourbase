@@ -191,6 +191,8 @@ class LocalQuery {
   eq(col, val) { this.filters.push({ col, op: 'eq', val }); return this }
   neq(col, val) { this.filters.push({ col, op: 'neq', val }); return this }
   in(col, vals) { this.filters.push({ col, op: 'in', val: vals }); return this }
+  // Só cobre o uso real deste projeto: .not(col, 'is', null) → IS NOT NULL
+  not(col, op, val) { this.filters.push({ col, op: `not_${op}`, val }); return this }
 
   order(col, opts = {}) { this.orderSpec = { col, ascending: opts.ascending !== false }; return this }
   single() { this._single = true; return this }
@@ -201,6 +203,9 @@ class LocalQuery {
       if (f.op === 'eq') return row[f.col] === f.val
       if (f.op === 'neq') return row[f.col] !== f.val
       if (f.op === 'in') return f.val.includes(row[f.col])
+      if (f.op === 'not_is') return f.val === null
+        ? row[f.col] !== null && row[f.col] !== undefined
+        : row[f.col] !== f.val
       return true
     })
   }

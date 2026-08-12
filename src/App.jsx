@@ -28,7 +28,6 @@ import Dashboard from './components/Dashboard.jsx'
 import Kanban from './components/Kanban.jsx'
 import Calendar from './components/Calendar.jsx'
 import NotesView from './components/NotesView.jsx'
-import DocumentsView from './components/DocumentsView.jsx'
 import TeamView from './components/TeamView.jsx'
 import RegistryView from './components/RegistryView.jsx'
 import ClientsView from './components/ClientsView.jsx'
@@ -41,7 +40,6 @@ import {
   IconKanban,
   IconCalendar,
   IconNotes,
-  IconFolder,
   IconRefresh,
   IconTeam,
   IconUserPlus,
@@ -49,6 +47,7 @@ import {
   IconFileSpreadsheet,
   IconLogout,
   IconUserCog,
+  IconChevronRight,
 } from './icons.jsx'
 
 const VIEWS = [
@@ -56,7 +55,6 @@ const VIEWS = [
   { key: 'kanban', label: 'Kanban', icon: IconKanban, title: 'Kanban de tarefas', subtitle: 'Organize o fluxo de trabalho arrastando os cartões' },
   { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
-  { key: 'midia', label: 'Documentações', icon: IconFolder, title: 'Documentações', subtitle: 'Gerencie e organize a documentação da sua equipe.' },
   { key: 'cadastro', label: 'Cadastro', icon: IconUserPlus, title: 'Central de Cadastros', subtitle: 'Inicie o cadastro de membros da equipe e clientes' },
   { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
@@ -83,9 +81,20 @@ export default function App() {
   const [tags, setTags] = useState([])
   // Cliente aberto no "Espaço dos Clientes" (null = listagem)
   const [selectedClientId, setSelectedClientId] = useState(null)
+  // Sub-aba ativa dentro do Espaço do Cliente ('kanban' | 'docs') — controlada
+  // aqui para permitir abrir direto em Documentações (ex.: link de uma nota)
+  const [clientTab, setClientTab] = useState('kanban')
   const [loading, setLoading] = useState(true)
-  const [online, setOnline] = useState(true)
   const [toast, setToast] = useState('')
+  // Barra lateral recolhível — lembra a preferência entre sessões
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('fb_sidebar_open') !== '0')
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev
+      localStorage.setItem('fb_sidebar_open', next ? '1' : '0')
+      return next
+    })
+  }
   const [kanbanDraft, setKanbanDraft] = useState(null)
   const [targetFolderId, setTargetFolderId] = useState(null)
   const [targetNoteId, setTargetNoteId] = useState(null)
@@ -121,9 +130,7 @@ export default function App() {
       setTasks(t)
       setNotes(n)
       setMembers(mb)
-      setOnline(true)
     } catch (err) {
-      setOnline(false)
       handleError(err)
     } finally {
       setLoading(false)
@@ -217,6 +224,7 @@ export default function App() {
       .createTask(draft)
       .then((t) => {
         setTasks((prev) => [...prev, t])
+        if (t.client_id) setClientLinkedTasks((prev) => [...prev, t])
         showToast('Tarefa criada.')
         return t
       })
@@ -236,6 +244,7 @@ export default function App() {
 
   const moveTask = (id, column_key) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
+    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
     api.moveTask(id, column_key).catch((err) => {
       handleError(err)
       loadAll()
@@ -244,6 +253,7 @@ export default function App() {
 
   const updateTask = (id, updates) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
     api.updateTask(id, updates).catch((err) => {
       handleError(err)
       loadAll()
@@ -252,6 +262,7 @@ export default function App() {
 
   const deleteTask = (id) => {
     setTasks((prev) => prev.filter((t) => t.id !== id))
+    setClientLinkedTasks((prev) => prev.filter((t) => t.id !== id))
     api.deleteTask(id).catch((err) => {
       handleError(err)
       loadAll()
@@ -311,10 +322,19 @@ export default function App() {
       .then((n) => setNotes((prev) => prev.map((x) => (x.id === id ? n : x))))
       .catch(handleError)
 
-  // Navega para a aba Documentações já com a pasta indicada aberta/selecionada
-  const navigateToFolder = (folderId) => {
+  // Navega para o Espaço do Cliente dono da pasta, já na sub-aba Documentações
+  // com a pasta indicada aberta/selecionada. Documentações não existe mais como
+  // rota global — toda pasta vive dentro do Espaço de um cliente (exceto pastas
+  // arquivadas de um cliente excluído, que ficam sem client_id).
+  const navigateToFolder = (folderId, clientId) => {
+    if (!clientId) {
+      showToast('Esta pasta não está vinculada a um cliente ativo.')
+      return
+    }
     setTargetFolderId(folderId)
-    setView('midia')
+    setClientTab('docs')
+    setSelectedClientId(clientId)
+    setView('clientes')
   }
 
   // Navega para a aba Notas já com a nota indicada selecionada
@@ -374,6 +394,51 @@ export default function App() {
   // que outro funcionário/gestor colocou no quadro do mesmo cliente.
   const [clientTasks, setClientTasks] = useState([])
 
+  // Progresso por cliente da listagem — vem agregado do servidor contando as
+  // tarefas de toda a equipe, não só as do usuário logado.
+  const [clientStats, setClientStats] = useState({})
+
+  const fetchClientStats = useCallback(() => {
+    api.getClientTaskStats()
+      .then((s) => { if (s && typeof s === 'object') setClientStats(s) })
+      .catch(() => { /* rota ainda não disponível — mantém o último valor */ })
+  }, [])
+
+  // Todas as tarefas vinculadas a algum cliente, de qualquer responsável —
+  // juntadas com `tasks` (pessoais) para o Calendário mostrar também o que a
+  // equipe agenda nos Kanbans de cliente, e não só o que está atribuído ao
+  // usuário logado.
+  const [clientLinkedTasks, setClientLinkedTasks] = useState([])
+
+  const fetchClientLinkedTasks = useCallback(() => {
+    api.getClientLinkedTasks()
+      .then((list) => { if (Array.isArray(list)) setClientLinkedTasks(list) })
+      .catch(() => { /* rota ainda não disponível — mantém o último valor */ })
+  }, [])
+
+  // Ativo enquanto o Calendário está aberto: carrega e revalida periodicamente
+  // (e ao voltar o foco pra aba) para refletir tarefas criadas/movidas por
+  // outras pessoas nos Kanbans de cliente, sem precisar de F5.
+  useEffect(() => {
+    if (view !== 'calendario') return
+    fetchClientLinkedTasks()
+    const poll = setInterval(fetchClientLinkedTasks, 15000)
+    window.addEventListener('focus', fetchClientLinkedTasks)
+    return () => {
+      clearInterval(poll)
+      window.removeEventListener('focus', fetchClientLinkedTasks)
+    }
+  }, [view, fetchClientLinkedTasks])
+
+  // Lista efetiva do Calendário: tarefas pessoais + tarefas de cliente de toda
+  // a equipe, sem duplicar quando a mesma tarefa aparece nas duas (ela é
+  // pessoal E de cliente ao mesmo tempo quando o responsável é o usuário logado).
+  const calendarTasks = useMemo(() => {
+    const merged = new Map(tasks.map((t) => [t.id, t]))
+    for (const t of clientLinkedTasks) merged.set(t.id, { ...merged.get(t.id), ...t })
+    return Array.from(merged.values())
+  }, [tasks, clientLinkedTasks])
+
   const fetchClientTasks = useCallback((id) => {
     if (!id) { setClientTasks([]); return }
     api.getTasksByClient(id).then(setClientTasks).catch(handleError)
@@ -396,6 +461,19 @@ export default function App() {
     }
   }, [selectedClientId, fetchClientTasks])
 
+  // Progresso da listagem de clientes: recarrega ao abrir a lista e enquanto
+  // ela estiver visível, para refletir o que a equipe concluiu sem exigir F5.
+  useEffect(() => {
+    if (view !== 'clientes' || selectedClientId) return
+    fetchClientStats()
+    const poll = setInterval(fetchClientStats, 15000)
+    window.addEventListener('focus', fetchClientStats)
+    return () => {
+      clearInterval(poll)
+      window.removeEventListener('focus', fetchClientStats)
+    }
+  }, [view, selectedClientId, fetchClientStats])
+
   // CRUD do Kanban do cliente — atua sobre `clientTasks` (visão compartilhada
   // de todo mundo) e replica em `tasks` quando a tarefa também pertence à
   // lista pessoal do usuário logado, mantendo Painel/Calendário coerentes.
@@ -404,12 +482,14 @@ export default function App() {
       .addTask(title, priority, due_date, assigned_to, description, client_id, tags)
       .then((t) => {
         setClientTasks((prev) => [...prev, t])
+        setClientLinkedTasks((prev) => [...prev, t])
         if (t.assigned_to === user?.id) setTasks((prev) => [...prev, t])
       })
       .catch(handleError)
 
   const moveClientTask = (id, column_key) => {
     setClientTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
+    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
     api.moveTask(id, column_key).catch((err) => {
       handleError(err)
@@ -419,6 +499,7 @@ export default function App() {
 
   const updateClientTask = (id, updates) => {
     setClientTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
     api.updateTask(id, updates).catch((err) => {
       handleError(err)
@@ -428,6 +509,7 @@ export default function App() {
 
   const deleteClientTask = (id) => {
     setClientTasks((prev) => prev.filter((t) => t.id !== id))
+    setClientLinkedTasks((prev) => prev.filter((t) => t.id !== id))
     setTasks((prev) => prev.filter((t) => t.id !== id))
     api.deleteTask(id).catch((err) => {
       handleError(err)
@@ -441,6 +523,12 @@ export default function App() {
     setView(next)
   }
 
+  // Abre o Espaço de um cliente sempre começando pelo Kanban
+  const openClient = (id) => {
+    setSelectedClientId(id)
+    setClientTab('kanban')
+  }
+
   if (!session) return <Login onLogin={login} />
 
   const user = session.user
@@ -449,7 +537,7 @@ export default function App() {
   const baseView = [...VIEWS, PROFILE_VIEW].find((v) => v.key === view) || VIEWS[0]
   // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
   const current = selectedClient
-    ? { title: selectedClient.name || 'Cliente sem nome', subtitle: 'Espaço do cliente · Kanban dedicado' }
+    ? { title: selectedClient.name || 'Cliente sem nome', subtitle: 'Espaço do cliente · Kanban e Documentações' }
     : baseView
 
   const renderView = () => {
@@ -474,7 +562,7 @@ export default function App() {
       case 'calendario':
         return (
           <Calendar
-            tasks={tasks}
+            tasks={calendarTasks}
             members={members}
             clients={clients}
             currentUser={user}
@@ -502,17 +590,6 @@ export default function App() {
             onConsumeNoteTarget={() => setTargetNoteId(null)}
           />
         )
-      case 'midia':
-        return (
-          <DocumentsView
-            clients={clients}
-            onError={handleError}
-            targetFolderId={targetFolderId}
-            onConsumeTarget={() => setTargetFolderId(null)}
-            onOpenNote={navigateToNote}
-            onUnlinkNote={(id) => linkNoteFolder(id, null)}
-          />
-        )
       case 'cadastro':
         return (
           <RegistryView
@@ -530,6 +607,10 @@ export default function App() {
             currentUser={user}
             columns={columns}
             tags={tags}
+            tab={clientTab}
+            onTabChange={setClientTab}
+            targetFolderId={targetFolderId}
+            onConsumeTarget={() => setTargetFolderId(null)}
             onBack={() => setSelectedClientId(null)}
             onAdd={addClientTask}
             onMove={moveClientTask}
@@ -544,10 +625,10 @@ export default function App() {
         ) : (
           <ClientsView
             clients={clients}
-            tasks={tasks}
+            taskStats={clientStats}
             onUpdate={updateClient}
             onDelete={deleteClient}
-            onOpenClient={setSelectedClientId}
+            onOpenClient={openClient}
           />
         )
       case 'equipe':
@@ -593,8 +674,15 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <aside className="sidebar">
+    <div className={`app${sidebarOpen ? '' : ' sidebar-collapsed'}`}>
+      <aside className={`sidebar${sidebarOpen ? '' : ' collapsed'}`}>
+        <button
+          className="sidebar-toggle"
+          title={sidebarOpen ? 'Recolher barra lateral' : 'Expandir barra lateral'}
+          onClick={toggleSidebar}
+        >
+          <IconChevronRight size={13} />
+        </button>
         <div className="brand">
           <img src="/fourbase-logo.png" alt="fourbase" className="brand-logo" />
           <div>
@@ -657,12 +745,6 @@ export default function App() {
           <div>
             <h2>{current.title}</h2>
             <p>{current.subtitle}</p>
-          </div>
-          <div className="topbar-actions">
-            <span className={`status-pill${online ? '' : ' offline'}`}>
-              <span className="dot" />
-              {online ? 'Conectado ao banco' : 'Sem conexão com a API'}
-            </span>
           </div>
         </section>
         {loading ? (

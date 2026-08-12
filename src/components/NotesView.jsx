@@ -87,13 +87,18 @@ export default function NotesView({
 
   // Cliente dono da pasta — sobe a cadeia de pais até achar um client_id
   // (subpastas herdam o client_id do pai na criação, mas caímos aqui como reforço)
-  const clientNameFor = (folder) => {
+  const clientIdFor = (folder) => {
     let cur = folder
     while (cur) {
-      if (cur.client_id) return clients.find((c) => c.id === cur.client_id)?.name || null
+      if (cur.client_id) return cur.client_id
       cur = folders.find((f) => f.id === cur.parent_id) || null
     }
     return null
+  }
+
+  const clientNameFor = (folder) => {
+    const id = clientIdFor(folder)
+    return id ? clients.find((c) => c.id === id)?.name || null : null
   }
 
   const visibleNotes = notes
@@ -405,7 +410,7 @@ export default function NotesView({
                 className="note-folder-badge"
                 style={{ '--folder-color': linkedFolder.color }}
                 title={`Ir para a pasta "${linkedFolder.name}" em Documentações`}
-                onClick={() => onNavigateToFolder(linkedFolder.id)}
+                onClick={() => onNavigateToFolder(linkedFolder.id, clientIdFor(linkedFolder))}
               >
                 <IconFolderFilled size={13} style={{ color: linkedFolder.color }} />
                 <span>{linkedFolder.name}</span>

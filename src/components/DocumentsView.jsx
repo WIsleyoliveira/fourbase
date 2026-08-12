@@ -21,6 +21,8 @@ import {
   IconFileText,
   IconStack,
   IconSearch,
+  IconLayoutGrid,
+  IconList,
 } from '../icons.jsx'
 import { getPreview } from '../textPreview.js'
 import { supabase, CLIENT_MEDIA_BUCKET, storagePathFromUrl } from '../supabase.js'
@@ -66,6 +68,11 @@ const DATE_RANGES = [
 const extOf = (name = '') => {
   const parts = String(name).split('.')
   return parts.length > 1 ? parts.pop().toLowerCase() : ''
+}
+
+const formatDate = (iso) => {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 // Casa o documento com a categoria escolhida — pela extensão do nome e,
@@ -573,6 +580,8 @@ export default function DocumentsView({
   const [customFrom, setCustomFrom]         = useState('')
   const [customTo, setCustomTo]             = useState('')
   const [docSearch, setDocSearch]           = useState('')
+  // Alterna a galeria entre cartões (grid) e lista compacta com data de criação
+  const [viewMode, setViewMode]             = useState('grid')
 
   const [expandedIds, setExpandedIds]   = useState(() => new Set())
   const [docsByFolder, setDocsByFolder] = useState({})
@@ -1205,6 +1214,25 @@ export default function DocumentsView({
             <span className="docs-filter-count">
               {visibleDocs.length + visibleNotes.length} de {selectedFolderDocs.length + selectedFolderNotes.length}
             </span>
+
+            <div className="docs-view-toggle" role="group" aria-label="Alternar visualização">
+              <button
+                type="button"
+                className={viewMode === 'grid' ? 'active' : ''}
+                title="Visualização em grade"
+                onClick={() => setViewMode('grid')}
+              >
+                <IconLayoutGrid size={15} />
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'list' ? 'active' : ''}
+                title="Visualização em lista"
+                onClick={() => setViewMode('list')}
+              >
+                <IconList size={15} />
+              </button>
+            </div>
           </div>
 
           {/* ── Badges dos filtros ativos ── */}
@@ -1243,7 +1271,7 @@ export default function DocumentsView({
             </div>
           )}
 
-          <div className="gallery-grid">
+          <div className={viewMode === 'list' ? 'gallery-list' : 'gallery-grid'}>
             {selectedFolderDocs.length === 0 && selectedFolderNotes.length === 0 ? (
               <div className="empty-hint">
                 Nenhum documento nesta pasta ainda — envie o primeiro arquivo.
@@ -1270,6 +1298,7 @@ export default function DocumentsView({
                   <small className="gallery-note-preview">{getPreview(n.content, 44)}</small>
                 </button>
                 <span className="gallery-note-tag">Nota</span>
+                <span className="gallery-item-date">{formatDate(n.updated_at || n.created_at)}</span>
                 <button
                   className="icon-btn danger gallery-remove"
                   title="Remover relação com esta pasta"
@@ -1301,6 +1330,7 @@ export default function DocumentsView({
                     <span>{item.name || 'Documento'}</span>
                   </a>
                 )}
+                <span className="gallery-item-date">{formatDate(item.created_at)}</span>
                 <button
                   className="icon-btn danger gallery-remove"
                   title="Remover"

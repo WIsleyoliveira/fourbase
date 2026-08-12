@@ -125,35 +125,18 @@ function ClientProgress({ stats }) {
   )
 }
 
-export default function ClientsView({ clients, tasks, onUpdate, onDelete, onOpenClient }) {
+export default function ClientsView({ clients, taskStats = {}, onUpdate, onDelete, onOpenClient }) {
   const [search, setSearch] = useState('')
   const [mode, setMode] = useState('grid')
   const [editing, setEditing] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [removing, setRemoving] = useState(false)
 
-  // Métricas por cliente, derivadas das tarefas — memoizadas para não recalcular a cada render
-  const statsByClient = useMemo(() => {
-    const map = {}
-    for (const t of tasks) {
-      if (!t.client_id) continue
-      const s = map[t.client_id] || (map[t.client_id] = { total: 0, todo: 0, doing: 0, done: 0, lastActivity: null })
-      s.total += 1
-      if (t.column_key === 'done') s.done += 1
-      else if (t.column_key === 'todo') s.todo += 1
-      else s.doing += 1
-      const stamp = t.updated_at || t.created_at
-      if (stamp && (!s.lastActivity || stamp > s.lastActivity)) s.lastActivity = stamp
-    }
-    for (const s of Object.values(map)) {
-      s.active = s.total - s.done
-      s.progress = s.total ? Math.round((s.done / s.total) * 100) : 0
-    }
-    return map
-  }, [tasks])
-
+  // As métricas por cliente vêm agregadas do servidor (`/api/tasks/client-stats`)
+  // porque precisam contar as tarefas de toda a equipe — a lista local de
+  // tarefas do usuário logado só enxerga o que está atribuído a ele.
   const EMPTY_STATS = { total: 0, todo: 0, doing: 0, done: 0, active: 0, progress: 0, lastActivity: null }
-  const statsFor = (id) => statsByClient[id] || EMPTY_STATS
+  const statsFor = (id) => taskStats[id] || EMPTY_STATS
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
