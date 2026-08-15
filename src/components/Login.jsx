@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { api } from '../api.js'
 
+// Não há cadastro público: quem entra no weFlow foi convidado pelo gestor do
+// seu workspace e ativa a conta em /activate/:token.
 export default function Login({ onLogin }) {
-  const [mode, setMode] = useState('login') // login | register
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -14,11 +14,7 @@ export default function Login({ onLogin }) {
     setError('')
     setLoading(true)
     try {
-      const auth =
-        mode === 'login'
-          ? await api.login(email, password)
-          : await api.register(name, email, password)
-      onLogin(auth)
+      onLogin(await api.login(email, password))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -37,40 +33,7 @@ export default function Login({ onLogin }) {
           </div>
         </div>
 
-        <div className="login-tabs">
-          <button
-            className={mode === 'login' ? 'active' : ''}
-            onClick={() => {
-              setMode('login')
-              setError('')
-            }}
-          >
-            Entrar
-          </button>
-          <button
-            className={mode === 'register' ? 'active' : ''}
-            onClick={() => {
-              setMode('register')
-              setError('')
-            }}
-          >
-            Criar conta
-          </button>
-        </div>
-
         <form className="login-form" onSubmit={submit}>
-          {mode === 'register' && (
-            <label>
-              Nome
-              <input
-                type="text"
-                placeholder="Seu nome completo"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </label>
-          )}
           <label>
             E-mail
             <input
@@ -85,7 +48,7 @@ export default function Login({ onLogin }) {
             Senha
             <input
               type="password"
-              placeholder={mode === 'register' ? 'Mínimo 6 caracteres' : 'Sua senha'}
+              placeholder="Sua senha"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -96,23 +59,14 @@ export default function Login({ onLogin }) {
           {error && <div className="login-error">{error}</div>}
 
           <button type="submit" className="login-submit" disabled={loading}>
-            {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar na plataforma' : 'Criar conta de funcionário'}
+            {loading ? 'Aguarde...' : 'Entrar na plataforma'}
           </button>
         </form>
 
-        {mode === 'register' && (
-          <p className="login-hint-text">
-            Contas criadas aqui são de <strong>funcionário</strong>. Cada funcionário vê apenas as
-            próprias tarefas, notas e arquivos.
-          </p>
-        )}
-
         <div className="login-demo">
-          <strong>Acesso do gestor</strong>
-          <span>
-            gestor@fourbase.com · senha <code>gestor123</code>
-          </span>
-          <small>O gestor acompanha as tarefas e o progresso de toda a equipe.</small>
+          <strong>Primeiro acesso?</strong>
+          <span>Ative sua conta pelo convite recebido do gestor.</span>
+          <small>Não há cadastro público: o acesso ao weFlow é sempre por convite.</small>
         </div>
       </div>
     </div>

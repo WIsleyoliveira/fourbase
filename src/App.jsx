@@ -24,6 +24,7 @@ const toColKey = (label) => {
   return `${slug}-${Date.now().toString(36)}`
 }
 import Login from './components/Login.jsx'
+import Activate from './components/Activate.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import Kanban from './components/Kanban.jsx'
 import Calendar from './components/Calendar.jsx'
@@ -71,7 +72,15 @@ const PROFILE_VIEW = {
   subtitle: 'Seus dados pessoais, foto e segurança de acesso',
 }
 
+// Token de ativação vindo do link de convite (/activate/:token). É a única
+// rota do app — não há react-router, então lemos direto do path.
+const activationTokenFromUrl = () => {
+  const match = window.location.pathname.match(/^\/activate\/([A-Za-z0-9._-]+)\/?$/)
+  return match ? match[1] : null
+}
+
 export default function App() {
+  const [activationToken, setActivationToken] = useState(activationTokenFromUrl)
   const [session, setSession] = useState(getAuth)
   const [view, setView] = useState('painel')
   const [tasks, setTasks] = useState([])
@@ -161,8 +170,8 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (session) loadAll()
-  }, [session, loadAll])
+    if (session && !activationToken) loadAll()
+  }, [session, activationToken, loadAll])
 
   const login = (auth) => {
     setAuth(auth)
@@ -343,12 +352,14 @@ export default function App() {
     setView('notas')
   }
 
-  // ---- cadastro de membro (gestor) ----
-  const createMember = (member) =>
-    api.createMember(member).then((m) => {
-      setMembers((prev) => [...prev, m])
-      showToast('Membro cadastrado.')
-      return m
+  // ---- convite de membro (gestor) ----
+  // Devolve { invitation, activation_url } para o modal exibir o link — a
+  // pessoa convidada só vira membro depois de ativar a conta, então a lista de
+  // membros não muda aqui.
+  const inviteMember = (invite) =>
+    api.inviteMember(invite).then((result) => {
+      showToast('Convite criado.')
+      return result
     })
     // erro propagado para o modal exibir a mensagem
 
@@ -529,6 +540,20 @@ export default function App() {
     setClientTab('kanban')
   }
 
+  // Ativação de convite — única "rota" do app (não há react-router). O token
+  // sai do path; ao terminar, limpamos a URL e caímos no Login.
+  if (activationToken) {
+    return (
+      <Activate
+        token={activationToken}
+        onActivated={() => {
+          window.history.replaceState({}, '', '/')
+          setActivationToken(null)
+        }}
+      />
+    )
+  }
+
   if (!session) return <Login onLogin={login} />
 
   const user = session.user
@@ -594,7 +619,7 @@ export default function App() {
         return (
           <RegistryView
             isGestor={isGestor}
-            onCreateMember={createMember}
+            onCreateMember={inviteMember}
             onCreateClient={createClient}
           />
         )

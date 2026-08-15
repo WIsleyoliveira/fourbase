@@ -17,7 +17,10 @@ import bcrypt from 'bcryptjs'
 
 const DB_PATH = fileURLToPath(new URL('../data/db.json', import.meta.url))
 
-const TABLES = [
+// Entidades que pertencem a uma empresa (workspace) e por isso carregam
+// workspace_id. weflow_workspaces é a própria lista de tenants e weflow_invitations
+// referencia o workspace pelo campo homônimo — nenhuma das duas entra aqui.
+const WORKSPACE_SCOPED = [
   'fourbase_users',
   'fourbase_tasks',
   'fourbase_notes',
@@ -31,19 +34,29 @@ const TABLES = [
   'fourbase_tags',
 ]
 
+const TABLES = ['weflow_workspaces', 'weflow_invitations', ...WORKSPACE_SCOPED]
+
+// Nome do workspace criado na primeira execução e usado para adotar os dados
+// que existiam antes da arquitetura multi-tenant.
+const DEFAULT_WORKSPACE_NAME = 'FOURBASE'
+
 // Colunas com restrição de unicidade, por tabela — usado para simular o erro
 // de constraint '23505' que o código já trata (ex: e-mail duplicado).
+// Um item pode ser uma coluna (única globalmente) ou um array de colunas
+// (única em conjunto — é assim que chave de coluna e nome de etiqueta passam a
+// ser únicos por workspace, e não mais em todo o banco).
 const UNIQUE_COLUMNS = {
   fourbase_users: ['email'],
-  fourbase_columns: ['key'],
-  fourbase_tags: ['name'],
+  fourbase_columns: [['workspace_id', 'key']],
+  fourbase_tags: [['workspace_id', 'name']],
+  weflow_invitations: ['token_hash'],
 }
 
 // Tabelas com created_at/updated_at automáticos ao inserir/atualizar.
 const TIMESTAMPED = new Set([
   'fourbase_notes', 'fourbase_media', 'fourbase_folders', 'fourbase_folder_media',
   'fourbase_columns', 'fourbase_clients', 'fourbase_report_activities', 'fourbase_tasks',
-  'fourbase_tags',
+  'fourbase_tags', 'weflow_workspaces', 'weflow_invitations',
 ])
 
 // Etiquetas padrão enviadas pela Amanda — pré-cadastradas na primeira execução.
@@ -58,14 +71,34 @@ const DEFAULT_TAGS = [
 
 function seedDb() {
   const now = new Date().toISOString()
+  const workspaceId = randomUUID()
+  const gestorId = randomUUID()
   return {
+    weflow_workspaces: [
+      {
+        id: workspaceId,
+        name: DEFAULT_WORKSPACE_NAME,
+        cnpj: null,
+        phone: null,
+        email: null,
+        contact_name: null,
+        address: null,
+        color: '#14b8c4',
+        created_by: gestorId,
+        created_at: now,
+        updated_at: now,
+      },
+    ],
+    weflow_invitations: [],
     fourbase_users: [
       {
-        id: randomUUID(),
+        id: gestorId,
+        workspace_id: workspaceId,
         name: 'Gestor fourbase',
         email: 'gestor@fourbase.com',
         password_hash: bcrypt.hashSync('gestor123', 10),
         role: 'gestor',
+        status: 'active',
         job_title: null,
         color: null,
         avatar_url: null,
@@ -79,18 +112,60 @@ function seedDb() {
     fourbase_folders: [],
     fourbase_folder_media: [],
     fourbase_columns: [
-      { id: randomUUID(), key: 'todo', label: 'A Fazer', position: 0, color: '#9ca3af', created_at: now },
-      { id: randomUUID(), key: 'doing', label: 'Em Progresso', position: 1, color: '#14b8c4', created_at: now },
-      { id: randomUUID(), key: 'done', label: 'Concluído', position: 2, color: '#2ec27e', created_at: now },
+      { id: randomUUID(), workspace_id: workspaceId, key: 'todo', label: 'A Fazer', position: 0, color: '#9ca3af', created_at: now },
+      { id: randomUUID(), workspace_id: workspaceId, key: 'doing', label: 'Em Progresso', position: 1, color: '#14b8c4', created_at: now },
+      { id: randomUUID(), workspace_id: workspaceId, key: 'done', label: 'Concluído', position: 2, color: '#2ec27e', created_at: now },
     ],
     fourbase_clients: [
-      { id: randomUUID(), name: 'Acme Indústria Ltda', cnpj: '12.345.678/0001-90', phone: '(11) 98888-1234', email: 'contato@acme.com.br', contact_name: 'Marina Alves', address: 'Av. Paulista, 1000 — São Paulo/SP', created_by: null, created_at: now, updated_at: now },
-      { id: randomUUID(), name: 'Studio Verde Design', cnpj: '98.765.432/0001-10', phone: '(21) 3555-7788', email: 'ola@studioverde.com', contact_name: 'Rafael Costa', address: 'Rua das Laranjeiras, 42 — Rio de Janeiro/RJ', created_by: null, created_at: now, updated_at: now },
-      { id: randomUUID(), name: 'Nordeste Logística', cnpj: '', phone: '(85) 99777-4455', email: 'comercial@nordestelog.com', contact_name: 'Juliana Rocha', address: 'Fortaleza/CE', created_by: null, created_at: now, updated_at: now },
+      { id: randomUUID(), workspace_id: workspaceId, name: 'Acme Indústria Ltda', cnpj: '12.345.678/0001-90', phone: '(11) 98888-1234', email: 'contato@acme.com.br', contact_name: 'Marina Alves', address: 'Av. Paulista, 1000 — São Paulo/SP', created_by: null, created_at: now, updated_at: now },
+      { id: randomUUID(), workspace_id: workspaceId, name: 'Studio Verde Design', cnpj: '98.765.432/0001-10', phone: '(21) 3555-7788', email: 'ola@studioverde.com', contact_name: 'Rafael Costa', address: 'Rua das Laranjeiras, 42 — Rio de Janeiro/RJ', created_by: null, created_at: now, updated_at: now },
+      { id: randomUUID(), workspace_id: workspaceId, name: 'Nordeste Logística', cnpj: '', phone: '(85) 99777-4455', email: 'comercial@nordestelog.com', contact_name: 'Juliana Rocha', address: 'Fortaleza/CE', created_by: null, created_at: now, updated_at: now },
     ],
     fourbase_report_activities: [],
-    fourbase_tags: DEFAULT_TAGS.map((t) => ({ id: randomUUID(), ...t, created_at: now })),
+    fourbase_tags: DEFAULT_TAGS.map((t) => ({ id: randomUUID(), workspace_id: workspaceId, ...t, created_at: now })),
   }
+}
+
+// ── Migração para a arquitetura multi-tenant ────────────────────────────────
+// Bancos criados antes dos workspaces não têm weflow_workspaces nem
+// workspace_id nas linhas. Cria o workspace inicial (FOURBASE) e adota nele
+// todos os registros já existentes. Nada é apagado nem duplicado; roda uma vez
+// só, porque na segunda execução todas as linhas já têm workspace_id.
+function migrateToWorkspaces(parsed) {
+  let touched = false
+  const now = new Date().toISOString()
+
+  if (parsed.weflow_workspaces.length === 0 && WORKSPACE_SCOPED.some((t) => parsed[t].length > 0)) {
+    const owner = parsed.fourbase_users.find((u) => u.role === 'gestor') || parsed.fourbase_users[0]
+    parsed.weflow_workspaces.push({
+      id: randomUUID(),
+      name: DEFAULT_WORKSPACE_NAME,
+      cnpj: null,
+      phone: null,
+      email: null,
+      contact_name: null,
+      address: null,
+      color: '#14b8c4',
+      created_by: owner?.id || null,
+      created_at: now,
+      updated_at: now,
+    })
+    touched = true
+  }
+
+  const initial = parsed.weflow_workspaces[0]
+  if (!initial) return touched
+
+  for (const table of WORKSPACE_SCOPED) {
+    for (const row of parsed[table]) {
+      if (!row.workspace_id) { row.workspace_id = initial.id; touched = true }
+    }
+  }
+  // Usuários criados antes do campo `status` continuam podendo entrar.
+  for (const user of parsed.fourbase_users) {
+    if (!user.status) { user.status = 'active'; touched = true }
+  }
+  return touched
 }
 
 function persist(state) {
@@ -114,6 +189,9 @@ function loadDb() {
       parsed.fourbase_tags = DEFAULT_TAGS.map((t) => ({ id: randomUUID(), ...t, created_at: now }))
       touched = true
     }
+    // Adota os dados pré-multi-tenant no workspace inicial (o workspace_id das
+    // etiquetas recém-criadas acima também é preenchido aqui).
+    if (migrateToWorkspaces(parsed)) touched = true
     if (touched) persist(parsed)
     return parsed
   } catch {
@@ -131,12 +209,17 @@ const uniqueViolation = (col) => ({
 })
 
 function checkUnique(table, item, ignoreId) {
-  const cols = UNIQUE_COLUMNS[table]
-  if (!cols) return null
-  for (const col of cols) {
-    if (item[col] === undefined || item[col] === null) continue
-    const clash = state[table].some((row) => row.id !== ignoreId && row[col] === item[col])
-    if (clash) return uniqueViolation(col)
+  const specs = UNIQUE_COLUMNS[table]
+  if (!specs) return null
+  for (const spec of specs) {
+    const cols = Array.isArray(spec) ? spec : [spec]
+    // Só valida quando o payload traz todas as colunas do grupo — um update
+    // parcial não tem como violar uma unicidade composta que não mexeu.
+    if (cols.some((c) => item[c] === undefined || item[c] === null)) continue
+    const clash = state[table].some(
+      (row) => row.id !== ignoreId && cols.every((c) => row[c] === item[c]),
+    )
+    if (clash) return uniqueViolation(cols.join(','))
   }
   return null
 }
@@ -324,6 +407,8 @@ class LocalQuery {
 // parte do schema daquela tabela antes de preenchê-lo automaticamente.
 function seedShape(table) {
   const shapes = {
+    weflow_workspaces: { updated_at: true },
+    weflow_invitations: {},
     fourbase_notes: { updated_at: true },
     fourbase_media: { updated_at: true },
     fourbase_clients: { updated_at: true },

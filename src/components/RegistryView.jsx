@@ -12,9 +12,9 @@ export default function RegistryView({ isGestor, onCreateMember, onCreateClient 
     isGestor && {
       key: 'member',
       icon: <IconUserCheck size={22} />,
-      title: 'Cadastrar Membro da Equipe',
-      subtitle: 'Adicione novos usuários que terão acesso ao software Fourbase.',
-      action: '+ Novo Membro',
+      title: 'Convidar Membro da Equipe',
+      subtitle: 'Gere um convite; a pessoa define a própria senha ao ativar a conta.',
+      action: '+ Novo Convite',
     },
     {
       key: 'client',
@@ -25,10 +25,9 @@ export default function RegistryView({ isGestor, onCreateMember, onCreateClient 
     },
   ].filter(Boolean)
 
-  const handleSaveMember = async (member) => {
-    await onCreateMember(member)
-    setOpenModal(null)
-  }
+  // O modal continua aberto depois de salvar: é nele que o link de ativação
+  // aparece para ser copiado (o servidor não guarda o token puro).
+  const handleSaveMember = (member) => onCreateMember(member)
 
   const handleSaveClient = async (client) => {
     await onCreateClient(client)

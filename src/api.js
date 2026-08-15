@@ -38,14 +38,20 @@ const request = async (path, options = {}) => {
 }
 
 export const api = {
-  // auth
+  // auth — não há cadastro público: contas nascem de um convite do gestor
   login: (email, password) =>
     request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  register: (name, email, password) =>
-    request('/api/auth/register', {
+
+  // convite (rotas públicas, usadas pela tela /activate/:token)
+  getInvitation: (token) => request(`/api/auth/invitations/${token}`),
+  acceptInvitation: (token, password) =>
+    request(`/api/auth/invitations/${token}/accept`, {
       method: 'POST',
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ password }),
     }),
+
+  // workspace do usuário logado
+  getWorkspace: () => request('/api/workspace'),
 
   // perfil do usuário logado
   getProfile: () => request('/api/auth/me'),
@@ -87,10 +93,14 @@ export const api = {
   createTag: (name, color) =>
     request('/api/tags', { method: 'POST', body: JSON.stringify({ name, color }) }),
 
-  // membros
+  // membros — a criação é por convite (o gestor não define a senha de ninguém).
+  // inviteMember devolve { invitation, activation_url }: o link só existe nessa
+  // resposta, então o gestor precisa copiá-lo ali.
   getMembers: () => request('/api/members'),
-  createMember: (member) =>
-    request('/api/members', { method: 'POST', body: JSON.stringify(member) }),
+  inviteMember: (invite) =>
+    request('/api/members/invite', { method: 'POST', body: JSON.stringify(invite) }),
+  getInvitations: () => request('/api/members/invitations'),
+  revokeInvitation: (id) => request(`/api/members/invitations/${id}`, { method: 'DELETE' }),
   deleteMember: (id) => request(`/api/members/${id}`, { method: 'DELETE' }),
 
   // clientes

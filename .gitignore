@@ -6,3 +6,4 @@ dist
 
 # Banco de dados local mockado (api/localDb.js) — estado de desenvolvimento
 data/db.json
+data/db.json.bak-*
