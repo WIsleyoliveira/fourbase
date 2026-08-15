@@ -6287,12 +6287,20 @@ textarea:focus {
 
 /* ── Exportar PDF via impressão do navegador ── */
 @media print {
+  .app {
+    /* Sem isso, ".main" herda a coluna de 264px da sidebar (que virou
+       display:none) em vez de ocupar a largura inteira da página impressa —
+       o relatório saía espremido numa faixa estreita, todo mal formatado. */
+    display: block !important;
+  }
   .sidebar, .topbar, .toast, .no-print {
     display: none !important;
   }
   .main, .view {
     padding: 0 !important;
     margin: 0 !important;
+    max-width: none !important;
+    width: auto !important;
   }
   .reports-view {
     gap: 0;
