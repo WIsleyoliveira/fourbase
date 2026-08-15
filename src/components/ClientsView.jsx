@@ -12,6 +12,15 @@ const VIEW_MODES = [
   { key: 'table', icon: IconTable,      label: 'Tabela' },
 ]
 
+// A view desmonta ao trocar de aba, então a forma de exibição escolhida fica
+// no localStorage para sobreviver à ida e volta (mesmo padrão de fb_sidebar_open).
+const MODE_LS_KEY = 'fb_clients_view_mode'
+
+const storedMode = () => {
+  const saved = localStorage.getItem(MODE_LS_KEY)
+  return VIEW_MODES.some((m) => m.key === saved) ? saved : 'grid'
+}
+
 const initials = (name) =>
   (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 
@@ -127,7 +136,7 @@ function ClientProgress({ stats }) {
 
 export default function ClientsView({ clients, taskStats = {}, onUpdate, onDelete, onOpenClient }) {
   const [search, setSearch] = useState('')
-  const [mode, setMode] = useState('grid')
+  const [mode, setMode] = useState(storedMode)
   const [editing, setEditing] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [removing, setRemoving] = useState(false)
@@ -295,7 +304,10 @@ export default function ClientsView({ clients, taskStats = {}, onUpdate, onDelet
                 title={m.label}
                 aria-label={m.label}
                 aria-pressed={mode === m.key}
-                onClick={() => setMode(m.key)}
+                onClick={() => {
+                  setMode(m.key)
+                  localStorage.setItem(MODE_LS_KEY, m.key)
+                }}
               >
                 <Ico size={16} />
               </button>
