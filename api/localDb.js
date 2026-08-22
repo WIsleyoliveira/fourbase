@@ -201,7 +201,16 @@ function loadDb() {
   }
 }
 
-const state = loadDb()
+// Leitura do arquivo é preguiçosa: só roda quando uma query de verdade toca o
+// banco mockado. Em produção (createClient real, ver api/index.js), este
+// arquivo é importado mas createLocalClient() nunca chega a ser chamado — sem
+// isso, o simples `import` já tentaria escrever em disco, e ambientes
+// serverless (Vercel) têm sistema de arquivos somente-leitura fora de /tmp.
+let _state = null
+function getState() {
+  if (_state === null) _state = loadDb()
+  return _state
+}
 
 const uniqueViolation = (col) => ({
   code: '23505',
@@ -216,7 +225,7 @@ function checkUnique(table, item, ignoreId) {
     // Só valida quando o payload traz todas as colunas do grupo — um update
     // parcial não tem como violar uma unicidade composta que não mexeu.
     if (cols.some((c) => item[c] === undefined || item[c] === null)) continue
-    const clash = state[table].some(
+    const clash = getState()[table].some(
       (row) => row.id !== ignoreId && cols.every((c) => row[c] === item[c]),
     )
     if (clash) return uniqueViolation(cols.join(','))
@@ -313,6 +322,7 @@ class LocalQuery {
   }
 
   _run() {
+    const state = getState()
     const table = state[this.table]
     if (!table) return { data: null, error: { message: `Tabela desconhecida: ${this.table}` } }
 

@@ -6,11 +6,8 @@ import bcrypt from 'bcryptjs'
 import { createClient } from '@supabase/supabase-js'
 import { createLocalClient } from './localDb.js'
 
-// TEMP DEBUG: substituído o `throw` por log — um throw aqui derruba o módulo
-// inteiro antes de qualquer rota existir, o que torna esse diagnóstico inútil
-// (nem /api/health responde). Restaurar o throw depois de achar a causa real.
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  console.error('[boot] JWT_SECRET ausente em produção — usando o valor de dev por enquanto.')
+  throw new Error('JWT_SECRET é obrigatório em produção — defina no .env do servidor.')
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'fourbase-dev-secret-troque-em-producao'
 
@@ -126,18 +123,6 @@ const inWorkspace = async (table, id, workspaceId) => {
 }
 
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'weflow-api' }))
-
-// TEMP DEBUG: diagnóstico de env vars sem expor valores — remover depois de
-// achar a causa do 500 em produção.
-app.get('/api/debug-env', (req, res) => res.json({
-  node_env: process.env.NODE_ENV || null,
-  has_jwt_secret: Boolean(process.env.JWT_SECRET),
-  has_supabase_url: Boolean(process.env.SUPABASE_URL),
-  has_supabase_anon_key: Boolean(process.env.SUPABASE_ANON_KEY),
-  supabase_url_prefix: (process.env.SUPABASE_URL || '').slice(0, 20),
-  using_local_db: !(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
-  node_version: process.version,
-}))
 
 // Cadastro público desativado: contas só nascem de um convite emitido pelo
 // gestor do workspace (POST /api/members/invite → POST /api/auth/invitations/:token/accept).
