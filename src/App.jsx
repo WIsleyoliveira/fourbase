@@ -104,6 +104,9 @@ export default function App() {
       return next
     })
   }
+  // Drawer da sidebar em telas < 768px — não persiste entre sessões, é
+  // sempre fechado ao carregar (comportamento normal de menu mobile).
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [kanbanDraft, setKanbanDraft] = useState(null)
   const [targetFolderId, setTargetFolderId] = useState(null)
   const [targetNoteId, setTargetNoteId] = useState(null)
@@ -532,7 +535,16 @@ export default function App() {
   const changeView = (next) => {
     setSelectedClientId(null)
     setView(next)
+    setMobileMenuOpen(false)
   }
+
+  // Fecha o drawer mobile com ESC, igual aos modais do app
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const handler = (e) => { if (e.key === 'Escape') setMobileMenuOpen(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [mobileMenuOpen])
 
   // Abre o Espaço de um cliente sempre começando pelo Kanban
   const openClient = (id) => {
@@ -700,13 +712,53 @@ export default function App() {
 
   return (
     <div className={`app${sidebarOpen ? '' : ' sidebar-collapsed'}`}>
-      <aside className={`sidebar${sidebarOpen ? '' : ' collapsed'}`}>
+      {/* Cabeçalho compacto — só visível abaixo de 768px (ver styles.css) */}
+      <header className="mobile-topbar">
+        <button
+          className="mobile-topbar-menu"
+          title="Abrir menu"
+          aria-label="Abrir menu"
+          aria-expanded={mobileMenuOpen}
+          onClick={() => setMobileMenuOpen(true)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <img src="/fourbase-logo.png" alt="fourbase" className="mobile-topbar-logo" />
+        <button
+          className="mobile-topbar-profile"
+          title="Abrir Meu Perfil"
+          onClick={() => changeView('perfil')}
+        >
+          <div className="member-avatar">
+            {user.avatar_url
+              ? <img src={user.avatar_url} alt={user.name} />
+              : user.name.charAt(0).toUpperCase()}
+          </div>
+        </button>
+      </header>
+
+      {/* Overlay escurecido atrás do drawer — clicar fecha o menu */}
+      {mobileMenuOpen && (
+        <div className="sidebar-backdrop" onClick={() => setMobileMenuOpen(false)} />
+      )}
+
+      <aside className={`sidebar${sidebarOpen ? '' : ' collapsed'}${mobileMenuOpen ? ' mobile-open' : ''}`}>
         <button
           className="sidebar-toggle"
           title={sidebarOpen ? 'Recolher barra lateral' : 'Expandir barra lateral'}
           onClick={toggleSidebar}
         >
           <IconChevronRight size={13} />
+        </button>
+        <button
+          className="sidebar-mobile-close"
+          title="Fechar menu"
+          aria-label="Fechar menu"
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          ×
         </button>
         <div className="brand">
           <img src="/fourbase-logo.png" alt="fourbase" className="brand-logo" />

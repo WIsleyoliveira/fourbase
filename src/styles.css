@@ -94,6 +94,22 @@ button {
   border-color: var(--primary);
 }
 
+/* ── Cabeçalho mobile + drawer da sidebar (< 768px) ──────────────────────
+   Escondidos por padrão; @media (max-width: 768px) mais abaixo os ativa. */
+.mobile-topbar {
+  display: none;
+}
+.sidebar-mobile-close {
+  display: none;
+}
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 46, 51, 0.55);
+  z-index: 40;
+  animation: fadeUp 0.15s ease;
+}
+
 /* ── Estado recolhido: só ícones, largura mínima ── */
 .sidebar.collapsed {
   padding-left: 14px;
@@ -839,6 +855,8 @@ textarea:focus {
   font-weight: 600;
   margin: 0;
   color: var(--text);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .card-complete-btn {
   flex-shrink: 0;
@@ -4039,6 +4057,192 @@ textarea:focus {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   Menu hambúrguer + drawer da sidebar, alvos de toque e ajustes finos de
+   mobile (< 768px) — roda depois dos blocos acima na cascata, então vence em
+   caso de sobreposição com o breakpoint de tablet (900px).
+   ══════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Cabeçalho mobile compacto: hambúrguer + logo + avatar */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #0d3b41 0%, #0a2e33 100%);
+  }
+  .mobile-topbar-menu {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+  .mobile-topbar-menu:hover,
+  .mobile-topbar-menu:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .mobile-topbar-menu span {
+    width: 20px;
+    height: 2px;
+    border-radius: 999px;
+    background: #e8f7f8;
+  }
+  .mobile-topbar-logo {
+    height: 28px;
+    width: 28px;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+  .mobile-topbar-profile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .mobile-topbar-profile .member-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* A sidebar vira um drawer fora da tela por padrão; a linha do topbar de
+     tablet (900px, mais acima) fica sem efeito porque este bloco roda depois. */
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .sidebar,
+  .sidebar.collapsed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(300px, 84vw);
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    padding: 22px 18px;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    overflow-y: auto;
+    box-shadow: none;
+  }
+  .sidebar.mobile-open,
+  .sidebar.collapsed.mobile-open {
+    transform: translateX(0);
+    box-shadow: 24px 0 48px rgba(10, 46, 51, 0.35);
+  }
+  .sidebar-toggle {
+    display: none;
+  }
+  .sidebar-mobile-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e8f7f8;
+    border-radius: 999px;
+    font-size: 22px;
+    line-height: 1;
+  }
+  /* Dentro do drawer, sempre mostra tudo por extenso — o estado "collapsed"
+     do desktop não faz sentido num painel deslizante de largura própria. */
+  .sidebar.collapsed .brand > div,
+  .sidebar.collapsed .footer-note,
+  .sidebar.collapsed .brand h1,
+  .sidebar.collapsed .brand p,
+  .sidebar.collapsed .menu button span,
+  .sidebar.collapsed .sidebar-profile-btn span,
+  .sidebar.collapsed .sidebar button.action span,
+  .sidebar.collapsed .user-box-id,
+  .sidebar.collapsed .logout-btn,
+  .sidebar-section,
+  .footer-note,
+  .sidebar button.action {
+    display: revert;
+  }
+  .menu {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+  .menu button {
+    white-space: normal;
+    min-height: 44px;
+  }
+  /* O bloco de 640px (acima) esconde isso incondicionalmente para a barra
+     horizontal de tablet — mas dentro do drawer aberto o nome deve aparecer. */
+  .user-box-id {
+    display: flex;
+  }
+  .brand p {
+    display: block;
+  }
+
+  /* Kanban: scroll horizontal com snap por coluna, comum em telas de toque */
+  .kanban {
+    scroll-snap-type: x proximity;
+  }
+  .column {
+    scroll-snap-align: start;
+    min-width: 280px;
+  }
+
+  /* Barras de filtro/cabeçalho: empilha em vez de espremer horizontalmente */
+  .reports-meta-fields,
+  .kanban-send-row,
+  .docs-gallery .panel-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  /* Modais: largura quase total, altura limitada com rolagem interna */
+  .modal-backdrop {
+    padding: 10px;
+    align-items: flex-end;
+  }
+  .modal {
+    width: 95%;
+    max-width: none;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 0 auto;
+    padding: 18px;
+  }
+
+  /* Alvos de toque confortáveis (mínimo 44×44px) */
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  button[type='submit'],
+  .task-form button,
+  .checklist button[type='submit'] {
+    min-height: 44px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
    Botão "+ Adicionar grupo" — aparece após a última coluna do Kanban
    ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -5004,6 +5208,8 @@ textarea:focus {
   font-size: 16px;
   color: var(--text);
   letter-spacing: -0.01em;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .client-card-badge {
   align-self: flex-start;
@@ -5019,6 +5225,7 @@ textarea:focus {
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-line;
+  overflow-wrap: break-word;
 }
 .client-card-menu {
   position: relative;
