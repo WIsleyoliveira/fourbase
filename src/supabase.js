@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL || 'https://uamjgaeawwkfdlrlpmfc.supabase.co'
+// Fallback aponta para o projeto de produção (weflow-producao, sa-east-1).
+// Chave publicável — não é segredo, é seguro expor no bundle do navegador.
+const url = import.meta.env.VITE_SUPABASE_URL || 'https://seaibmpzkdvhclveckgs.supabase.co'
 const key =
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_RvGMiJo63JeC3euIiT9Iwg_dWSwuThZ'
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_fZI5a3C22Bioib4y50TM5w_BWH7mPL1'
 
 export const supabase = createClient(url, key)
 

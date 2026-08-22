@@ -128,12 +128,13 @@ end $$;
 -- Chave de coluna do Kanban e nome de etiqueta eram únicos em todo o banco;
 -- com vários workspaces isso impediria duas empresas de terem a mesma coluna.
 -- O e-mail do usuário continua único globalmente: é o identificador de login.
-drop index if exists fourbase_columns_key_key;
+-- A constraint UNIQUE cria o índice implicitamente; dropar o índice primeiro
+-- falha com "requires it" porque a constraint ainda depende dele. Basta
+-- dropar a constraint — o índice antigo some junto.
 alter table fourbase_columns drop constraint if exists fourbase_columns_key_key;
 create unique index if not exists fourbase_columns_workspace_key_idx
   on fourbase_columns (workspace_id, key);
 
-drop index if exists fourbase_tags_name_key;
 alter table fourbase_tags drop constraint if exists fourbase_tags_name_key;
 create unique index if not exists fourbase_tags_workspace_name_idx
   on fourbase_tags (workspace_id, name);

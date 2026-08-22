@@ -3,14 +3,22 @@ import cors from 'cors'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
+import { createClient } from '@supabase/supabase-js'
 import { createLocalClient } from './localDb.js'
 
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET é obrigatório em produção — defina no .env do servidor.')
+}
 const JWT_SECRET = process.env.JWT_SECRET || 'fourbase-dev-secret-troque-em-producao'
 
-// Banco de dados local mockado (data/db.json) — ver api/localDb.js.
-// Para trocar por um Postgres/Supabase real em produção, troque esta linha
-// por `createClient(SUPABASE_URL, SUPABASE_ANON_KEY)` do @supabase/supabase-js.
-const supabase = createLocalClient()
+// Com SUPABASE_URL e SUPABASE_ANON_KEY definidos (produção), usa o Postgres
+// real do Supabase. Sem eles (dev local, como o resto da equipe já roda),
+// cai no banco mockado em data/db.json — ver api/localDb.js. RLS nas tabelas
+// fourbase_*/weflow_* é aberta (`using (true)`) porque a autorização real é
+// feita aqui no Express via JWT próprio, não pelo Supabase Auth.
+const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : createLocalClient()
 
 const app = express()
 app.use(cors())

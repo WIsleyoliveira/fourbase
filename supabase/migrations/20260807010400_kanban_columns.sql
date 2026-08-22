@@ -15,3 +15,18 @@ insert into fourbase_columns (key, label, position, color) values
   ('doing', 'Em Progresso', 1, '#14b8c4'),
   ('done',  'Concluído',    2, '#2ec27e')
 on conflict (key) do nothing;
+
+-- Alguns projetos Supabase forçam RLS automaticamente em toda tabela nova; sem
+-- política, a tabela fica inacessível via API mesmo para o backend.
+alter table fourbase_columns enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where tablename = 'fourbase_columns' and policyname = 'fourbase_columns_all'
+  ) then
+    create policy fourbase_columns_all on fourbase_columns
+      for all using (true) with check (true);
+  end if;
+end $$;
