@@ -56,7 +56,6 @@ const VIEWS = [
   { key: 'kanban', label: 'Kanban', icon: IconKanban, title: 'Kanban de tarefas', subtitle: 'Organize o fluxo de trabalho arrastando os cartões' },
   { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
-  { key: 'cadastro', label: 'Cadastro', icon: IconUserPlus, title: 'Central de Cadastros', subtitle: 'Inicie o cadastro de membros da equipe e clientes', gestorOnly: true },
   { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
   { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente' },
@@ -70,6 +69,17 @@ const PROFILE_VIEW = {
   icon: IconUserCog,
   title: 'Meu Perfil',
   subtitle: 'Seus dados pessoais, foto e segurança de acesso',
+}
+
+// Também fica fora de VIEWS de propósito: renderizado como botão próprio,
+// logo acima de "Meu Perfil" — exclusivo de gestor, então não faz sentido
+// competir por espaço na lista principal de navegação.
+const CADASTRO_VIEW = {
+  key: 'cadastro',
+  label: 'Cadastro',
+  icon: IconUserPlus,
+  title: 'Central de Cadastros',
+  subtitle: 'Inicie o cadastro de membros da equipe e clientes',
 }
 
 // Token de ativação vindo do link de convite (/activate/:token). É a única
@@ -571,7 +581,7 @@ export default function App() {
   const user = session.user
   const isGestor = user.role === 'gestor'
   const visibleViews = VIEWS.filter((v) => !v.gestorOnly || isGestor)
-  const baseView = [...VIEWS, PROFILE_VIEW].find((v) => v.key === view) || VIEWS[0]
+  const baseView = [...VIEWS, PROFILE_VIEW, CADASTRO_VIEW].find((v) => v.key === view) || VIEWS[0]
   // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
   const current = selectedClient
     ? { title: selectedClient.name || 'Cliente sem nome', subtitle: 'Espaço do cliente · Kanban e Documentações' }
@@ -782,6 +792,15 @@ export default function App() {
             )
           })}
         </nav>
+        {isGestor && (
+          <button
+            className={`sidebar-profile-btn${view === 'cadastro' ? ' active' : ''}`}
+            onClick={() => changeView('cadastro')}
+          >
+            <IconUserPlus size={17} />
+            <span>{CADASTRO_VIEW.label}</span>
+          </button>
+        )}
         <button
           className={`sidebar-profile-btn${view === 'perfil' ? ' active' : ''}`}
           onClick={() => changeView('perfil')}
