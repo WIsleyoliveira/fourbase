@@ -1204,7 +1204,7 @@ const validReportRefs = async (fields, workspaceId) =>
   (await inWorkspace('fourbase_users', fields.assigned_to, workspaceId)) &&
   (await inWorkspace('fourbase_clients', fields.client_id, workspaceId))
 
-app.get('/api/report-activities', auth, asyncRoute(async (req, res) => {
+app.get('/api/report-activities', auth, gestorOnly, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_report_activities')
     .select('*')
@@ -1214,7 +1214,7 @@ app.get('/api/report-activities', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
-app.post('/api/report-activities', auth, asyncRoute(async (req, res) => {
+app.post('/api/report-activities', auth, gestorOnly, asyncRoute(async (req, res) => {
   const workspaceId = workspaceOf(req)
   const fields = { activity_name: '', date: null, status: 'A fazer', assigned_to: null, client_id: null, ...reportFields(req.body) }
   if (!(await validReportRefs(fields, workspaceId))) {
@@ -1229,7 +1229,7 @@ app.post('/api/report-activities', auth, asyncRoute(async (req, res) => {
   res.status(201).json(data)
 }))
 
-app.patch('/api/report-activities/:id', auth, asyncRoute(async (req, res) => {
+app.patch('/api/report-activities/:id', auth, gestorOnly, asyncRoute(async (req, res) => {
   const workspaceId = workspaceOf(req)
   const fields = reportFields(req.body)
   if (!(await validReportRefs(fields, workspaceId))) {
@@ -1247,7 +1247,7 @@ app.patch('/api/report-activities/:id', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
-app.delete('/api/report-activities/:id', auth, asyncRoute(async (req, res) => {
+app.delete('/api/report-activities/:id', auth, gestorOnly, asyncRoute(async (req, res) => {
   const { error } = await supabase
     .from('fourbase_report_activities')
     .delete()

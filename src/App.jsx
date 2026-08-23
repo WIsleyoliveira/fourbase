@@ -58,7 +58,7 @@ const VIEWS = [
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
   { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
-  { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente' },
+  { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente', gestorOnly: true },
 ]
 
 // Fica fora de VIEWS de propósito: é renderizado no bloco inferior da sidebar,
@@ -690,7 +690,7 @@ export default function App() {
           />
         )
       case 'relatorios':
-        return (
+        return isGestor ? (
           <ReportsView
             members={members}
             clients={clients}
@@ -698,7 +698,7 @@ export default function App() {
             currentUser={user}
             onError={handleError}
           />
-        )
+        ) : null
       default:
         return (
           <Dashboard
