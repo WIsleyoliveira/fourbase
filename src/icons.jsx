@@ -153,6 +153,15 @@ export const IconClock = (p) => (
   </Icon>
 )
 
+export const IconRocket = (p) => (
+  <Icon {...p}>
+    <path d="M12 2c3 1.5 5 5 5 9 0 2-.5 3.5-1.2 5L12 20l-3.8-4C7.5 14.5 7 13 7 11c0-4 2-7.5 5-9z" />
+    <circle cx="12" cy="10" r="2" />
+    <path d="M8.5 15.5 6 18l1-3.2" />
+    <path d="M15.5 15.5 18 18l-1-3.2" />
+  </Icon>
+)
+
 export const IconFlag = (p) => (
   <Icon {...p}>
     <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />

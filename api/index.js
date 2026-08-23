@@ -57,6 +57,7 @@ const publicUser = (u) => ({
   phone: u.phone ?? null,
   color: u.color ?? null,
   avatar_url: u.avatar_url ?? null,
+  has_completed_onboarding: u.has_completed_onboarding ?? false,
   created_at: u.created_at ?? null,
 })
 
@@ -374,7 +375,7 @@ app.post('/api/auth/invitations/:token/accept', asyncRoute(async (req, res) => {
 // de fora de propósito: e-mail é o identificador de login, role é prerrogativa
 // do gestor e o workspace não pode ser trocado por ninguém pela API.
 app.patch('/api/profile', auth, asyncRoute(async (req, res) => {
-  const { name, job_title, phone, color, avatar_url } = req.body
+  const { name, job_title, phone, color, avatar_url, has_completed_onboarding } = req.body
   const updates = {}
   if (name !== undefined) {
     if (!name.trim()) return res.status(400).json({ error: 'O nome não pode ficar em branco' })
@@ -384,6 +385,7 @@ app.patch('/api/profile', auth, asyncRoute(async (req, res) => {
   if (phone !== undefined) updates.phone = phone.trim() || null
   if (color !== undefined) updates.color = normalizeColor(color)
   if (avatar_url !== undefined) updates.avatar_url = avatar_url || null
+  if (has_completed_onboarding !== undefined) updates.has_completed_onboarding = Boolean(has_completed_onboarding)
 
   const { data, error } = await supabase
     .from('fourbase_users')

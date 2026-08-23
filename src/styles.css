@@ -6892,3 +6892,187 @@ textarea:focus {
     align-items: flex-start;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Onboarding — wizard de boas-vindas do primeiro acesso
+   ══════════════════════════════════════════════════════════════════════════════ */
+.onboarding-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 28, 32, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  z-index: 60;
+  padding: 20px;
+  animation: fadeUp 0.2s ease;
+}
+.onboarding-card {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  background: #f4faf9;
+  border: 1px solid var(--primary-soft);
+  border-radius: 28px;
+  padding: 40px 32px 28px;
+  box-shadow: 0 30px 70px -20px rgba(10, 60, 65, 0.35), var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.onboarding-skip {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 999px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.onboarding-skip:hover {
+  color: var(--primary-deep);
+  background: var(--primary-light);
+}
+
+.onboarding-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  min-height: 200px;
+  justify-content: center;
+  animation: onboardingStepIn 0.3s ease;
+}
+.onboarding-icon {
+  width: 76px;
+  height: 76px;
+  border-radius: 999px;
+  background: linear-gradient(160deg, var(--primary-light), var(--primary-soft));
+  color: var(--primary-deep);
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  box-shadow: 0 10px 24px rgba(20, 184, 196, 0.22);
+}
+.onboarding-content h2 {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  text-wrap: balance;
+}
+.onboarding-content p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--muted);
+  max-width: 36ch;
+}
+
+@keyframes onboardingStepIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.onboarding-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.onboarding-progress-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.onboarding-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.onboarding-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  transition: all 0.2s ease;
+}
+.onboarding-dots span.done {
+  background: var(--primary);
+}
+.onboarding-dots span.active {
+  width: 20px;
+  background: var(--primary);
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.onboarding-back {
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 11px 18px;
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.onboarding-back:hover {
+  border-color: var(--primary);
+  color: var(--primary-deep);
+}
+.onboarding-next,
+.onboarding-cta {
+  border: none;
+  background: var(--primary);
+  color: var(--white);
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 12px 22px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 20px rgba(20, 184, 196, 0.3);
+  transition: background 0.15s ease, transform 0.15s ease;
+  margin-left: auto;
+}
+.onboarding-next:hover,
+.onboarding-cta:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+.onboarding-cta {
+  font-size: 14px;
+  padding: 13px 26px;
+}
+
+@media (max-width: 640px) {
+  .onboarding-card {
+    padding: 34px 22px 22px;
+    border-radius: 22px;
+  }
+  .onboarding-content {
+    min-height: 170px;
+  }
+  .onboarding-actions {
+    flex-wrap: wrap;
+  }
+  .onboarding-next,
+  .onboarding-cta {
+    flex: 1 1 auto;
+    justify-content: center;
+    text-align: center;
+  }
+}

@@ -36,6 +36,7 @@ import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
+import Onboarding from './components/Onboarding.jsx'
 import {
   IconDashboard,
   IconKanban,
@@ -224,6 +225,13 @@ export default function App() {
       ),
     )
   }
+
+  // Onboarding do primeiro acesso — a flag mora no banco (não em
+  // localStorage), então não reaparece ao trocar de navegador/dispositivo.
+  const completeOnboarding = () =>
+    api.updateProfile({ has_completed_onboarding: true })
+      .then(applyProfileUpdate)
+      .catch(handleError)
 
   // ---- colunas ----
   const addColumn = (label) => {
@@ -888,6 +896,9 @@ export default function App() {
           </section>
         )}
       </main>
+      {view === 'painel' && !loading && !user.has_completed_onboarding && (
+        <Onboarding onFinish={completeOnboarding} onSkip={completeOnboarding} />
+      )}
       {toast && <div className="toast">{toast}</div>}
       {kanbanDraft && (
         <SendToKanbanModal
