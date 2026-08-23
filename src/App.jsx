@@ -57,7 +57,6 @@ const VIEWS = [
   { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
   { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
-  { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
   { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente', gestorOnly: true },
 ]
 
@@ -80,6 +79,16 @@ const CADASTRO_VIEW = {
   icon: IconUserPlus,
   title: 'Central de Cadastros',
   subtitle: 'Inicie o cadastro de membros da equipe e clientes',
+}
+
+// Idem: fica fora de VIEWS porque é renderizado dentro do agrupamento
+// "Área do gestor", junto de Cadastro e Meu Perfil, e não na lista principal.
+const EQUIPE_VIEW = {
+  key: 'equipe',
+  label: 'Equipe',
+  icon: IconTeam,
+  title: 'Visão da equipe',
+  subtitle: 'Acompanhe as tarefas e o progresso de todos',
 }
 
 // Token de ativação vindo do link de convite (/activate/:token). É a única
@@ -581,7 +590,7 @@ export default function App() {
   const user = session.user
   const isGestor = user.role === 'gestor'
   const visibleViews = VIEWS.filter((v) => !v.gestorOnly || isGestor)
-  const baseView = [...VIEWS, PROFILE_VIEW, CADASTRO_VIEW].find((v) => v.key === view) || VIEWS[0]
+  const baseView = [...VIEWS, PROFILE_VIEW, CADASTRO_VIEW, EQUIPE_VIEW].find((v) => v.key === view) || VIEWS[0]
   // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
   const current = selectedClient
     ? { title: selectedClient.name || 'Cliente sem nome', subtitle: 'Espaço do cliente · Kanban e Documentações' }
@@ -792,22 +801,40 @@ export default function App() {
             )
           })}
         </nav>
-        {isGestor && (
+        {isGestor ? (
+          <div className="sidebar-group">
+            <p className="sidebar-group-label">Área do gestor</p>
+            <button
+              className={`sidebar-profile-btn${view === 'cadastro' ? ' active' : ''}`}
+              onClick={() => changeView('cadastro')}
+            >
+              <IconUserPlus size={17} />
+              <span>{CADASTRO_VIEW.label}</span>
+            </button>
+            <button
+              className={`sidebar-profile-btn${view === 'perfil' ? ' active' : ''}`}
+              onClick={() => changeView('perfil')}
+            >
+              <IconUserCog size={17} />
+              <span>{PROFILE_VIEW.label}</span>
+            </button>
+            <button
+              className={`sidebar-profile-btn${view === 'equipe' ? ' active' : ''}`}
+              onClick={() => changeView('equipe')}
+            >
+              <IconTeam size={17} />
+              <span>{EQUIPE_VIEW.label}</span>
+            </button>
+          </div>
+        ) : (
           <button
-            className={`sidebar-profile-btn${view === 'cadastro' ? ' active' : ''}`}
-            onClick={() => changeView('cadastro')}
+            className={`sidebar-profile-btn${view === 'perfil' ? ' active' : ''}`}
+            onClick={() => changeView('perfil')}
           >
-            <IconUserPlus size={17} />
-            <span>{CADASTRO_VIEW.label}</span>
+            <IconUserCog size={17} />
+            <span>{PROFILE_VIEW.label}</span>
           </button>
         )}
-        <button
-          className={`sidebar-profile-btn${view === 'perfil' ? ' active' : ''}`}
-          onClick={() => changeView('perfil')}
-        >
-          <IconUserCog size={17} />
-          <span>{PROFILE_VIEW.label}</span>
-        </button>
         <div className="user-box">
           <button
             className="user-box-identity"

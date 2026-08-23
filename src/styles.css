@@ -122,6 +122,7 @@ button {
 .sidebar.collapsed .brand p,
 .sidebar.collapsed .menu button span,
 .sidebar.collapsed .sidebar-profile-btn span,
+.sidebar.collapsed .sidebar-group-label,
 .sidebar.collapsed .user-box-id,
 .sidebar.collapsed .sidebar button.action span,
 .sidebar.collapsed .footer-note {
@@ -2756,6 +2757,28 @@ textarea:focus {
   box-shadow: 0 8px 18px rgba(20, 184, 196, 0.35);
 }
 
+/* Agrupa Cadastro + Meu Perfil + Equipe, com rótulo "Área do gestor" acima —
+   os botões ficam próximos entre si (gap pequeno), e o grupo inteiro herda o
+   comportamento de "empurrar pro fim da sidebar" que .sidebar-profile-btn
+   tinha via margin-top: auto (por isso zeramos o auto individual aqui dentro). */
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+}
+.sidebar-group .sidebar-profile-btn {
+  margin-top: 0;
+}
+.sidebar-group-label {
+  padding: 4px 14px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7fb0b6;
+}
+
 .user-box {
   display: flex;
   align-items: center;
@@ -3797,6 +3820,7 @@ textarea:focus {
   .sidebar.collapsed .brand p,
   .sidebar.collapsed .menu button span,
   .sidebar.collapsed .sidebar-profile-btn span,
+  .sidebar.collapsed .sidebar-group-label,
   .sidebar.collapsed .sidebar button.action span {
     display: inline;
   }
@@ -4173,6 +4197,7 @@ textarea:focus {
   .sidebar.collapsed .brand p,
   .sidebar.collapsed .menu button span,
   .sidebar.collapsed .sidebar-profile-btn span,
+  .sidebar.collapsed .sidebar-group-label,
   .sidebar.collapsed .sidebar button.action span,
   .sidebar.collapsed .user-box-id,
   .sidebar.collapsed .logout-btn,
