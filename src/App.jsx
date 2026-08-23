@@ -572,7 +572,9 @@ export default function App() {
   }
 
   // Ativação de convite — única "rota" do app (não há react-router). O token
-  // sai do path; ao terminar, limpamos a URL e caímos no Login.
+  // sai do path; ao terminar, limpamos a URL. Convite inválido cai no Login;
+  // ativação bem-sucedida entra direto (a resposta do accept já tem token +
+  // user, mesmo formato do login normal — sem pedir e-mail/senha de novo).
   if (activationToken) {
     return (
       <Activate
@@ -580,6 +582,11 @@ export default function App() {
         onActivated={() => {
           window.history.replaceState({}, '', '/')
           setActivationToken(null)
+        }}
+        onLogin={(auth) => {
+          window.history.replaceState({}, '', '/')
+          setActivationToken(null)
+          login(auth)
         }}
       />
     )

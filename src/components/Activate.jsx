@@ -4,7 +4,7 @@ import { api } from '../api.js'
 // Tela de ativação de convite (/activate/:token). Reaproveita o visual do
 // Login. O token vem só da URL: workspace e cargo saem do convite guardado no
 // servidor, nunca de nada que esta tela possa enviar.
-export default function Activate({ token, onActivated }) {
+export default function Activate({ token, onActivated, onLogin }) {
   const [invitation, setInvitation] = useState(null)
   const [checking, setChecking] = useState(true)
   const [password, setPassword] = useState('')
@@ -12,6 +12,10 @@ export default function Activate({ token, onActivated }) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  // Resposta de POST .../accept — mesmo formato de api.login(), guardada só
+  // para entrar direto ao clicar "Entrar no weFlow" (sem pedir e-mail/senha
+  // de novo, já que a pessoa acabou de criar a senha nesta mesma tela).
+  const [authResult, setAuthResult] = useState(null)
 
   useEffect(() => {
     api
@@ -34,7 +38,8 @@ export default function Activate({ token, onActivated }) {
     }
     setSaving(true)
     try {
-      await api.acceptInvitation(token, password)
+      const result = await api.acceptInvitation(token, password)
+      setAuthResult(result)
       setDone(true)
     } catch (err) {
       setError(err.message)
@@ -71,7 +76,7 @@ export default function Activate({ token, onActivated }) {
               <strong>Conta ativada!</strong>
               <span>Você já pode entrar no weFlow com o seu e-mail e a senha que acabou de criar.</span>
             </div>
-            <button className="login-submit" onClick={onActivated}>
+            <button className="login-submit" onClick={() => onLogin(authResult)}>
               Entrar no weFlow
             </button>
           </>
