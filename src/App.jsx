@@ -56,7 +56,7 @@ const VIEWS = [
   { key: 'kanban', label: 'Kanban', icon: IconKanban, title: 'Kanban de tarefas', subtitle: 'Organize o fluxo de trabalho arrastando os cartões' },
   { key: 'calendario', label: 'Calendário', icon: IconCalendar, title: 'Calendário', subtitle: 'Prazos de entrega das suas tarefas' },
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
-  { key: 'cadastro', label: 'Cadastro', icon: IconUserPlus, title: 'Central de Cadastros', subtitle: 'Inicie o cadastro de membros da equipe e clientes' },
+  { key: 'cadastro', label: 'Cadastro', icon: IconUserPlus, title: 'Central de Cadastros', subtitle: 'Inicie o cadastro de membros da equipe e clientes', gestorOnly: true },
   { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
   { key: 'equipe', label: 'Equipe', icon: IconTeam, title: 'Visão da equipe', subtitle: 'Acompanhe as tarefas e o progresso de todos', gestorOnly: true },
   { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente' },

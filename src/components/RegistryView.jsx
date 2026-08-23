@@ -16,7 +16,8 @@ export default function RegistryView({ isGestor, onCreateMember, onCreateClient 
       subtitle: 'Gere um convite; a pessoa define a própria senha ao ativar a conta.',
       action: '+ Novo Convite',
     },
-    {
+    // Cadastro de cliente também é ação de gestor — mesma regra do convite
+    isGestor && {
       key: 'client',
       icon: <IconBuilding size={22} />,
       title: 'Cadastrar Cliente',

@@ -1121,7 +1121,7 @@ app.get('/api/clients', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
-app.post('/api/clients', auth, asyncRoute(async (req, res) => {
+app.post('/api/clients', auth, gestorOnly, asyncRoute(async (req, res) => {
   const { name = '', cnpj = '', phone = '', email = '', contact_name = '', address = '', color } = req.body
   const { data, error } = await supabase
     .from('fourbase_clients')
