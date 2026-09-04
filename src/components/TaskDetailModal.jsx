@@ -303,6 +303,7 @@ export default function TaskDetailModal({
         description: descDraft.trim(),
         priority: local.priority || 'Média',
         due_date: local.due_date || null,
+        due_date_end: local.due_date ? (local.due_date_end || null) : null,
         column_key: local.column_key || COLUMNS[0]?.key || 'todo',
         assigned_to: local.assigned_to || null,
         client_id: local.client_id || null,
@@ -395,14 +396,43 @@ export default function TaskDetailModal({
               </div>
 
               {/* Datas */}
-              <div className="tdv2-attr">
-                <span className="tdv2-label">Vencimento</span>
+              <div className="tdv2-attr tdv2-attr-wrap tdv2-attr-dates">
+                <span className="tdv2-label">
+                  {local.due_date_end ? 'Início' : 'Vencimento'}
+                </span>
                 <input
                   type="date"
                   className="tdv2-date-input"
                   value={local.due_date || ''}
-                  onChange={(e) => updateField('due_date', e.target.value || null)}
+                  onChange={(e) => {
+                    const next = e.target.value || null
+                    updateField('due_date', next)
+                    // Reflete localmente — o backend também limpa due_date_end
+                    // do lado dele quando due_date vira null.
+                    if (!next && local.due_date_end) setLocal((prev) => ({ ...prev, due_date_end: null }))
+                  }}
                 />
+                <label className="tdv2-multiday-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!local.due_date_end}
+                    disabled={!local.due_date}
+                    onChange={(e) => updateField('due_date_end', e.target.checked ? local.due_date : null)}
+                  />
+                  Vários dias
+                </label>
+                {local.due_date_end !== null && local.due_date_end !== undefined && (
+                  <>
+                    <span className="tdv2-label">Até</span>
+                    <input
+                      type="date"
+                      className="tdv2-date-input"
+                      min={local.due_date || undefined}
+                      value={local.due_date_end || ''}
+                      onChange={(e) => updateField('due_date_end', e.target.value || local.due_date)}
+                    />
+                  </>
+                )}
               </div>
 
               {/* Cliente */}

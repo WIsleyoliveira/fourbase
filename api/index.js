@@ -505,10 +505,15 @@ app.get('/api/tasks/client-stats', auth, asyncRoute(async (req, res) => {
 
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
   const {
-    title, priority = 'Média', due_date = null, assigned_to, description = '',
+    title, priority = 'Média', due_date = null, due_date_end = null, assigned_to, description = '',
     client_id = null, tags = [], column_key = 'todo', attachments = [],
   } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
+  // due_date_end só faz sentido junto de due_date, e nunca antes dele —
+  // tarefa "de um dia só" é devolvida com due_date_end null.
+  if (due_date_end && (!due_date || due_date_end < due_date)) {
+    return res.status(400).json({ error: 'A data final não pode ser antes da data de início' })
+  }
   const workspaceId = workspaceOf(req)
   const isGestor = req.user.role === 'gestor'
   const owner = isGestor && assigned_to ? assigned_to : req.user.id
@@ -528,6 +533,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       description: description.trim(),
       priority,
       due_date,
+      due_date_end: due_date ? (due_date_end || null) : null,
       column_key: column_key || 'todo',
       user_id: req.user.id,
       assigned_to: owner,
@@ -542,7 +548,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { column_key, title, priority, due_date, assigned_to, description, logged_time_seconds, attachments, client_id, tags } = req.body
+  const { column_key, title, priority, due_date, due_date_end, assigned_to, description, logged_time_seconds, attachments, client_id, tags } = req.body
   const workspaceId = workspaceOf(req)
   const updates = {}
   if (column_key) updates.column_key = column_key
@@ -550,6 +556,29 @@ app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   if (description !== undefined) updates.description = description
   if (priority) updates.priority = priority
   if (due_date !== undefined) updates.due_date = due_date
+  if (due_date_end !== undefined) updates.due_date_end = due_date_end || null
+  // Valida a combinação final (campo que não veio nesta chamada usa o valor
+  // já salvo) — sem isso, editar só a data final não pegaria uma inversão.
+  if (updates.due_date !== undefined || updates.due_date_end !== undefined) {
+    const { data: current } = await supabase
+      .from('fourbase_tasks')
+      .select('due_date, due_date_end')
+      .eq('id', req.params.id)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle()
+    const finalStart = updates.due_date !== undefined ? updates.due_date : current?.due_date
+    let finalEnd = updates.due_date_end !== undefined ? updates.due_date_end : current?.due_date_end
+    // Removeu a data de início: due_date_end fica órfã, então some junto —
+    // precisa rodar ANTES da validação abaixo, senão isso vira um 400 em vez
+    // de uma limpeza automática.
+    if (!finalStart && finalEnd) {
+      finalEnd = null
+      updates.due_date_end = null
+    }
+    if (finalEnd && finalEnd < finalStart) {
+      return res.status(400).json({ error: 'A data final não pode ser antes da data de início' })
+    }
+  }
   if (assigned_to && req.user.role === 'gestor') {
     if (!(await inWorkspace('fourbase_users', assigned_to, workspaceId))) {
       return res.status(400).json({ error: 'Responsável inválido' })

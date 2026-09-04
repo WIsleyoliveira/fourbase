@@ -21,11 +21,13 @@ const formatDate = (iso) => {
   return new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const dueState = (due_date) => {
+// Compara contra due_date_end quando a tarefa dura vários dias — só está
+// atrasada depois do último dia, não do primeiro.
+const dueState = (due_date, due_date_end) => {
   if (!due_date) return null
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const due = new Date(`${due_date}T00:00:00`)
+  const due = new Date(`${due_date_end || due_date}T00:00:00`)
   const diffDays = Math.round((due - today) / 86400000)
   if (diffDays < 0) return 'overdue'
   if (diffDays === 0) return 'today'
@@ -237,7 +239,7 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
               >
                 {colTasks.length === 0 && <div className="empty-hint">Solte cartões aqui</div>}
                 {colTasks.map((task) => {
-                  const due = dueState(task.due_date)
+                  const due = dueState(task.due_date, task.due_date_end)
                   const isDone = task.column_key === 'done'
                   // Código de cores único por responsável — identifica a tarefa por pessoa
                   const ownerColor = memberColor(task.assigned_to, members)
@@ -295,7 +297,9 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                         {task.due_date ? (
                           <span className={`due-tag due-${due}`}>
                             <IconCalendar size={10} />
-                            {formatDate(task.due_date)}
+                            {task.due_date_end
+                              ? `${formatDate(task.due_date)} — ${formatDate(task.due_date_end)}`
+                              : formatDate(task.due_date)}
                           </span>
                         ) : <span />}
 
