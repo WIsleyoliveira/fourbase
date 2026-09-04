@@ -238,6 +238,7 @@ export default function TaskDetailModal({
   const [descDraft, setDescDraft] = useState(task.description || '')
   const [fullscreen, setFullscreen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // Hook de cronômetro — soma ao tempo já persistido na tarefa (logged_time_seconds)
   const { isTracking, toggle, display } = useTimeTracker(
@@ -287,8 +288,15 @@ export default function TaskDetailModal({
     }
   }
 
-  const handleDelete = () => {
-    if (!confirm('Excluir esta tarefa permanentemente?')) return
+  // Confirmação via modal próprio em vez de window.confirm(): o navegador
+  // suprime/auto-rejeita diálogos nativos repetidos (ex.: após "Impedir que
+  // esta página crie caixas de diálogo adicionais"), fazendo a exclusão
+  // parecer que "não faz nada" ao clicar — mesmo problema já corrigido em
+  // DocumentsView.
+  const handleDelete = () => setConfirmingDelete(true)
+
+  const confirmDelete = () => {
+    setConfirmingDelete(false)
     onDelete(task.id)
     onClose()
   }
@@ -622,8 +630,45 @@ export default function TaskDetailModal({
     </>
   )
 
+  const deleteConfirmModal = confirmingDelete && createPortal(
+    <div className="modal-backdrop" onClick={() => setConfirmingDelete(false)}>
+      <div className="modal remove-confirm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="remove-confirm-header">
+          <div className="remove-confirm-icon">
+            <IconTrash size={20} />
+          </div>
+          <button className="icon-btn" title="Fechar" onClick={() => setConfirmingDelete(false)}>
+            <IconClose size={16} />
+          </button>
+        </div>
+        <div className="remove-confirm-body">
+          <h3>Excluir tarefa</h3>
+          <p>
+            Tem certeza que deseja excluir <strong>{local.title || 'esta tarefa'}</strong> permanentemente?{' '}
+            Esta ação não poderá ser desfeita.
+          </p>
+        </div>
+        <div className="remove-confirm-actions">
+          <button className="secondary" onClick={() => setConfirmingDelete(false)}>
+            Cancelar
+          </button>
+          <button className="remove-confirm-btn" onClick={confirmDelete}>
+            <IconTrash size={14} />
+            Sim, excluir
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+
   if (embedded) {
-    return <div className="tdv2-embedded-panel">{panel}</div>
+    return (
+      <div className="tdv2-embedded-panel">
+        {panel}
+        {deleteConfirmModal}
+      </div>
+    )
   }
 
   return (
@@ -634,6 +679,7 @@ export default function TaskDetailModal({
       >
         {panel}
       </div>
+      {deleteConfirmModal}
     </div>
   )
 }
