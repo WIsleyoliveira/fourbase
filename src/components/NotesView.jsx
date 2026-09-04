@@ -6,7 +6,7 @@ import {
   IconList, IconListOrdered, IconQuote,
   IconLink, IconCalendar, IconType,
   IconHeading, IconParagraph,
-  IconFolderFilled, IconClose, IconPaperclip, IconBuilding,
+  IconFolderFilled, IconClose, IconPaperclip, IconBuilding, IconFilePdf,
 } from '../icons.jsx'
 import { api } from '../api.js'
 import { getPreview } from '../textPreview.js'
@@ -44,8 +44,10 @@ function ToolDivider() {
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
+const formatPrintDate = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+
 export default function NotesView({
-  notes, onCreate, onSave, onDelete, onSendToKanban, onLinkFolder, onUpdateAttachments, onNavigateToFolder,
+  notes, currentUser, onCreate, onSave, onDelete, onSendToKanban, onLinkFolder, onUpdateAttachments, onNavigateToFolder,
   targetNoteId, onConsumeNoteTarget,
 }) {
   const editorRef = useRef(null)
@@ -180,6 +182,12 @@ export default function NotesView({
     }
   }
 
+  // Documento com timbrado, oculto na tela e revelado só por @media print
+  // (mesmo mecanismo de Relatórios: window.print() → "Salvar como PDF" no
+  // diálogo do navegador, sem precisar de nenhuma lib de PDF). Imprime
+  // exatamente o que está no editor agora, salvo ou não.
+  const exportPdf = () => window.print()
+
   const selectNote = async (id) => {
     if (id === activeId) return
     if (dirty) await save()
@@ -291,7 +299,7 @@ export default function NotesView({
   return (
     <div className="notes-layout">
       {/* ══ Sidebar de notas ══════════════════════════════════════════════════ */}
-      <aside className="notes-list panel">
+      <aside className="notes-list panel no-print">
         <div className="notes-list-header">
           <h3>Suas notas</h3>
           <button className="icon-btn" title="Nova nota" onClick={createNote}>
@@ -379,7 +387,7 @@ export default function NotesView({
       {/* ══ Painel de edição ════════════════════════════════════════════════ */}
       {active ? (
         <div
-          className={`panel editor-panel${dragActive ? ' drag-active' : ''}`}
+          className={`panel editor-panel no-print${dragActive ? ' drag-active' : ''}`}
           onKeyDown={onKeyDown}
           onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
           onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragActive(false) }}
@@ -609,6 +617,15 @@ export default function NotesView({
               {wordCount} palavra{wordCount === 1 ? '' : 's'}
             </span>
             <div className="editor-footer-right">
+              <button
+                type="button"
+                className="btn-pdf"
+                title="Exportar esta nota em PDF com o timbrado da empresa"
+                onClick={exportPdf}
+              >
+                <IconFilePdf size={14} />
+                Transformar em PDF
+              </button>
               {dirty ? (
                 <>
                   <span className="editor-unsaved-hint">Ctrl+S para salvar</span>
@@ -626,7 +643,7 @@ export default function NotesView({
           </div>
         </div>
       ) : (
-        <div className="panel editor-empty">
+        <div className="panel editor-empty no-print">
           <IconNotes size={34} />
           <strong>Nenhuma nota selecionada</strong>
           <p>Crie sua primeira nota para começar a documentar.</p>
@@ -634,6 +651,30 @@ export default function NotesView({
             <IconPlus size={16} />
             <span>Nova nota</span>
           </button>
+        </div>
+      )}
+
+      {/* ── Documento com timbrado — visível apenas na impressão/exportação em PDF ── */}
+      {active && (
+        <div className="notes-print-doc print-only">
+          <div className="reports-print-header">
+            <img src="/fourbase-logo.png" alt="weFlow" className="brand-logo" />
+            <h1>{title.trim() || 'Sem título'}</h1>
+          </div>
+          <div className="reports-print-infobox">
+            <div>
+              <span>Autor</span>
+              <strong>{currentUser?.name || '—'}</strong>
+            </div>
+            <div>
+              <span>Emitido em</span>
+              <strong>{formatPrintDate(new Date())}</strong>
+            </div>
+          </div>
+          <div
+            className="notes-print-content"
+            dangerouslySetInnerHTML={{ __html: editorRef.current?.innerHTML || active.content || '' }}
+          />
         </div>
       )}
 

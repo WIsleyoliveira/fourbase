@@ -1683,6 +1683,25 @@ textarea:focus {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.editor-footer .btn-pdf {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  background: var(--white) !important;
+  color: var(--primary-deep) !important;
+  border: 1px solid var(--border) !important;
+  padding: 5px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.editor-footer .btn-pdf:hover {
+  background: var(--primary-light) !important;
+  border-color: var(--primary-soft) !important;
+}
 
 .editor {
   min-height: 340px;
@@ -6517,6 +6536,37 @@ textarea:focus {
   font-size: 13px;
 }
 
+/* ── Nota impressa (Transformar em PDF) — tipografia do HTML vindo do
+   editor (contentEditable: h2, p, blockquote, listas, negrito/itálico...) ── */
+.notes-print-content {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.notes-print-content h2 {
+  font-size: 17px;
+  margin: 18px 0 8px;
+  color: var(--text);
+}
+.notes-print-content p {
+  margin: 0 0 10px;
+}
+.notes-print-content ul,
+.notes-print-content ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+.notes-print-content blockquote {
+  margin: 0 0 10px;
+  padding: 8px 14px;
+  border-left: 3px solid var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-deep);
+}
+.notes-print-content a {
+  color: var(--primary-deep);
+}
+
 /* ── Exportar PDF via impressão do navegador ── */
 @media print {
   .app {
@@ -6539,6 +6589,12 @@ textarea:focus {
   }
   .reports-grid-panel {
     display: none !important;
+  }
+  .notes-layout {
+    /* Sem isso, o grid de 300px + 1fr sobra do layout normal e o documento
+       impresso (agora o único filho visível) fica espremido na coluna
+       estreita da lista de notas em vez de ocupar a página inteira. */
+    display: block !important;
   }
   .print-only {
     display: block !important;
