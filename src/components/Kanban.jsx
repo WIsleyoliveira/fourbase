@@ -335,6 +335,17 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                             </button>
                           </div>
 
+                          {task.mentioned_users?.length > 0 && (
+                            <div className="card-mentions" title={task.mentioned_users.map(memberName).join(', ')}>
+                              {task.mentioned_users.slice(0, 3).map((id) => (
+                                <Avatar key={id} id={id} name={memberName(id)} list={members} className="card-mention-avatar" />
+                              ))}
+                              {task.mentioned_users.length > 3 && (
+                                <span className="card-mention-more">+{task.mentioned_users.length - 3}</span>
+                              )}
+                            </div>
+                          )}
+
                           {task.assigned_to && (
                             <Avatar
                               id={task.assigned_to}

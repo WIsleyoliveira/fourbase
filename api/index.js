@@ -123,6 +123,20 @@ const inWorkspace = async (table, id, workspaceId) => {
   return Boolean(data)
 }
 
+// Filtra uma lista de ids de usuário pros que existem no workspace — usado
+// pra "mencionados", um campo opcional e de baixo risco: em vez de rejeitar a
+// tarefa inteira por causa de um id inválido, simplesmente ignora esse id.
+const validMemberIds = async (ids, workspaceId) => {
+  const unique = [...new Set((Array.isArray(ids) ? ids : []).filter(Boolean))]
+  if (unique.length === 0) return []
+  const { data } = await supabase
+    .from('fourbase_users')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .in('id', unique)
+  return (data || []).map((u) => u.id)
+}
+
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'weflow-api' }))
 
 // Cadastro público desativado: contas só nascem de um convite emitido pelo
@@ -506,7 +520,7 @@ app.get('/api/tasks/client-stats', auth, asyncRoute(async (req, res) => {
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
   const {
     title, priority = 'Média', due_date = null, due_date_end = null, assigned_to, description = '',
-    client_id = null, tags = [], column_key = 'todo', attachments = [],
+    client_id = null, tags = [], column_key = 'todo', attachments = [], mentioned_users = [],
   } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
   // due_date_end só faz sentido junto de due_date, e nunca antes dele —
@@ -540,6 +554,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       client_id: client_id || null,
       tags: Array.isArray(tags) ? tags : [],
       attachments: Array.isArray(attachments) ? attachments : [],
+      mentioned_users: await validMemberIds(mentioned_users, workspaceId),
     })
     .select()
     .single()
@@ -548,7 +563,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { column_key, title, priority, due_date, due_date_end, assigned_to, description, logged_time_seconds, attachments, client_id, tags } = req.body
+  const { column_key, title, priority, due_date, due_date_end, assigned_to, description, logged_time_seconds, attachments, client_id, tags, mentioned_users } = req.body
   const workspaceId = workspaceOf(req)
   const updates = {}
   if (column_key) updates.column_key = column_key
@@ -594,6 +609,7 @@ app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
     updates.client_id = client_id || null
   }
   if (tags !== undefined) updates.tags = Array.isArray(tags) ? tags : []
+  if (mentioned_users !== undefined) updates.mentioned_users = await validMemberIds(mentioned_users, workspaceId)
 
   const query = supabase
     .from('fourbase_tasks')

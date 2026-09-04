@@ -22,6 +22,7 @@ import {
   IconBuilding,
 } from '../icons.jsx'
 import TagPicker from './TagPicker.jsx'
+import MemberPicker from './MemberPicker.jsx'
 import Avatar from './Avatar.jsx'
 
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
@@ -309,6 +310,7 @@ export default function TaskDetailModal({
         client_id: local.client_id || null,
         tags: local.tags || [],
         attachments: local.attachments || [],
+        mentioned_users: local.mentioned_users || [],
       })
       onClose()
     } finally {
@@ -506,6 +508,20 @@ export default function TaskDetailModal({
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Mencionados — opcional, além do responsável */}
+              <div className="tdv2-attr tdv2-attr-wrap">
+                <span className="tdv2-label">
+                  <IconUser size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  Mencionados
+                </span>
+                <MemberPicker
+                  value={local.mentioned_users || []}
+                  members={members}
+                  excludeId={local.assigned_to}
+                  onChange={(next) => updateField('mentioned_users', next)}
+                />
               </div>
 
               {/* Prioridade */}
