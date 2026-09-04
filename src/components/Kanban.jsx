@@ -133,6 +133,7 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
   const [priority, setPriority] = useState('Média')
   const [dueDate, setDueDate] = useState('')
   const [assignedTo, setAssignedTo] = useState(currentUser?.id || '')
+  const [clientId, setClientId] = useState('')
   const [newTaskTags, setNewTaskTags] = useState([])
   const [dragId, setDragId] = useState(null)
   const [overColumn, setOverColumn] = useState(null)
@@ -148,10 +149,11 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
   const submit = (e) => {
     e.preventDefault()
     if (!title.trim()) return
-    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim(), undefined, newTaskTags)
+    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim(), clientId || null, newTaskTags)
     setTitle('')
     setDueDate('')
     setDescription('')
+    setClientId('')
     setNewTaskTags([])
   }
 
@@ -195,6 +197,16 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
             ))}
           </select>
         )}
+        <select
+          value={clientId}
+          title="Vincular a um cliente (opcional)"
+          onChange={(e) => setClientId(e.target.value)}
+        >
+          <option value="">Sem cliente</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
+          ))}
+        </select>
         <textarea
           className="task-form-description"
           placeholder="Descrição (opcional)"
