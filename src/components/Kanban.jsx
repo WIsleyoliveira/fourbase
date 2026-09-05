@@ -21,11 +21,16 @@ const formatDate = (iso) => {
   return new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const dueState = (due_date) => {
+// due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
+const formatTime = (time) => (time ? time.slice(0, 5) : '')
+
+// Compara contra due_date_end quando a tarefa dura vários dias — só está
+// atrasada depois do último dia, não do primeiro.
+const dueState = (due_date, due_date_end) => {
   if (!due_date) return null
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const due = new Date(`${due_date}T00:00:00`)
+  const due = new Date(`${due_date_end || due_date}T00:00:00`)
   const diffDays = Math.round((due - today) / 86400000)
   if (diffDays < 0) return 'overdue'
   if (diffDays === 0) return 'today'
@@ -131,6 +136,7 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
   const [priority, setPriority] = useState('Média')
   const [dueDate, setDueDate] = useState('')
   const [assignedTo, setAssignedTo] = useState(currentUser?.id || '')
+  const [clientId, setClientId] = useState('')
   const [newTaskTags, setNewTaskTags] = useState([])
   const [dragId, setDragId] = useState(null)
   const [overColumn, setOverColumn] = useState(null)
@@ -146,10 +152,11 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
   const submit = (e) => {
     e.preventDefault()
     if (!title.trim()) return
-    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim(), undefined, newTaskTags)
+    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim(), clientId || null, newTaskTags)
     setTitle('')
     setDueDate('')
     setDescription('')
+    setClientId('')
     setNewTaskTags([])
   }
 
@@ -193,6 +200,16 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
             ))}
           </select>
         )}
+        <select
+          value={clientId}
+          title="Vincular a um cliente (opcional)"
+          onChange={(e) => setClientId(e.target.value)}
+        >
+          <option value="">Sem cliente</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
+          ))}
+        </select>
         <textarea
           className="task-form-description"
           placeholder="Descrição (opcional)"
@@ -237,7 +254,7 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
               >
                 {colTasks.length === 0 && <div className="empty-hint">Solte cartões aqui</div>}
                 {colTasks.map((task) => {
-                  const due = dueState(task.due_date)
+                  const due = dueState(task.due_date, task.due_date_end)
                   const isDone = task.column_key === 'done'
                   // Código de cores único por responsável — identifica a tarefa por pessoa
                   const ownerColor = memberColor(task.assigned_to, members)
@@ -295,7 +312,16 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                         {task.due_date ? (
                           <span className={`due-tag due-${due}`}>
                             <IconCalendar size={10} />
-                            {formatDate(task.due_date)}
+                            {task.due_date_end
+                              ? `${formatDate(task.due_date)} — ${formatDate(task.due_date_end)}`
+                              : formatDate(task.due_date)}
+                            {task.due_time && (
+                              <>
+                                {' · '}
+                                {formatTime(task.due_time)}
+                                {task.due_time_end && `–${formatTime(task.due_time_end)}`}
+                              </>
+                            )}
                           </span>
                         ) : <span />}
 
@@ -318,6 +344,17 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                               <IconArrowRight size={13} />
                             </button>
                           </div>
+
+                          {task.mentioned_users?.length > 0 && (
+                            <div className="card-mentions" title={task.mentioned_users.map(memberName).join(', ')}>
+                              {task.mentioned_users.slice(0, 3).map((id) => (
+                                <Avatar key={id} id={id} name={memberName(id)} list={members} className="card-mention-avatar" />
+                              ))}
+                              {task.mentioned_users.length > 3 && (
+                                <span className="card-mention-more">+{task.mentioned_users.length - 3}</span>
+                              )}
+                            </div>
+                          )}
 
                           {task.assigned_to && (
                             <Avatar

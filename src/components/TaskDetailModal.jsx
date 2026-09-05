@@ -22,6 +22,7 @@ import {
   IconBuilding,
 } from '../icons.jsx'
 import TagPicker from './TagPicker.jsx'
+import MemberPicker from './MemberPicker.jsx'
 import Avatar from './Avatar.jsx'
 
 const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
@@ -237,6 +238,7 @@ export default function TaskDetailModal({
   const [descDraft, setDescDraft] = useState(task.description || '')
   const [fullscreen, setFullscreen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   // Hook de cronômetro — soma ao tempo já persistido na tarefa (logged_time_seconds)
   const { isTracking, toggle, display } = useTimeTracker(
@@ -286,8 +288,15 @@ export default function TaskDetailModal({
     }
   }
 
-  const handleDelete = () => {
-    if (!confirm('Excluir esta tarefa permanentemente?')) return
+  // Confirmação via modal próprio em vez de window.confirm(): o navegador
+  // suprime/auto-rejeita diálogos nativos repetidos (ex.: após "Impedir que
+  // esta página crie caixas de diálogo adicionais"), fazendo a exclusão
+  // parecer que "não faz nada" ao clicar — mesmo problema já corrigido em
+  // DocumentsView.
+  const handleDelete = () => setConfirmingDelete(true)
+
+  const confirmDelete = () => {
+    setConfirmingDelete(false)
     onDelete(task.id)
     onClose()
   }
@@ -303,11 +312,15 @@ export default function TaskDetailModal({
         description: descDraft.trim(),
         priority: local.priority || 'Média',
         due_date: local.due_date || null,
+        due_date_end: local.due_date ? (local.due_date_end || null) : null,
+        due_time: local.due_date ? (local.due_time || null) : null,
+        due_time_end: local.due_date && local.due_time ? (local.due_time_end || null) : null,
         column_key: local.column_key || COLUMNS[0]?.key || 'todo',
         assigned_to: local.assigned_to || null,
         client_id: local.client_id || null,
         tags: local.tags || [],
         attachments: local.attachments || [],
+        mentioned_users: local.mentioned_users || [],
       })
       onClose()
     } finally {
@@ -395,14 +408,76 @@ export default function TaskDetailModal({
               </div>
 
               {/* Datas */}
-              <div className="tdv2-attr">
-                <span className="tdv2-label">Vencimento</span>
+              <div className="tdv2-attr tdv2-attr-wrap tdv2-attr-dates">
+                <span className="tdv2-label">
+                  {local.due_date_end ? 'Início' : 'Vencimento'}
+                </span>
                 <input
                   type="date"
                   className="tdv2-date-input"
                   value={local.due_date || ''}
-                  onChange={(e) => updateField('due_date', e.target.value || null)}
+                  onChange={(e) => {
+                    const next = e.target.value || null
+                    updateField('due_date', next)
+                    // Reflete localmente — o backend também limpa due_date_end
+                    // do lado dele quando due_date vira null.
+                    if (!next && local.due_date_end) setLocal((prev) => ({ ...prev, due_date_end: null }))
+                  }}
                 />
+                <label className="tdv2-multiday-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!local.due_date_end}
+                    disabled={!local.due_date}
+                    onChange={(e) => updateField('due_date_end', e.target.checked ? local.due_date : null)}
+                  />
+                  Vários dias
+                </label>
+                {local.due_date_end !== null && local.due_date_end !== undefined && (
+                  <>
+                    <span className="tdv2-label">Até</span>
+                    <input
+                      type="date"
+                      className="tdv2-date-input"
+                      min={local.due_date || undefined}
+                      value={local.due_date_end || ''}
+                      onChange={(e) => updateField('due_date_end', e.target.value || local.due_date)}
+                    />
+                  </>
+                )}
+                <label className="tdv2-multiday-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!local.due_time}
+                    disabled={!local.due_date}
+                    onChange={(e) => {
+                      updateField('due_time', e.target.checked ? '09:00' : null)
+                      // Sem horário de início, o horário final fica órfão — some junto.
+                      if (!e.target.checked && local.due_time_end) {
+                        setLocal((prev) => ({ ...prev, due_time_end: null }))
+                      }
+                    }}
+                  />
+                  Definir horário
+                </label>
+                {local.due_time && (
+                  <>
+                    <span className="tdv2-label">Início</span>
+                    <input
+                      type="time"
+                      className="tdv2-date-input"
+                      value={local.due_time || ''}
+                      onChange={(e) => updateField('due_time', e.target.value || null)}
+                    />
+                    <span className="tdv2-label">Fim</span>
+                    <input
+                      type="time"
+                      className="tdv2-date-input"
+                      value={local.due_time_end || ''}
+                      onChange={(e) => updateField('due_time_end', e.target.value || null)}
+                    />
+                  </>
+                )}
               </div>
 
               {/* Cliente */}
@@ -476,6 +551,20 @@ export default function TaskDetailModal({
                     )}
                   </div>
                 )}
+              </div>
+
+              {/* Mencionados — opcional, além do responsável */}
+              <div className="tdv2-attr tdv2-attr-wrap">
+                <span className="tdv2-label">
+                  <IconUser size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  Mencionados
+                </span>
+                <MemberPicker
+                  value={local.mentioned_users || []}
+                  members={members}
+                  excludeId={local.assigned_to}
+                  onChange={(next) => updateField('mentioned_users', next)}
+                />
               </div>
 
               {/* Prioridade */}
@@ -576,8 +665,45 @@ export default function TaskDetailModal({
     </>
   )
 
+  const deleteConfirmModal = confirmingDelete && createPortal(
+    <div className="modal-backdrop" onClick={() => setConfirmingDelete(false)}>
+      <div className="modal remove-confirm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="remove-confirm-header">
+          <div className="remove-confirm-icon">
+            <IconTrash size={20} />
+          </div>
+          <button className="icon-btn" title="Fechar" onClick={() => setConfirmingDelete(false)}>
+            <IconClose size={16} />
+          </button>
+        </div>
+        <div className="remove-confirm-body">
+          <h3>Excluir tarefa</h3>
+          <p>
+            Tem certeza que deseja excluir <strong>{local.title || 'esta tarefa'}</strong> permanentemente?{' '}
+            Esta ação não poderá ser desfeita.
+          </p>
+        </div>
+        <div className="remove-confirm-actions">
+          <button className="secondary" onClick={() => setConfirmingDelete(false)}>
+            Cancelar
+          </button>
+          <button className="remove-confirm-btn" onClick={confirmDelete}>
+            <IconTrash size={14} />
+            Sim, excluir
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+
   if (embedded) {
-    return <div className="tdv2-embedded-panel">{panel}</div>
+    return (
+      <div className="tdv2-embedded-panel">
+        {panel}
+        {deleteConfirmModal}
+      </div>
+    )
   }
 
   return (
@@ -588,6 +714,7 @@ export default function TaskDetailModal({
       >
         {panel}
       </div>
+      {deleteConfirmModal}
     </div>
   )
 }

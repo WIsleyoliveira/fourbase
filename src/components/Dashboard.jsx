@@ -7,26 +7,32 @@ import { memberColor } from '../colors.js'
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
 const MAX_UPCOMING = 4
 
-// Estado do prazo em relação a hoje — reaproveita a mesma lógica usada no Kanban
-const dueState = (due_date) => {
+// Estado do prazo em relação a hoje — reaproveita a mesma lógica usada no Kanban.
+// due_date_end (tarefa de vários dias) é o que decide "atrasada", não o início.
+const dueState = (due_date, due_date_end) => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const due = new Date(`${due_date}T00:00:00`)
+  const due = new Date(`${due_date_end || due_date}T00:00:00`)
   const diffDays = Math.round((due - today) / 86400000)
   if (diffDays < 0) return 'overdue'
   if (diffDays === 0) return 'today'
   return 'upcoming'
 }
 
-const dueLabel = (due_date) => {
+// due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
+const formatTime = (time) => (time ? time.slice(0, 5) : '')
+
+const dueLabel = (due_date, due_date_end, due_time) => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const due = new Date(`${due_date}T00:00:00`)
+  const due = new Date(`${due_date_end || due_date}T00:00:00`)
   const diffDays = Math.round((due - today) / 86400000)
+  const timeSuffix = due_time ? ` · ${formatTime(due_time)}` : ''
   if (diffDays < 0) return `Atrasada ${Math.abs(diffDays)}d`
-  if (diffDays === 0) return 'Hoje'
-  if (diffDays === 1) return 'Amanhã'
-  return due.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  if (diffDays === 0) return `Hoje${timeSuffix}`
+  if (diffDays === 1) return `Amanhã${timeSuffix}`
+  const label = due.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return (due_date_end ? `${new Date(`${due_date}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} – ${label}` : label) + timeSuffix
 }
 
 export default function Dashboard({
@@ -150,8 +156,8 @@ export default function Dashboard({
                   {t.priority}
                 </span>
                 <span className="upcoming-item-title">{t.title}</span>
-                <span className={`due-tag due-${dueState(t.due_date)}`}>
-                  {dueLabel(t.due_date)}
+                <span className={`due-tag due-${dueState(t.due_date, t.due_date_end)}`}>
+                  {dueLabel(t.due_date, t.due_date_end, t.due_time)}
                 </span>
               </button>
             ))}

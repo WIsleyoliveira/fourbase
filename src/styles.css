@@ -993,6 +993,45 @@ textarea:focus {
   cursor: default;
 }
 
+.card-mentions {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+}
+.card-mention-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), #6ee7ee);
+  color: var(--white);
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid var(--white);
+}
+.card-mention-avatar:not(:first-child) {
+  margin-left: -8px;
+}
+.card-mention-more {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -8px;
+  border: 2px solid var(--white);
+  flex-shrink: 0;
+}
+
 .card-actions {
   display: flex;
   gap: 8px;
@@ -1068,6 +1107,12 @@ textarea:focus {
   grid-template-columns: 300px 1fr;
   gap: 20px;
   align-items: start;
+}
+/* Sem isso, um item de grid não encolhe abaixo do conteúdo intrínseco —
+   uma linha sem espaços (URL colada, etc.) empurraria a coluna e criaria
+   scroll horizontal na página inteira em vez de quebrar dentro do editor. */
+.notes-layout > .editor-panel {
+  min-width: 0;
 }
 .notes-list {
   padding: 16px;
@@ -1683,6 +1728,25 @@ textarea:focus {
   opacity: 0.6;
   cursor: not-allowed;
 }
+.editor-footer .btn-pdf {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  background: var(--white) !important;
+  color: var(--primary-deep) !important;
+  border: 1px solid var(--border) !important;
+  padding: 5px 12px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.editor-footer .btn-pdf:hover {
+  background: var(--primary-light) !important;
+  border-color: var(--primary-soft) !important;
+}
 
 .editor {
   min-height: 340px;
@@ -1695,6 +1759,8 @@ textarea:focus {
   line-height: 1.8;
   font-size: 15px;
   overflow-y: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   color: var(--text);
 }
 .editor:focus {
@@ -3565,6 +3631,16 @@ textarea:focus {
   background: var(--ok);
   border-color: var(--ok);
 }
+.daydetail-item-time {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--primary-deep);
+  background: var(--primary-light);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
 .daydetail-item-title {
   flex: 1;
   min-width: 0;
@@ -4623,6 +4699,35 @@ textarea:focus {
   border-color: var(--primary);
 }
 
+/* ── Linha de datas: quebra em várias linhas quando o intervalo está ativo
+   ou a tela é estreita — a .tdv2-attr-wrap "genérica" só ajusta align-items,
+   quem realmente quebra linha aqui é este flex-wrap. ── */
+.tdv2-attr-dates {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.tdv2-multiday-toggle {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  width: auto !important;
+}
+.tdv2-multiday-toggle input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+.tdv2-multiday-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* ── Estimativa de tempo ─────────────────────────────────────────────────────── */
 .tdv2-estimate-input {
   border: 1px solid var(--primary);
@@ -4802,6 +4907,34 @@ textarea:focus {
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 11.5px;
+}
+
+/* ── Menções (MemberPicker) — mesma base visual do TagPicker, com avatar
+   em vez de bolinha colorida ── */
+.member-pill {
+  background: var(--primary-light);
+  color: var(--primary-deep);
+  padding: 2px 7px 2px 2px;
+}
+.member-pill-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.member-picker-option-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
 }
 
 /* ── Responsável ─────────────────────────────────────────────────────────────── */
@@ -6517,6 +6650,48 @@ textarea:focus {
   font-size: 13px;
 }
 
+/* ── Nota impressa (Transformar em PDF) — tipografia do HTML vindo do
+   editor (contentEditable: h2, p, blockquote, listas, negrito/itálico...) ── */
+.notes-print-content {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text);
+  text-align: justify;
+  /* Sem isso, uma "palavra" sem espaço (URL colada, string grande) vaza da
+     página em vez de quebrar — mesmo problema já corrigido no editor. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.notes-print-content h2 {
+  font-size: 17px;
+  margin: 18px 0 8px;
+  color: var(--text);
+  /* Título curto justificado fica com espaçamento estranho entre palavras */
+  text-align: left;
+}
+.notes-print-content p,
+.notes-print-content div {
+  /* .editor é um contentEditable puro: Enter sem formatBlock('P') vira <div>
+     no Chrome, não <p> — sem esta regra essas linhas ficavam coladas, sem
+     espaçamento nenhum entre parágrafos no PDF exportado. */
+  margin: 0 0 10px;
+}
+.notes-print-content ul,
+.notes-print-content ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+.notes-print-content blockquote {
+  margin: 0 0 10px;
+  padding: 8px 14px;
+  border-left: 3px solid var(--primary);
+  background: var(--primary-light);
+  color: var(--primary-deep);
+}
+.notes-print-content a {
+  color: var(--primary-deep);
+}
+
 /* ── Exportar PDF via impressão do navegador ── */
 @media print {
   .app {
@@ -6539,6 +6714,12 @@ textarea:focus {
   }
   .reports-grid-panel {
     display: none !important;
+  }
+  .notes-layout {
+    /* Sem isso, o grid de 300px + 1fr sobra do layout normal e o documento
+       impresso (agora o único filho visível) fica espremido na coluna
+       estreita da lista de notas em vez de ocupar a página inteira. */
+    display: block !important;
   }
   .print-only {
     display: block !important;

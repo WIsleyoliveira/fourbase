@@ -36,6 +36,9 @@ const isSameDay = (a, b) =>
 
 const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
+// due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
+const formatTime = (time) => (time ? time.slice(0, 5) : '')
+
 // Duração da transição de largura do popover (ver .daydetail-popover em styles.css) —
 // o desmonte do painel de detalhes é adiado até o fim da transição para não interrompê-la.
 const COLLAPSE_MS = 280
@@ -130,12 +133,30 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
     })
   }, [tasks, search, assigneeFilter, tagFilter])
 
+  // Tarefas de vários dias aparecem em toda data do intervalo [due_date,
+  // due_date_end] — não só no dia de início. Iterar por string 'YYYY-MM-DD'
+  // (em vez de objetos Date) evita qualquer pegadinha de fuso horário aqui.
+  const MAX_SPAN_DAYS = 366 // limite de sanidade — evita travar em caso de data absurda
+  const datesBetween = (start, end) => {
+    if (!end || end <= start) return [start]
+    const dates = []
+    let cur = start
+    for (let i = 0; i < MAX_SPAN_DAYS && cur <= end; i++) {
+      dates.push(cur)
+      const [y, m, d] = cur.split('-').map(Number)
+      cur = toKey(new Date(y, m - 1, d + 1))
+    }
+    return dates
+  }
+
   const tasksByDay = useMemo(() => {
     const map = {}
     filteredTasks.forEach((t) => {
       if (!t.due_date) return
-      map[t.due_date] = map[t.due_date] || []
-      map[t.due_date].push(t)
+      for (const key of datesBetween(t.due_date, t.due_date_end)) {
+        map[key] = map[key] || []
+        map[key].push(t)
+      }
     })
     return map
   }, [filteredTasks])
@@ -143,7 +164,14 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   // Tarefas do dia selecionado no popover — memoizado, reage a mudanças de data ou da lista de tarefas
   const tasksForSelectedDate = useMemo(() => {
     if (!selectedDate) return []
-    return (tasksByDay[toKey(selectedDate)] || []).slice().sort((a, b) => a.title.localeCompare(b.title))
+    // Com horário definido vem primeiro, ordenado por hora; sem horário
+    // fica depois, ordenado por título.
+    return (tasksByDay[toKey(selectedDate)] || []).slice().sort((a, b) => {
+      if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time)
+      if (a.due_time) return -1
+      if (b.due_time) return 1
+      return a.title.localeCompare(b.title)
+    })
   }, [selectedDate, tasksByDay])
 
   const unscheduled = useMemo(
@@ -152,8 +180,9 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   )
   const overdue = useMemo(() => {
     const todayKey = toKey(today)
+    // Uma tarefa de vários dias só está atrasada depois do último dia dela.
     return filteredTasks
-      .filter((t) => t.due_date && t.due_date < todayKey && t.column_key !== 'done')
+      .filter((t) => t.due_date && (t.due_date_end || t.due_date) < todayKey && t.column_key !== 'done')
       .sort((a, b) => a.due_date.localeCompare(b.due_date))
   }, [filteredTasks, today])
 
@@ -225,7 +254,21 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   const dropOnDay = (e, date) => {
     e.preventDefault()
     const id = e.dataTransfer.getData('text/plain')
-    if (id && onUpdate) onUpdate(id, { due_date: toKey(date) })
+    if (!id || !onUpdate) return
+    const newStart = toKey(date)
+    const task = tasks.find((t) => t.id === id)
+    // Arrastar uma tarefa de vários dias preserva a duração — só desloca o
+    // intervalo inteiro pro novo dia, em vez de deixar due_date_end órfã
+    // (e antes de due_date, o que o backend rejeitaria).
+    if (task?.due_date_end && task.due_date) {
+      const spanDays = Math.round(
+        (new Date(`${task.due_date_end}T00:00:00`) - new Date(`${task.due_date}T00:00:00`)) / 86400000,
+      )
+      const newEnd = toKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() + spanDays))
+      onUpdate(id, { due_date: newStart, due_date_end: newEnd })
+    } else {
+      onUpdate(id, { due_date: newStart })
+    }
   }
 
   const dayDetailLabel = selectedDate
@@ -520,6 +563,12 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
                           >
                             {done && <IconCheckPlain size={11} />}
                           </button>
+                          {t.due_time && (
+                            <span className="daydetail-item-time">
+                              {formatTime(t.due_time)}
+                              {t.due_time_end && `–${formatTime(t.due_time_end)}`}
+                            </span>
+                          )}
                           <button
                             className={`daydetail-item-title${done ? ' done' : ''}`}
                             onClick={() => { clearTimeout(collapseTimerRef.current); setCollapsing(false); setSelectedTaskId(t.id) }}

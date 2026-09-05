@@ -650,6 +650,7 @@ export default function App() {
         return (
           <NotesView
             notes={notes}
+            currentUser={user}
             onCreate={createNote}
             onSave={saveNote}
             onDelete={deleteNote}
