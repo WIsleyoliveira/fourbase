@@ -1108,6 +1108,12 @@ textarea:focus {
   gap: 20px;
   align-items: start;
 }
+/* Sem isso, um item de grid não encolhe abaixo do conteúdo intrínseco —
+   uma linha sem espaços (URL colada, etc.) empurraria a coluna e criaria
+   scroll horizontal na página inteira em vez de quebrar dentro do editor. */
+.notes-layout > .editor-panel {
+  min-width: 0;
+}
 .notes-list {
   padding: 16px;
   display: flex;
@@ -1753,6 +1759,8 @@ textarea:focus {
   line-height: 1.8;
   font-size: 15px;
   overflow-y: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   color: var(--text);
 }
 .editor:focus {
