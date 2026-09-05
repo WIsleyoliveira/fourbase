@@ -588,6 +588,10 @@ export default function NotesView({
             contentEditable
             suppressContentEditableWarning
             data-placeholder="Escreva ideias, observações, links, decisões e documentação interna…"
+            // Sem isso, Enter no Chrome quebra linha com <div> em vez de <p> —
+            // o CSS de impressão (.notes-print-content p) não pega, e o PDF
+            // exportado saía com os parágrafos colados, sem espaçamento.
+            onFocus={() => document.execCommand('defaultParagraphSeparator', false, 'p')}
             onInput={() => {
               setDirty(true)
               updateCount()

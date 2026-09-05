@@ -6656,13 +6656,24 @@ textarea:focus {
   font-size: 13.5px;
   line-height: 1.7;
   color: var(--text);
+  text-align: justify;
+  /* Sem isso, uma "palavra" sem espaço (URL colada, string grande) vaza da
+     página em vez de quebrar — mesmo problema já corrigido no editor. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .notes-print-content h2 {
   font-size: 17px;
   margin: 18px 0 8px;
   color: var(--text);
+  /* Título curto justificado fica com espaçamento estranho entre palavras */
+  text-align: left;
 }
-.notes-print-content p {
+.notes-print-content p,
+.notes-print-content div {
+  /* .editor é um contentEditable puro: Enter sem formatBlock('P') vira <div>
+     no Chrome, não <p> — sem esta regra essas linhas ficavam coladas, sem
+     espaçamento nenhum entre parágrafos no PDF exportado. */
   margin: 0 0 10px;
 }
 .notes-print-content ul,
