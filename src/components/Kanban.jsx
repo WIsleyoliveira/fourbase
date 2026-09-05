@@ -21,6 +21,9 @@ const formatDate = (iso) => {
   return new Date(value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
+const formatTime = (time) => (time ? time.slice(0, 5) : '')
+
 // Compara contra due_date_end quando a tarefa dura vários dias — só está
 // atrasada depois do último dia, não do primeiro.
 const dueState = (due_date, due_date_end) => {
@@ -312,6 +315,13 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                             {task.due_date_end
                               ? `${formatDate(task.due_date)} — ${formatDate(task.due_date_end)}`
                               : formatDate(task.due_date)}
+                            {task.due_time && (
+                              <>
+                                {' · '}
+                                {formatTime(task.due_time)}
+                                {task.due_time_end && `–${formatTime(task.due_time_end)}`}
+                              </>
+                            )}
                           </span>
                         ) : <span />}
 

@@ -519,7 +519,8 @@ app.get('/api/tasks/client-stats', auth, asyncRoute(async (req, res) => {
 
 app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
   const {
-    title, priority = 'Média', due_date = null, due_date_end = null, assigned_to, description = '',
+    title, priority = 'Média', due_date = null, due_date_end = null, due_time = null, due_time_end = null,
+    assigned_to, description = '',
     client_id = null, tags = [], column_key = 'todo', attachments = [], mentioned_users = [],
   } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
@@ -527,6 +528,16 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
   // tarefa "de um dia só" é devolvida com due_date_end null.
   if (due_date_end && (!due_date || due_date_end < due_date)) {
     return res.status(400).json({ error: 'A data final não pode ser antes da data de início' })
+  }
+  // due_time_end só faz sentido junto de due_time; a ordem só é validada
+  // quando é o mesmo dia — em intervalo de vários dias, um horário final
+  // "menor" (ex.: início 22:00, fim 06:00 no dia seguinte) é legítimo.
+  if (due_time_end && !due_time) {
+    return res.status(400).json({ error: 'Defina o horário de início antes do horário final' })
+  }
+  const sameDayTimes = !due_date_end || due_date_end === due_date
+  if (sameDayTimes && due_time && due_time_end && due_time_end < due_time) {
+    return res.status(400).json({ error: 'O horário final não pode ser antes do horário de início' })
   }
   const workspaceId = workspaceOf(req)
   const isGestor = req.user.role === 'gestor'
@@ -548,6 +559,8 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       priority,
       due_date,
       due_date_end: due_date ? (due_date_end || null) : null,
+      due_time: due_date ? (due_time || null) : null,
+      due_time_end: due_date && due_time ? (due_time_end || null) : null,
       column_key: column_key || 'todo',
       user_id: req.user.id,
       assigned_to: owner,
@@ -563,7 +576,7 @@ app.post('/api/tasks', auth, asyncRoute(async (req, res) => {
 }))
 
 app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
-  const { column_key, title, priority, due_date, due_date_end, assigned_to, description, logged_time_seconds, attachments, client_id, tags, mentioned_users } = req.body
+  const { column_key, title, priority, due_date, due_date_end, due_time, due_time_end, assigned_to, description, logged_time_seconds, attachments, client_id, tags, mentioned_users } = req.body
   const workspaceId = workspaceOf(req)
   const updates = {}
   if (column_key) updates.column_key = column_key
@@ -572,26 +585,45 @@ app.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   if (priority) updates.priority = priority
   if (due_date !== undefined) updates.due_date = due_date
   if (due_date_end !== undefined) updates.due_date_end = due_date_end || null
+  if (due_time !== undefined) updates.due_time = due_time || null
+  if (due_time_end !== undefined) updates.due_time_end = due_time_end || null
   // Valida a combinação final (campo que não veio nesta chamada usa o valor
-  // já salvo) — sem isso, editar só a data final não pegaria uma inversão.
-  if (updates.due_date !== undefined || updates.due_date_end !== undefined) {
+  // já salvo) — sem isso, editar só a data/horário final não pegaria uma inversão.
+  if (
+    updates.due_date !== undefined || updates.due_date_end !== undefined ||
+    updates.due_time !== undefined || updates.due_time_end !== undefined
+  ) {
     const { data: current } = await supabase
       .from('fourbase_tasks')
-      .select('due_date, due_date_end')
+      .select('due_date, due_date_end, due_time, due_time_end')
       .eq('id', req.params.id)
       .eq('workspace_id', workspaceId)
       .maybeSingle()
     const finalStart = updates.due_date !== undefined ? updates.due_date : current?.due_date
     let finalEnd = updates.due_date_end !== undefined ? updates.due_date_end : current?.due_date_end
-    // Removeu a data de início: due_date_end fica órfã, então some junto —
-    // precisa rodar ANTES da validação abaixo, senão isso vira um 400 em vez
-    // de uma limpeza automática.
+    let finalTime = updates.due_time !== undefined ? updates.due_time : current?.due_time
+    let finalTimeEnd = updates.due_time_end !== undefined ? updates.due_time_end : current?.due_time_end
+    // Removeu a data de início: due_date_end/due_time/due_time_end ficam
+    // órfãos, então somem junto — precisa rodar ANTES das validações
+    // abaixo, senão isso vira um 400 em vez de uma limpeza automática.
     if (!finalStart && finalEnd) {
       finalEnd = null
       updates.due_date_end = null
     }
+    if (!finalStart && finalTime) {
+      finalTime = null
+      updates.due_time = null
+    }
+    if (!finalTime && finalTimeEnd) {
+      finalTimeEnd = null
+      updates.due_time_end = null
+    }
     if (finalEnd && finalEnd < finalStart) {
       return res.status(400).json({ error: 'A data final não pode ser antes da data de início' })
+    }
+    const sameDayTimes = !finalEnd || finalEnd === finalStart
+    if (sameDayTimes && finalTime && finalTimeEnd && finalTimeEnd < finalTime) {
+      return res.status(400).json({ error: 'O horário final não pode ser antes do horário de início' })
     }
   }
   if (assigned_to && req.user.role === 'gestor') {

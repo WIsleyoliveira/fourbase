@@ -19,16 +19,20 @@ const dueState = (due_date, due_date_end) => {
   return 'upcoming'
 }
 
-const dueLabel = (due_date, due_date_end) => {
+// due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
+const formatTime = (time) => (time ? time.slice(0, 5) : '')
+
+const dueLabel = (due_date, due_date_end, due_time) => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const due = new Date(`${due_date_end || due_date}T00:00:00`)
   const diffDays = Math.round((due - today) / 86400000)
+  const timeSuffix = due_time ? ` · ${formatTime(due_time)}` : ''
   if (diffDays < 0) return `Atrasada ${Math.abs(diffDays)}d`
-  if (diffDays === 0) return 'Hoje'
-  if (diffDays === 1) return 'Amanhã'
+  if (diffDays === 0) return `Hoje${timeSuffix}`
+  if (diffDays === 1) return `Amanhã${timeSuffix}`
   const label = due.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-  return due_date_end ? `${new Date(`${due_date}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} – ${label}` : label
+  return (due_date_end ? `${new Date(`${due_date}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} – ${label}` : label) + timeSuffix
 }
 
 export default function Dashboard({
@@ -153,7 +157,7 @@ export default function Dashboard({
                 </span>
                 <span className="upcoming-item-title">{t.title}</span>
                 <span className={`due-tag due-${dueState(t.due_date, t.due_date_end)}`}>
-                  {dueLabel(t.due_date, t.due_date_end)}
+                  {dueLabel(t.due_date, t.due_date_end, t.due_time)}
                 </span>
               </button>
             ))}

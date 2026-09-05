@@ -313,6 +313,8 @@ export default function TaskDetailModal({
         priority: local.priority || 'Média',
         due_date: local.due_date || null,
         due_date_end: local.due_date ? (local.due_date_end || null) : null,
+        due_time: local.due_date ? (local.due_time || null) : null,
+        due_time_end: local.due_date && local.due_time ? (local.due_time_end || null) : null,
         column_key: local.column_key || COLUMNS[0]?.key || 'todo',
         assigned_to: local.assigned_to || null,
         client_id: local.client_id || null,
@@ -440,6 +442,39 @@ export default function TaskDetailModal({
                       min={local.due_date || undefined}
                       value={local.due_date_end || ''}
                       onChange={(e) => updateField('due_date_end', e.target.value || local.due_date)}
+                    />
+                  </>
+                )}
+                <label className="tdv2-multiday-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!local.due_time}
+                    disabled={!local.due_date}
+                    onChange={(e) => {
+                      updateField('due_time', e.target.checked ? '09:00' : null)
+                      // Sem horário de início, o horário final fica órfão — some junto.
+                      if (!e.target.checked && local.due_time_end) {
+                        setLocal((prev) => ({ ...prev, due_time_end: null }))
+                      }
+                    }}
+                  />
+                  Definir horário
+                </label>
+                {local.due_time && (
+                  <>
+                    <span className="tdv2-label">Início</span>
+                    <input
+                      type="time"
+                      className="tdv2-date-input"
+                      value={local.due_time || ''}
+                      onChange={(e) => updateField('due_time', e.target.value || null)}
+                    />
+                    <span className="tdv2-label">Fim</span>
+                    <input
+                      type="time"
+                      className="tdv2-date-input"
+                      value={local.due_time_end || ''}
+                      onChange={(e) => updateField('due_time_end', e.target.value || null)}
                     />
                   </>
                 )}

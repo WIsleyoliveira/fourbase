@@ -36,6 +36,9 @@ const isSameDay = (a, b) =>
 
 const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
+// due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
+const formatTime = (time) => (time ? time.slice(0, 5) : '')
+
 // Duração da transição de largura do popover (ver .daydetail-popover em styles.css) —
 // o desmonte do painel de detalhes é adiado até o fim da transição para não interrompê-la.
 const COLLAPSE_MS = 280
@@ -161,7 +164,14 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   // Tarefas do dia selecionado no popover — memoizado, reage a mudanças de data ou da lista de tarefas
   const tasksForSelectedDate = useMemo(() => {
     if (!selectedDate) return []
-    return (tasksByDay[toKey(selectedDate)] || []).slice().sort((a, b) => a.title.localeCompare(b.title))
+    // Com horário definido vem primeiro, ordenado por hora; sem horário
+    // fica depois, ordenado por título.
+    return (tasksByDay[toKey(selectedDate)] || []).slice().sort((a, b) => {
+      if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time)
+      if (a.due_time) return -1
+      if (b.due_time) return 1
+      return a.title.localeCompare(b.title)
+    })
   }, [selectedDate, tasksByDay])
 
   const unscheduled = useMemo(
@@ -553,6 +563,12 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
                           >
                             {done && <IconCheckPlain size={11} />}
                           </button>
+                          {t.due_time && (
+                            <span className="daydetail-item-time">
+                              {formatTime(t.due_time)}
+                              {t.due_time_end && `–${formatTime(t.due_time_end)}`}
+                            </span>
+                          )}
                           <button
                             className={`daydetail-item-title${done ? ' done' : ''}`}
                             onClick={() => { clearTimeout(collapseTimerRef.current); setCollapsing(false); setSelectedTaskId(t.id) }}
