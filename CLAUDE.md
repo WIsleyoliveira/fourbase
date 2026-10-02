@@ -12,22 +12,25 @@ npm run dev:web     # Vite only
 npm run build        # production build to dist/
 npm run preview      # preview the production build
 npm start             # node server.js (single-process, used by `vercel dev` / production-style run)
+npm test              # node:test — tests/*.test.js (API against a temp local DB, no network)
 ```
 
-There is no test suite and no lint config in this repo (no `test`/`lint` script, no eslint/prettier config). Don't invent one unless asked.
+Tests use the built-in `node:test` runner, no extra framework. `tests/workspace-isolation.test.js` boots the Express app against a throwaway `FOURBASE_DB_PATH` fixture with two workspaces and asserts no cross-tenant reads/writes and correct gestor/funcionário gating — run it after touching any route's `workspace_id`/`user_id` filters. There is no lint config.
 
 The Vite dev server proxies `/api/*` to `http://localhost:3001` (see `vite.config.js`) — always hit the frontend through `:5173`, not `:3001` directly, so the proxy and cookies/headers behave like production.
 
 ## Architecture
 
-### Local mock database instead of a live Supabase project
-`api/index.js` does **not** talk to a real Supabase project for data. It imports `createLocalClient()` from `api/localDb.js`, a hand-rolled shim that implements the subset of the `supabase-js` query-builder chain this codebase actually uses (`.from().select().eq().in().order().single().maybeSingle().insert().update().delete().upsert()`). The object it returns is "thenable" (works with `await` and inside `Promise.all`), so route handlers are written exactly as if `supabase` were the real client — swapping backends means changing one line.
+### Data backend: real Supabase in production, local mock in dev
+With `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` set (production on Vercel), `api/index.js` uses the real Supabase Postgres with the **service_role** key. All `fourbase_*`/`weflow_*` tables have RLS enabled with **no policies** (migration `20261002000000_lock_down_table_rls.sql`), so the anon key shipped in the browser bundle cannot touch them — the Express API is the only path to the data, and it enforces tenancy by filtering every query on `workspace_id` from the JWT. Never add a permissive table policy back, and never expose the service_role key to the frontend (`VITE_*`).
+
+Without `SUPABASE_URL` (default local dev), `api/index.js` uses the local mock instead. It imports `createLocalClient()` from `api/localDb.js`, a hand-rolled shim that implements the subset of the `supabase-js` query-builder chain this codebase actually uses (`.from().select().eq().in().order().single().maybeSingle().insert().update().delete().upsert()`). The object it returns is "thenable" (works with `await` and inside `Promise.all`), so route handlers are written exactly as if `supabase` were the real client — swapping backends means changing one line.
 
 Data is persisted to `data/db.json` (gitignored), created and seeded on first run: one gestor account (`gestor@fourbase.com` / `gestor123`), 3 demo clients, and the 3 default Kanban columns. Delete that file to reset to a clean seed.
 
 Known gap in the shim: it does **not** parse embedded-resource/join select syntax (`col:table!fk_name(...)`). The one route that needed a join (`GET /api/team/tasks`) resolves it manually — fetches tasks and users separately and merges them in JS. Follow that pattern rather than teaching the shim to parse joins.
 
-To point the backend at a real Postgres/Supabase project again, change `const supabase = createLocalClient()` in `api/index.js` back to `createClient(SUPABASE_URL, SUPABASE_ANON_KEY)` from `@supabase/supabase-js`. The SQL schema for that path (tables, columns, RLS policies) is tracked in `supabase/migrations/*.sql` — the local shim doesn't enforce any of this, so keep those files in sync when you add a field to a table used by both paths. The local file-based DB does **not** work on Vercel (no persistent disk across serverless invocations) — a real deploy needs the Supabase client restored.
+The mock file path can be overridden with `FOURBASE_DB_PATH` (used by the tests). The SQL schema for that path (tables, columns, RLS policies) is tracked in `supabase/migrations/*.sql` — the local shim doesn't enforce any of this, so keep those files in sync when you add a field to a table used by both paths. The local file-based DB does **not** work on Vercel (no persistent disk across serverless invocations) — a real deploy needs the Supabase client restored.
 
 Frontend file uploads (`src/supabase.js`) are a separate concern and still go straight from the browser to real Supabase **Storage** buckets (`fourbase-media`, `fourbase-client-media`), bypassing the Express API entirely to avoid serverless payload limits. Data lives in the local mock; file blobs live in real Supabase Storage — don't conflate the two when debugging uploads vs. data persistence.
 

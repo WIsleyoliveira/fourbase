@@ -15,7 +15,10 @@ import { fileURLToPath } from 'url'
 import { randomUUID } from 'crypto'
 import bcrypt from 'bcryptjs'
 
-const DB_PATH = fileURLToPath(new URL('../data/db.json', import.meta.url))
+// FOURBASE_DB_PATH permite apontar para outro arquivo — usado pelos testes
+// (tests/) para não tocar no data/db.json de desenvolvimento.
+const DB_PATH = process.env.FOURBASE_DB_PATH
+  || fileURLToPath(new URL('../data/db.json', import.meta.url))
 
 // Entidades que pertencem a uma empresa (workspace) e por isso carregam
 // workspace_id. weflow_workspaces é a própria lista de tenants e weflow_invitations
