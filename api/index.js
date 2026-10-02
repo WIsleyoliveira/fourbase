@@ -1,5 +1,7 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
@@ -11,18 +13,55 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET || 'fourbase-dev-secret-troque-em-producao'
 
-// Com SUPABASE_URL e SUPABASE_ANON_KEY definidos (produção), usa o Postgres
-// real do Supabase. Sem eles (dev local, como o resto da equipe já roda),
-// cai no banco mockado em data/db.json — ver api/localDb.js. RLS nas tabelas
-// fourbase_*/weflow_* é aberta (`using (true)`) porque a autorização real é
-// feita aqui no Express via JWT próprio, não pelo Supabase Auth.
-const supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+// Com SUPABASE_URL definido (produção), usa o Postgres real do Supabase. Sem
+// ele (dev local), cai no banco mockado em data/db.json — ver api/localDb.js.
+//
+// A chave usada aqui deve ser a service_role: as tabelas fourbase_*/weflow_*
+// têm RLS fechado para anon/authenticated (migration 20261002000000), então só
+// o servidor lê e grava nelas. A autorização por usuário/workspace é feita
+// aqui no Express via JWT próprio. A chave anon fica restrita ao Storage no
+// navegador e NÃO deve dar acesso às tabelas.
+//
+// SUPABASE_ANON_KEY continua aceito como fallback só para a transição do
+// deploy (antes da migration de RLS rodar); depois dela, sem a service_role a
+// API não consegue mais ler o banco.
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+if (process.env.SUPABASE_URL && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn('[fourbase] SUPABASE_SERVICE_ROLE_KEY não definida — usando a chave anon. ' +
+    'Isso para de funcionar depois da migration que fecha o RLS.')
+}
+const supabase = (process.env.SUPABASE_URL && supabaseKey)
+  ? createClient(process.env.SUPABASE_URL, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
   : createLocalClient()
 
 const app = express()
-app.use(cors())
+// Na Vercel a API fica atrás de um proxy: sem isto o rate limit veria o IP do
+// proxy e bloquearia todo mundo junto.
+app.set('trust proxy', 1)
+// A API só responde JSON (o frontend é servido pela Vercel como estático), então
+// a CSP padrão do helmet aqui não afeta imagens/uploads do app.
+app.use(helmet())
+// O frontend chama a API na mesma origem (Vercel em produção, proxy do Vite em
+// dev), o que dispensa CORS. Só libera outra origem se APP_URL for definido.
+app.use(cors({ origin: process.env.APP_URL || false }))
 app.use(express.json({ limit: '2mb' }))
+
+// Limite de tentativas nas rotas de credencial, contra força bruta. O contador
+// é em memória — na Vercel cada instância tem o seu, então é aproximado; um
+// limite global exigiria um store compartilhado (ex.: Redis).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' },
+})
+
+// Hash usado quando o e-mail não existe, para o login levar o mesmo tempo nos
+// dois casos e não revelar quais e-mails têm conta.
+const DUMMY_HASH = bcrypt.hashSync('fourbase-dummy-password', 10)
 
 const asyncRoute = (fn) => (req, res) =>
   fn(req, res).catch((err) => {
@@ -147,6 +186,8 @@ app.post('/api/auth/register', (req, res) =>
   }),
 )
 
+app.use(['/api/auth/login', '/api/auth/invitations', '/api/profile/password'], authLimiter)
+
 app.post('/api/auth/login', asyncRoute(async (req, res) => {
   const { email, password } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Informe e-mail e senha' })
@@ -156,7 +197,8 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
     .eq('email', email.trim().toLowerCase())
     .maybeSingle()
   if (error) throw error
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+  const passwordOk = await bcrypt.compare(String(password), user?.password_hash || DUMMY_HASH)
+  if (!user || !passwordOk) {
     return res.status(401).json({ error: 'E-mail ou senha incorretos' })
   }
   if (user.status === 'inactive') {
@@ -354,7 +396,7 @@ app.post('/api/auth/invitations/:token/accept', asyncRoute(async (req, res) => {
       workspace_id: invitation.workspace_id,
       name: invitation.name,
       email: invitation.email,
-      password_hash: bcrypt.hashSync(password, 10),
+      password_hash: await bcrypt.hash(password, 10),
       role: invitation.role,
       status: 'active',
       job_title: invitation.job_title || null,
@@ -430,13 +472,13 @@ app.patch('/api/profile/password', auth, asyncRoute(async (req, res) => {
     .maybeSingle()
   if (fetchErr) throw fetchErr
   if (!user) return res.status(401).json({ error: 'Usuário não encontrado' })
-  if (!bcrypt.compareSync(current_password, user.password_hash)) {
+  if (!(await bcrypt.compare(String(current_password), user.password_hash))) {
     return res.status(400).json({ error: 'A senha atual está incorreta' })
   }
 
   const { error } = await supabase
     .from('fourbase_users')
-    .update({ password_hash: bcrypt.hashSync(new_password, 10) })
+    .update({ password_hash: await bcrypt.hash(new_password, 10) })
     .eq('id', req.user.id)
     .eq('workspace_id', workspaceOf(req))
   if (error) throw error
