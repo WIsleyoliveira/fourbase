@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api, getAuth, setAuth } from './api.js'
 import { tagColor } from './colors.js'
+import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath } from './routes.js'
 
 // Colunas padrão — usadas como fallback antes de qualquer persistência
 const DEFAULT_COLUMNS = [
@@ -92,27 +94,26 @@ const EQUIPE_VIEW = {
   subtitle: 'Acompanhe as tarefas e o progresso de todos',
 }
 
-// Token de ativação vindo do link de convite (/activate/:token). É a única
-// rota do app — não há react-router, então lemos direto do path.
-const activationTokenFromUrl = () => {
-  const match = window.location.pathname.match(/^\/activate\/([A-Za-z0-9._-]+)\/?$/)
-  return match ? match[1] : null
-}
-
 export default function App() {
-  const [activationToken, setActivationToken] = useState(activationTokenFromUrl)
+  const navigate = useNavigate()
+  const location = useLocation()
+  // A URL é a fonte da verdade da navegação (ver src/routes.js): tela, cliente
+  // aberto e sub-aba saem dela, o que dá deep link, botão voltar e F5 que
+  // mantém o lugar. /activate/:token é o link de convite.
+  const route = useMemo(
+    () => parseLocation(location.pathname, location.search),
+    [location.pathname, location.search],
+  )
+  const { activationToken, view, clientId: selectedClientId, tab: clientTab } = route
   const [session, setSession] = useState(getAuth)
-  const [view, setView] = useState('painel')
   const [tasks, setTasks] = useState([])
   const [notes, setNotes] = useState([])
   const [members, setMembers] = useState([])
   const [clients, setClients] = useState([])
   const [tags, setTags] = useState([])
-  // Cliente aberto no "Espaço dos Clientes" (null = listagem)
-  const [selectedClientId, setSelectedClientId] = useState(null)
-  // Sub-aba ativa dentro do Espaço do Cliente ('kanban' | 'docs') — controlada
-  // aqui para permitir abrir direto em Documentações (ex.: link de uma nota)
-  const [clientTab, setClientTab] = useState('kanban')
+  // Só depois que os clientes chegam dá para dizer que /clientes/:id aponta
+  // para um cliente que não existe (ver o efeito mais abaixo).
+  const [clientsLoaded, setClientsLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
   // Barra lateral recolhível — lembra a preferência entre sessões
@@ -172,6 +173,7 @@ export default function App() {
     api.getClients()
       .then((c) => { if (Array.isArray(c)) setClients(c) })
       .catch(() => { /* tabela fourbase_clients ainda não criada */ })
+      .finally(() => setClientsLoaded(true))
 
     // Etiquetas — tabela pode não existir ainda (antes da migração); falha silenciosa
     api.getTags()
@@ -200,7 +202,9 @@ export default function App() {
     setAuth(auth)
     setSession(auth)
     setLoading(true)
-    setView('painel')
+    // Quem chegou por um link direto (ex.: /kanban) entra nele; URL que não
+    // é tela (ex.: "/") vai para o painel.
+    if (!route.valid || route.activationToken) navigate(viewPath(DEFAULT_VIEW), { replace: true })
   }
 
   const logout = () => {
@@ -208,6 +212,8 @@ export default function App() {
     setSession(null)
     setTasks([])
     setNotes([])
+    setClientsLoaded(false)
+    navigate('/', { replace: true })
   }
 
   // Perfil salvo: o backend devolve {token, user} com um JWT novo (o nome vai
@@ -371,15 +377,13 @@ export default function App() {
       return
     }
     setTargetFolderId(folderId)
-    setClientTab('docs')
-    setSelectedClientId(clientId)
-    setView('clientes')
+    navigate(clientPath(clientId, 'docs'))
   }
 
   // Navega para a aba Notas já com a nota indicada selecionada
   const navigateToNote = (noteId) => {
     setTargetNoteId(noteId)
-    setView('notas')
+    navigate(viewPath('notas'))
   }
 
   // ---- convite de membro (gestor) ----
@@ -413,7 +417,7 @@ export default function App() {
   const deleteClient = (id, mode = 'archive') => {
     setClients((prev) => prev.filter((c) => c.id !== id))
     // Se o cliente aberto foi excluído, volta para a listagem
-    setSelectedClientId((prev) => (prev === id ? null : prev))
+    if (selectedClientId === id) navigate(viewPath('clientes'), { replace: true })
     return api.deleteClient(id, mode)
       .then(() => showToast(mode === 'cascade' ? 'Cliente e pastas excluídos.' : 'Cliente excluído; pastas arquivadas.'))
       .catch((err) => {
@@ -560,10 +564,27 @@ export default function App() {
 
   // Trocar de aba sempre volta o módulo de clientes para a listagem
   const changeView = (next) => {
-    setSelectedClientId(null)
-    setView(next)
+    navigate(viewPath(next))
     setMobileMenuOpen(false)
   }
+
+  // URL que não é uma tela, ou tela de gestor aberta por quem não é gestor,
+  // cai no painel (replace: não deixa a URL ruim no histórico).
+  const isGestorSession = session?.user?.role === 'gestor'
+  const blockedForRole = GESTOR_ONLY_VIEWS.includes(view) && !isGestorSession
+  useEffect(() => {
+    if (activationToken || !session) return
+    if (!route.valid || blockedForRole) navigate(viewPath(DEFAULT_VIEW), { replace: true })
+  }, [activationToken, session, route.valid, blockedForRole, navigate])
+
+  // /clientes/:id com um id que não existe (apagado, de outro workspace, link
+  // velho) volta para a listagem em vez de mostrar uma tela vazia.
+  useEffect(() => {
+    if (!session || !clientsLoaded || !selectedClientId) return
+    if (!clients.some((c) => c.id === selectedClientId)) {
+      navigate(viewPath('clientes'), { replace: true })
+    }
+  }, [session, clientsLoaded, clients, selectedClientId, navigate])
 
   // Fecha o drawer mobile com ESC, igual aos modais do app
   useEffect(() => {
@@ -574,28 +595,22 @@ export default function App() {
   }, [mobileMenuOpen])
 
   // Abre o Espaço de um cliente sempre começando pelo Kanban
-  const openClient = (id) => {
-    setSelectedClientId(id)
-    setClientTab('kanban')
-  }
+  const openClient = (id) => navigate(clientPath(id))
 
-  // Ativação de convite — única "rota" do app (não há react-router). O token
-  // sai do path; ao terminar, limpamos a URL. Convite inválido cai no Login;
-  // ativação bem-sucedida entra direto (a resposta do accept já tem token +
-  // user, mesmo formato do login normal — sem pedir e-mail/senha de novo).
+  // Troca de sub-aba (Kanban/Documentações) do Espaço do Cliente. replace: as
+  // abas não enchem o histórico — o botão voltar sai do cliente.
+  const changeClientTab = (tab) => navigate(clientPath(selectedClientId, tab), { replace: true })
+
+  // Ativação de convite (/activate/:token). Ao terminar, sai da URL do token.
+  // Convite inválido cai no Login; ativação bem-sucedida entra direto (a
+  // resposta do accept já tem token + user, mesmo formato do login normal —
+  // sem pedir e-mail/senha de novo).
   if (activationToken) {
     return (
       <Activate
         token={activationToken}
-        onActivated={() => {
-          window.history.replaceState({}, '', '/')
-          setActivationToken(null)
-        }}
-        onLogin={(auth) => {
-          window.history.replaceState({}, '', '/')
-          setActivationToken(null)
-          login(auth)
-        }}
+        onActivated={() => navigate('/', { replace: true })}
+        onLogin={login}
       />
     )
   }
@@ -680,10 +695,10 @@ export default function App() {
             columns={columns}
             tags={tags}
             tab={clientTab}
-            onTabChange={setClientTab}
+            onTabChange={changeClientTab}
             targetFolderId={targetFolderId}
             onConsumeTarget={() => setTargetFolderId(null)}
-            onBack={() => setSelectedClientId(null)}
+            onBack={() => navigate(viewPath('clientes'))}
             onAdd={addClientTask}
             onMove={moveClientTask}
             onUpdate={updateClientTask}
