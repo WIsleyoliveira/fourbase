@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { api, getAuth, setAuth } from './api.js'
 import { tagColor } from './colors.js'
+import { TASK_KEYS, mergeCalendarTasks } from './taskCache.js'
+import {
+  useClientLinkedTasks, useClientTaskStats, useClientTasks, useMyTasks, useTaskActions,
+} from './hooks/useTasks.js'
 import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath } from './routes.js'
+
+// Referências estáveis para "ainda sem dados" — um `[]` novo a cada render
+// invalidaria useMemo/memo nas telas.
+const EMPTY = []
+const EMPTY_OBJECT = {}
 
 // Colunas padrão — usadas como fallback antes de qualquer persistência
 const DEFAULT_COLUMNS = [
@@ -105,8 +115,8 @@ export default function App() {
     [location.pathname, location.search],
   )
   const { activationToken, view, clientId: selectedClientId, tab: clientTab } = route
+  const queryClient = useQueryClient()
   const [session, setSession] = useState(getAuth)
-  const [tasks, setTasks] = useState([])
   const [notes, setNotes] = useState([])
   const [members, setMembers] = useState([])
   const [clients, setClients] = useState([])
@@ -153,14 +163,39 @@ export default function App() {
     showToast(`Erro: ${err.message}`)
   }
 
+  // ---- tarefas (TanStack Query) ----
+  // Quatro visões da mesma coleção, todas no cache do Query (ver taskCache.js):
+  // minhas tarefas, quadro do cliente aberto, tarefas de cliente do Calendário
+  // e o progresso por cliente da listagem. Cada uma só busca quando a tela que
+  // a usa está aberta e se mantém atualizada sozinha (polling + foco da aba).
+  const sessionActive = Boolean(session) && !activationToken
+  const userId = session?.user?.id
+  const myTasksQuery = useMyTasks(userId, sessionActive)
+  const clientTasksQuery = useClientTasks(sessionActive ? selectedClientId : null)
+  const linkedTasksQuery = useClientLinkedTasks(sessionActive && view === 'calendario')
+  const statsQuery = useClientTaskStats(sessionActive && view === 'clientes' && !selectedClientId)
+  const tasks = myTasksQuery.data ?? EMPTY
+  const clientTasks = clientTasksQuery.data ?? EMPTY
+  const clientStats = statsQuery.data ?? EMPTY_OBJECT
+  const taskActions = useTaskActions({ userId, onError: handleError })
+
+  // Falha ao carregar tarefas avisa por toast; o cache segue com o último dado.
+  useEffect(() => { if (myTasksQuery.error) handleError(myTasksQuery.error) }, [myTasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (clientTasksQuery.error) handleError(clientTasksQuery.error) }, [clientTasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lista efetiva do Calendário: tarefas pessoais + tarefas de cliente de toda
+  // a equipe, sem duplicar a que está nas duas.
+  const calendarTasks = useMemo(
+    () => mergeCalendarTasks(tasks, linkedTasksQuery.data ?? EMPTY),
+    [tasks, linkedTasksQuery.data],
+  )
+
   const loadAll = useCallback(async () => {
     try {
-      const [t, n, mb] = await Promise.all([
-        api.getTasks(),
+      const [n, mb] = await Promise.all([
         api.getNotes(),
         api.getMembers(),
       ])
-      setTasks(t)
       setNotes(n)
       setMembers(mb)
     } catch (err) {
@@ -198,6 +233,12 @@ export default function App() {
     if (session && !activationToken) loadAll()
   }, [session, activationToken, loadAll])
 
+  // Recarga manual / recuperação de erro: também revalida as tarefas.
+  const refreshAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: TASK_KEYS.all })
+    return loadAll()
+  }, [queryClient, loadAll])
+
   const login = (auth) => {
     setAuth(auth)
     setSession(auth)
@@ -210,7 +251,9 @@ export default function App() {
   const logout = () => {
     setAuth(null)
     setSession(null)
-    setTasks([])
+    // Descarta o cache: a próxima pessoa a entrar neste navegador não pode
+    // ver nem por um instante os dados de quem saiu.
+    queryClient.clear()
     setNotes([])
     setClientsLoaded(false)
     navigate('/', { replace: true })
@@ -256,62 +299,25 @@ export default function App() {
     api.createColumn(newCol.label, key, newCol.position, color).catch(() => {})
   }
 
-  // ---- tarefas ----
-  const addTask = (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
-    api
-      .addTask(title, priority, due_date, assigned_to, description, client_id, tags)
-      .then((t) => setTasks((prev) => [...prev, t]))
-      .catch(handleError)
+  // ---- tarefas: ações (otimistas, em todas as listas do cache) ----
+  // Mover/atualizar/excluir valem igual no Kanban pessoal, no quadro do
+  // cliente, no Calendário e no Painel — o hook atualiza todas as listas.
+  const { addTask, addClientTask, moveTask, updateTask, deleteTask } = taskActions
 
   // Criação com o objeto completo, vinda do modal de especificações da tarefa
-  const createTask = (draft) =>
-    api
-      .createTask(draft)
-      .then((t) => {
-        setTasks((prev) => [...prev, t])
-        if (t.client_id) setClientLinkedTasks((prev) => [...prev, t])
-        showToast('Tarefa criada.')
-        return t
-      })
-      .catch(handleError)
+  const createTask = async (draft) => {
+    const t = await taskActions.createTask(draft)
+    if (t) showToast('Tarefa criada.')
+    return t
+  }
 
   const openSendToKanban = (title, description = '') => setKanbanDraft({ title, description })
 
-  const confirmSendToKanban = (data) =>
-    api
-      .addTask(data.title, data.priority, data.due_date, data.assigned_to, data.description)
-      .then((t) => {
-        setTasks((prev) => [...prev, t])
-        setKanbanDraft(null)
-        showToast('Enviado para o Kanban.')
-      })
-      .catch(handleError)
-
-  const moveTask = (id, column_key) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
-    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
-    api.moveTask(id, column_key).catch((err) => {
-      handleError(err)
-      loadAll()
-    })
-  }
-
-  const updateTask = (id, updates) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-    api.updateTask(id, updates).catch((err) => {
-      handleError(err)
-      loadAll()
-    })
-  }
-
-  const deleteTask = (id) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id))
-    setClientLinkedTasks((prev) => prev.filter((t) => t.id !== id))
-    api.deleteTask(id).catch((err) => {
-      handleError(err)
-      loadAll()
-    })
+  const confirmSendToKanban = async (data) => {
+    const t = await addTask(data.title, data.priority, data.due_date, data.assigned_to, data.description)
+    if (!t) return
+    setKanbanDraft(null)
+    showToast('Enviado para o Kanban.')
   }
 
   // Cria uma etiqueta nova (usada pelo TagPicker ao digitar um nome inexistente).
@@ -422,7 +428,7 @@ export default function App() {
       .then(() => showToast(mode === 'cascade' ? 'Cliente e pastas excluídos.' : 'Cliente excluído; pastas arquivadas.'))
       .catch((err) => {
         handleError(err)
-        loadAll()
+        refreshAll()
       })
   }
 
@@ -431,136 +437,6 @@ export default function App() {
     () => clients.find((c) => c.id === selectedClientId) || null,
     [clients, selectedClientId]
   )
-
-  // Backlog do Kanban do cliente — TODAS as tarefas daquele client_id, de
-  // qualquer responsável (não só as do usuário logado). `GET /api/tasks`
-  // filtra por `assigned_to = usuário logado`, então o Kanban do cliente
-  // precisa de uma busca própria para que um funcionário veja as atividades
-  // que outro funcionário/gestor colocou no quadro do mesmo cliente.
-  const [clientTasks, setClientTasks] = useState([])
-
-  // Progresso por cliente da listagem — vem agregado do servidor contando as
-  // tarefas de toda a equipe, não só as do usuário logado.
-  const [clientStats, setClientStats] = useState({})
-
-  const fetchClientStats = useCallback(() => {
-    api.getClientTaskStats()
-      .then((s) => { if (s && typeof s === 'object') setClientStats(s) })
-      .catch(() => { /* rota ainda não disponível — mantém o último valor */ })
-  }, [])
-
-  // Todas as tarefas vinculadas a algum cliente, de qualquer responsável —
-  // juntadas com `tasks` (pessoais) para o Calendário mostrar também o que a
-  // equipe agenda nos Kanbans de cliente, e não só o que está atribuído ao
-  // usuário logado.
-  const [clientLinkedTasks, setClientLinkedTasks] = useState([])
-
-  const fetchClientLinkedTasks = useCallback(() => {
-    api.getClientLinkedTasks()
-      .then((list) => { if (Array.isArray(list)) setClientLinkedTasks(list) })
-      .catch(() => { /* rota ainda não disponível — mantém o último valor */ })
-  }, [])
-
-  // Ativo enquanto o Calendário está aberto: carrega e revalida periodicamente
-  // (e ao voltar o foco pra aba) para refletir tarefas criadas/movidas por
-  // outras pessoas nos Kanbans de cliente, sem precisar de F5.
-  useEffect(() => {
-    if (view !== 'calendario') return
-    fetchClientLinkedTasks()
-    const poll = setInterval(fetchClientLinkedTasks, 15000)
-    window.addEventListener('focus', fetchClientLinkedTasks)
-    return () => {
-      clearInterval(poll)
-      window.removeEventListener('focus', fetchClientLinkedTasks)
-    }
-  }, [view, fetchClientLinkedTasks])
-
-  // Lista efetiva do Calendário: tarefas pessoais + tarefas de cliente de toda
-  // a equipe, sem duplicar quando a mesma tarefa aparece nas duas (ela é
-  // pessoal E de cliente ao mesmo tempo quando o responsável é o usuário logado).
-  const calendarTasks = useMemo(() => {
-    const merged = new Map(tasks.map((t) => [t.id, t]))
-    for (const t of clientLinkedTasks) merged.set(t.id, { ...merged.get(t.id), ...t })
-    return Array.from(merged.values())
-  }, [tasks, clientLinkedTasks])
-
-  const fetchClientTasks = useCallback((id) => {
-    if (!id) { setClientTasks([]); return }
-    api.getTasksByClient(id).then(setClientTasks).catch(handleError)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    fetchClientTasks(selectedClientId)
-  }, [selectedClientId, fetchClientTasks])
-
-  // Polling leve: mantém o quadro do cliente atualizado com o que outras
-  // pessoas da equipe adicionarem/moverem, sem precisar recarregar a página.
-  useEffect(() => {
-    if (!selectedClientId) return
-    const poll = setInterval(() => fetchClientTasks(selectedClientId), 6000)
-    const onFocus = () => fetchClientTasks(selectedClientId)
-    window.addEventListener('focus', onFocus)
-    return () => {
-      clearInterval(poll)
-      window.removeEventListener('focus', onFocus)
-    }
-  }, [selectedClientId, fetchClientTasks])
-
-  // Progresso da listagem de clientes: recarrega ao abrir a lista e enquanto
-  // ela estiver visível, para refletir o que a equipe concluiu sem exigir F5.
-  useEffect(() => {
-    if (view !== 'clientes' || selectedClientId) return
-    fetchClientStats()
-    const poll = setInterval(fetchClientStats, 15000)
-    window.addEventListener('focus', fetchClientStats)
-    return () => {
-      clearInterval(poll)
-      window.removeEventListener('focus', fetchClientStats)
-    }
-  }, [view, selectedClientId, fetchClientStats])
-
-  // CRUD do Kanban do cliente — atua sobre `clientTasks` (visão compartilhada
-  // de todo mundo) e replica em `tasks` quando a tarefa também pertence à
-  // lista pessoal do usuário logado, mantendo Painel/Calendário coerentes.
-  const addClientTask = (title, priority, due_date, assigned_to, description, client_id = null, tags = []) =>
-    api
-      .addTask(title, priority, due_date, assigned_to, description, client_id, tags)
-      .then((t) => {
-        setClientTasks((prev) => [...prev, t])
-        setClientLinkedTasks((prev) => [...prev, t])
-        if (t.assigned_to === user?.id) setTasks((prev) => [...prev, t])
-      })
-      .catch(handleError)
-
-  const moveClientTask = (id, column_key) => {
-    setClientTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
-    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, column_key } : t)))
-    api.moveTask(id, column_key).catch((err) => {
-      handleError(err)
-      fetchClientTasks(selectedClientId)
-    })
-  }
-
-  const updateClientTask = (id, updates) => {
-    setClientTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-    setClientLinkedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
-    api.updateTask(id, updates).catch((err) => {
-      handleError(err)
-      fetchClientTasks(selectedClientId)
-    })
-  }
-
-  const deleteClientTask = (id) => {
-    setClientTasks((prev) => prev.filter((t) => t.id !== id))
-    setClientLinkedTasks((prev) => prev.filter((t) => t.id !== id))
-    setTasks((prev) => prev.filter((t) => t.id !== id))
-    api.deleteTask(id).catch((err) => {
-      handleError(err)
-      fetchClientTasks(selectedClientId)
-    })
-  }
 
   // Trocar de aba sempre volta o módulo de clientes para a listagem
   const changeView = (next) => {
@@ -700,9 +576,9 @@ export default function App() {
             onConsumeTarget={() => setTargetFolderId(null)}
             onBack={() => navigate(viewPath('clientes'))}
             onAdd={addClientTask}
-            onMove={moveClientTask}
-            onUpdate={updateClientTask}
-            onDelete={deleteClientTask}
+            onMove={moveTask}
+            onUpdate={updateTask}
+            onDelete={deleteTask}
             onAddColumn={addColumn}
             onCreateTag={createTag}
             onError={handleError}
@@ -888,7 +764,7 @@ export default function App() {
             <IconLogout size={16} />
           </button>
         </div>
-        <button className="action" onClick={loadAll}>
+        <button className="action" onClick={refreshAll}>
           <IconRefresh />
           <span>Recarregar dados</span>
         </button>
