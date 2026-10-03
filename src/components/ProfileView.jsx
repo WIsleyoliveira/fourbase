@@ -85,6 +85,7 @@ export default function ProfileView({ currentUser, onProfileSaved, onToast, onEr
 
   const [savingProfile, setSavingProfile] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [savingNotify, setSavingNotify] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -194,6 +195,27 @@ export default function ProfileView({ currentUser, onProfileSaved, onToast, onEr
       onError(err)
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  // ── Notificações por e-mail ──────────────────────────────────────────────
+  // Sem valor salvo conta como ligado (mesmo padrão do servidor).
+  const notifyEmail = profile?.notify_email !== false
+
+  const toggleNotifyEmail = async () => {
+    if (savingNotify) return
+    setSavingNotify(true)
+    try {
+      const saved = await api.updateProfile({ notify_email: !notifyEmail })
+      setProfile(saved.user)
+      onProfileSaved(saved)
+      onToast(saved.user.notify_email === false
+        ? 'E-mails de notificação desativados.'
+        : 'E-mails de notificação ativados.')
+    } catch (err) {
+      onError(err)
+    } finally {
+      setSavingNotify(false)
     }
   }
 
@@ -415,7 +437,39 @@ export default function ProfileView({ currentUser, onProfileSaved, onToast, onEr
         </div>
       </form>
 
-      {/* ══ Card 3: Informações do sistema (somente leitura) ═══════════════ */}
+      {/* ══ Card 3: Notificações ═══════════════════════════════════════════ */}
+      <div className="panel profile-card">
+        <div className="panel-header">
+          <h3>
+            <IconMail size={15} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            Notificações
+          </h3>
+        </div>
+        <div className="profile-switch-row">
+          <div className="profile-switch-text">
+            <span id="notify-email-label" className="profile-switch-label">
+              Receber e-mails de notificação
+            </span>
+            <small id="notify-email-hint" className="profile-field-hint">
+              Você recebe um e-mail quando alguém menciona você ou atribui uma tarefa a você; o sino funciona nos dois casos.
+            </small>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            className="profile-switch"
+            aria-checked={notifyEmail}
+            aria-labelledby="notify-email-label"
+            aria-describedby="notify-email-hint"
+            aria-disabled={savingNotify}
+            onClick={toggleNotifyEmail}
+          >
+            <span className="profile-switch-thumb" />
+          </button>
+        </div>
+      </div>
+
+      {/* ══ Card 4: Informações do sistema (somente leitura) ═══════════════ */}
       <div className="panel profile-card">
         <div className="panel-header">
           <h3>
