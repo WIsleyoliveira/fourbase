@@ -13,7 +13,7 @@ export default router
 // de fora de propósito: e-mail é o identificador de login, role é prerrogativa
 // do gestor e o workspace não pode ser trocado por ninguém pela API.
 router.patch('/api/profile', auth, asyncRoute(async (req, res) => {
-  const { name, job_title, phone, color, avatar_url, has_completed_onboarding } = req.body
+  const { name, job_title, phone, color, avatar_url, has_completed_onboarding, notify_email } = req.body
   const updates = {}
   if (name !== undefined) {
     if (!name.trim()) return res.status(400).json({ error: 'O nome não pode ficar em branco' })
@@ -24,6 +24,7 @@ router.patch('/api/profile', auth, asyncRoute(async (req, res) => {
   if (color !== undefined) updates.color = normalizeColor(color)
   if (avatar_url !== undefined) updates.avatar_url = avatar_url || null
   if (has_completed_onboarding !== undefined) updates.has_completed_onboarding = Boolean(has_completed_onboarding)
+  if (notify_email !== undefined) updates.notify_email = Boolean(notify_email)
 
   const { data, error } = await supabase
     .from('fourbase_users')

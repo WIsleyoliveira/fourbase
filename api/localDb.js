@@ -35,6 +35,7 @@ const WORKSPACE_SCOPED = [
   'fourbase_clients',
   'fourbase_report_activities',
   'fourbase_tags',
+  'fourbase_notifications',
 ]
 
 const TABLES = ['weflow_workspaces', 'weflow_invitations', ...WORKSPACE_SCOPED]
@@ -52,6 +53,8 @@ const UNIQUE_COLUMNS = {
   fourbase_users: ['email'],
   fourbase_columns: [['workspace_id', 'key']],
   fourbase_tags: [['workspace_id', 'name']],
+  // Avisos de prazo: um por (usuário, tarefa, data); dedupe_key nulo não conflita
+  fourbase_notifications: [['user_id', 'dedupe_key']],
   weflow_invitations: ['token_hash'],
 }
 
@@ -59,7 +62,7 @@ const UNIQUE_COLUMNS = {
 const TIMESTAMPED = new Set([
   'fourbase_notes', 'fourbase_media', 'fourbase_folders', 'fourbase_folder_media',
   'fourbase_columns', 'fourbase_clients', 'fourbase_report_activities', 'fourbase_tasks',
-  'fourbase_tags', 'weflow_workspaces', 'weflow_invitations',
+  'fourbase_tags', 'fourbase_notifications', 'weflow_workspaces', 'weflow_invitations',
 ])
 
 // Etiquetas padrão enviadas pela Amanda — pré-cadastradas na primeira execução.
@@ -126,6 +129,7 @@ function seedDb() {
     ],
     fourbase_report_activities: [],
     fourbase_tags: DEFAULT_TAGS.map((t) => ({ id: randomUUID(), workspace_id: workspaceId, ...t, created_at: now })),
+    fourbase_notifications: [],
   }
 }
 

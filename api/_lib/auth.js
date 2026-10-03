@@ -45,6 +45,8 @@ export const publicUser = (u) => ({
   color: u.color ?? null,
   avatar_url: u.avatar_url ?? null,
   has_completed_onboarding: u.has_completed_onboarding ?? false,
+  // Usuários anteriores à migration não têm a coluna: contam como "ligado"
+  notify_email: u.notify_email ?? true,
   created_at: u.created_at ?? null,
 })
 
