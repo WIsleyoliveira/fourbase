@@ -65,6 +65,7 @@ export const api = {
 
   // tarefas
   getTasks: () => request('/api/tasks'),
+  getTask: (id) => request(`/api/tasks/${id}`),
   // todas as tarefas de um cliente (qualquer responsável) — usada pela aba Relatórios
   getTasksByClient: (clientId) => request(`/api/tasks/by-client/${clientId}`),
   // todas as tarefas vinculadas a QUALQUER cliente (qualquer responsável) — o
@@ -112,6 +113,11 @@ export const api = {
   // mode: 'archive' (desvincula as pastas) | 'cascade' (exclui as pastas)
   deleteClient: (id, mode = 'archive') =>
     request(`/api/clients/${id}?folders=${mode}`, { method: 'DELETE' }),
+
+  // sino de notificações — today é a data local do navegador (AAAA-MM-DD)
+  getNotifications: (today) => request(`/api/notifications?today=${encodeURIComponent(today)}`),
+  markNotificationRead: (id) => request(`/api/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllNotificationsRead: () => request('/api/notifications/read-all', { method: 'POST' }),
 
   // notas
   getNotes: () => request('/api/notes'),

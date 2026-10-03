@@ -7257,3 +7257,193 @@ textarea:focus {
     text-align: center;
   }
 }
+
+/* ── Sino de notificações ─────────────────────────────────────────────────
+   Um no .topbar (desktop) e outro no .mobile-topbar; cada breakpoint mostra um. */
+.notif-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.notif-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--primary-deep);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.18s ease, color 0.18s ease;
+}
+.notif-bell:hover,
+.notif-bell:focus-visible,
+.notif-bell[aria-expanded='true'] {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+.notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  border: 2px solid var(--white);
+}
+.notif-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 360px;
+  max-width: calc(100vw - 24px);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 30;
+  overflow: hidden;
+}
+.notif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.notif-readall {
+  border: none;
+  background: transparent;
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.notif-readall:hover,
+.notif-readall:focus-visible {
+  background: var(--primary-light);
+}
+.notif-empty {
+  padding: 22px 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.notif-list {
+  list-style: none;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.notif-list li:last-child .notif-item {
+  border-bottom: none;
+}
+.notif-item:hover,
+.notif-item:focus-visible {
+  background: var(--bg);
+}
+.notif-item.unread {
+  background: var(--primary-light);
+  color: var(--text);
+  font-weight: 600;
+}
+.notif-item.unread:hover,
+.notif-item.unread:focus-visible {
+  background: var(--primary-soft);
+}
+.notif-item-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+.notif-item.unread .notif-item-dot {
+  background: var(--primary);
+}
+.notif-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.notif-item-text {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+.notif-item-time {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.notif-wrap-mobile {
+  display: none;
+}
+.mobile-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+@media (max-width: 768px) {
+  .notif-wrap-desktop {
+    display: none;
+  }
+  .notif-wrap-mobile {
+    display: block;
+  }
+  .notif-wrap-mobile .notif-bell {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    color: #e8f7f8;
+  }
+  .notif-wrap-mobile .notif-bell:hover,
+  .notif-wrap-mobile .notif-bell:focus-visible,
+  .notif-wrap-mobile .notif-bell[aria-expanded='true'] {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .notif-wrap-mobile .notif-badge {
+    top: 2px;
+    right: 2px;
+    border-color: #0a2e33;
+  }
+  /* No celular o popover ocupa a largura da tela, sob o cabeçalho */
+  .notif-wrap-mobile {
+    position: static;
+  }
+  .notif-wrap-mobile .notif-popover {
+    position: fixed;
+    top: 64px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
+  }
+}

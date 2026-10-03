@@ -20,6 +20,7 @@ import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
+import NotificationBell from './components/NotificationBell.jsx'
 import {
   IconDashboard,
   IconKanban,
@@ -327,17 +328,20 @@ export default function App() {
           <span />
         </button>
         <img src="/fourbase-logo.png" alt="fourbase" className="mobile-topbar-logo" />
-        <button
-          className="mobile-topbar-profile"
-          title="Abrir Meu Perfil"
-          onClick={() => changeView('perfil')}
-        >
-          <div className="member-avatar">
-            {user.avatar_url
-              ? <img src={user.avatar_url} alt={user.name} />
-              : user.name.charAt(0).toUpperCase()}
-          </div>
-        </button>
+        <div className="mobile-topbar-actions">
+          <NotificationBell className="notif-wrap-mobile" />
+          <button
+            className="mobile-topbar-profile"
+            title="Abrir Meu Perfil"
+            onClick={() => changeView('perfil')}
+          >
+            <div className="member-avatar">
+              {user.avatar_url
+                ? <img src={user.avatar_url} alt={user.name} />
+                : user.name.charAt(0).toUpperCase()}
+            </div>
+          </button>
+        </div>
       </header>
 
       {/* Overlay escurecido atrás do drawer — clicar fecha o menu */}
@@ -451,6 +455,7 @@ export default function App() {
             <h2>{current.title}</h2>
             <p>{current.subtitle}</p>
           </div>
+          <NotificationBell className="notif-wrap-desktop" />
         </section>
         <section className="view" key={view}>
           {renderView()}
