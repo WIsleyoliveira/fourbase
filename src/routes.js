@@ -6,6 +6,7 @@
 //   /clientes/:id            Espaço do cliente (Kanban)
 //   /clientes/:id?aba=docs   Espaço do cliente, aba Documentações
 //   /activate/:token         Ativação de convite (link enviado pelo gestor)
+//   <qualquer tela>?tarefa=ID  Abre a tarefa em um painel somente leitura (avisos do sino)
 
 export const DEFAULT_VIEW = 'painel'
 
@@ -19,17 +20,20 @@ export const GESTOR_ONLY_VIEWS = ['relatorios', 'equipe', 'cadastro']
 
 const ACTIVATE_RE = /^\/activate\/([A-Za-z0-9._-]+)\/?$/
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]+$/
+const TASK_ID_RE = /^[A-Za-z0-9_-]+$/
 
 // Lê pathname + search e devolve o estado de navegação. `valid` é false quando
 // a URL não corresponde a nenhuma tela — o chamador redireciona para o painel.
 export function parseLocation(pathname, search = '') {
   const activate = pathname.match(ACTIVATE_RE)
   if (activate) {
-    return { activationToken: activate[1], view: DEFAULT_VIEW, clientId: null, tab: 'kanban', valid: true }
+    return { activationToken: activate[1], view: DEFAULT_VIEW, clientId: null, tab: 'kanban', taskId: null, valid: true }
   }
 
   const parts = pathname.split('/').filter(Boolean)
-  const base = { activationToken: null, view: DEFAULT_VIEW, clientId: null, tab: 'kanban' }
+  const rawTask = new URLSearchParams(search).get('tarefa')
+  const taskId = rawTask && TASK_ID_RE.test(rawTask) ? rawTask : null
+  const base = { activationToken: null, view: DEFAULT_VIEW, clientId: null, tab: 'kanban', taskId }
 
   if (parts.length === 0) return { ...base, valid: false }
   if (!VIEW_KEYS.includes(parts[0])) return { ...base, valid: false }
@@ -47,3 +51,13 @@ export const viewPath = (view) => `/${VIEW_KEYS.includes(view) ? view : DEFAULT_
 
 export const clientPath = (clientId, tab = 'kanban') =>
   `/clientes/${encodeURIComponent(clientId)}${tab === 'docs' ? '?aba=docs' : ''}`
+
+// Devolve o `search` com o parâmetro `tarefa` definido (ou removido, se taskId
+// for nulo), preservando os demais (ex.: ?aba=docs). Vazio quando não sobra nada.
+export function withTaskParam(search = '', taskId = null) {
+  const params = new URLSearchParams(search)
+  if (taskId) params.set('tarefa', taskId)
+  else params.delete('tarefa')
+  const qs = params.toString()
+  return qs ? `?${qs}` : ''
+}
