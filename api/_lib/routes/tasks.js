@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { supabase } from '../supabase.js'
-import { asyncRoute, appOrigin } from '../http.js'
+import { asyncRoute } from '../http.js'
 import { auth, workspaceOf } from '../auth.js'
 import { inWorkspace, validMemberIds } from '../validation.js'
 import { emitTaskNotifications } from '../notifications.js'
@@ -138,7 +138,7 @@ router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
     .single()
   if (error) throw error
   // Avisos de menção/atribuição (nunca lança; before = null na criação)
-  await emitTaskNotifications(null, data, { ...req.user, appUrl: appOrigin(req) })
+  await emitTaskNotifications(null, data, req.user)
   res.status(201).json(data)
 }))
 
@@ -231,7 +231,7 @@ router.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   const { data, error } = await query.select().single()
   if (error) throw error
   // Só depois de o update dar certo (a regra de autorização acima já valeu)
-  if (before) await emitTaskNotifications(before, data, { ...req.user, appUrl: appOrigin(req) })
+  if (before) await emitTaskNotifications(before, data, req.user)
   res.json(data)
 }))
 

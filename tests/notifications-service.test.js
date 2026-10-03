@@ -17,6 +17,8 @@ import bcrypt from 'bcryptjs'
 
 const PASSWORD = 'senha-teste-123'
 const now = new Date().toISOString()
+const APP_URL = 'https://app.fourbase.test'
+const originalAppUrl = process.env.APP_URL
 
 const wsA = randomUUID()
 const ids = {
@@ -76,11 +78,12 @@ let mails
 let pending
 let clock
 
-const call = async (who, method, url, body) => {
+const call = async (who, method, url, body, extraHeaders = {}) => {
   const res = await fetch(base + url, {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...extraHeaders,
       ...(tokens[who] ? { Authorization: `Bearer ${tokens[who]}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -107,7 +110,6 @@ before(async () => {
   fs.writeFileSync(dbPath, JSON.stringify(fixture))
   process.env.FOURBASE_DB_PATH = dbPath
   delete process.env.SUPABASE_URL
-  delete process.env.APP_URL
 
   ;({ supabase } = await import('../api/_lib/supabase.js'))
   ;({ setNotificationDeps, resetNotificationDeps } = await import('../api/_lib/notifications.js'))
@@ -123,11 +125,15 @@ before(async () => {
 })
 
 after(() => {
+  if (originalAppUrl === undefined) delete process.env.APP_URL
+  else process.env.APP_URL = originalAppUrl
   resetNotificationDeps?.()
   server?.close()
 })
 
 beforeEach(async () => {
+  // Os e-mails usam só APP_URL; cada teste parte dele definido
+  process.env.APP_URL = APP_URL
   mails = []
   pending = []
   clock = new Date()
@@ -216,7 +222,7 @@ test('e-mail: enviado para menção/atribuição com notify_email true; não env
 
   const mencao = mails.find((m) => m.to === 'func@a.test')
   assert.match(mencao.subject, /mencionou você/)
-  assert.ok(mencao.text.includes(`${base}/painel?tarefa=${c.body.id}`), 'link com a origem da requisição')
+  assert.ok(mencao.text.includes(`${APP_URL}/painel?tarefa=${c.body.id}`), 'link montado com APP_URL')
   const atribuicao = mails.find((m) => m.to === 'outro@a.test')
   assert.match(atribuicao.subject, /atribuiu a você/)
 
@@ -321,4 +327,43 @@ test('funcionário que se auto-atribui/menciona outros gera aviso com o nome do 
   assert.equal(mails.length, 1)
   assert.equal(mails[0].to, 'gestor@a.test')
   assert.match(mails[0].subject, /func@a\.test mencionou você/)
+})
+
+test('e-mail: com APP_URL definido, o link do corpo começa com APP_URL', async () => {
+  const c = await call('gestorA', 'POST', '/api/tasks', { title: 'Link', mentioned_users: [ids.funcA] })
+  assert.equal(c.status, 201)
+  await flush()
+  assert.equal(mails.length, 1)
+  assert.ok(mails[0].text.includes(`${APP_URL}/painel?tarefa=${c.body.id}`))
+  assert.ok(!mails[0].text.includes(base), 'não usa o host da requisição')
+})
+
+test('e-mail: Origin forjado na requisição é ignorado, o link vem sempre de APP_URL', async () => {
+  const c = await call('funcA', 'POST', '/api/tasks',
+    { title: 'Phishing?', mentioned_users: [ids.gestorA] },
+    { Origin: 'https://evil.example' })
+  assert.equal(c.status, 201)
+  const p = await call('funcA', 'PATCH', `/api/tasks/${c.body.id}`,
+    { mentioned_users: [ids.gestorA, ids.funcOutro] },
+    { Origin: 'https://evil.example' })
+  assert.equal(p.status, 200)
+  await flush()
+  assert.equal(mails.length, 2)
+  for (const m of mails) {
+    assert.ok(m.text.includes(`${APP_URL}/painel?tarefa=${c.body.id}`))
+    assert.ok(!m.text.includes('evil.example'), 'o Origin forjado nunca aparece no e-mail')
+  }
+})
+
+test('e-mail: sem APP_URL (mesmo com Origin forjado) não envia e-mail, mas cria o aviso do sino sem erro', async () => {
+  delete process.env.APP_URL
+  const c = await call('funcA', 'POST', '/api/tasks',
+    { title: 'Sem APP_URL', mentioned_users: [ids.gestorA] },
+    { Origin: 'https://evil.example' })
+  assert.equal(c.status, 201)
+  await flush()
+  assert.equal(mails.length, 0)
+  const doGestor = await notifsOf(ids.gestorA, c.body.id)
+  assert.equal(doGestor.length, 1)
+  assert.equal(doGestor[0].kind, 'mention')
 })

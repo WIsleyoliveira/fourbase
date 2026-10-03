@@ -22,8 +22,9 @@ export const setNotificationDeps = (deps = {}) => {
 }
 export const resetNotificationDeps = () => setNotificationDeps()
 
-// `actor`: { id, name, workspace_id, appUrl? } — appUrl é a origem usada no link
-// do e-mail (a rota preenche com a mesma origem do fluxo de convites).
+// `actor`: { id, name, workspace_id }. O link do e-mail usa SOMENTE APP_URL:
+// Origin/Host da requisição são controlados por quem chama e permitiriam que um
+// membro fizesse a plataforma enviar links para um domínio qualquer (phishing).
 export async function emitTaskNotifications(before, after, actor, deps = {}) {
   try {
     const d = { ...moduleDeps, ...deps }
@@ -41,9 +42,9 @@ export async function emitTaskNotifications(before, after, actor, deps = {}) {
     const items = diffTaskNotifications(before, after, actor.id, activeIds)
     if (items.length === 0) return
 
-    const appUrl = actor.appUrl || process.env.APP_URL
+    const appUrl = process.env.APP_URL
     if (!appUrl) {
-      console.warn('[notifications] origem do app indisponível (APP_URL/Origin): e-mails de aviso não serão enviados')
+      console.warn('[notifications] APP_URL não definido: e-mails de aviso não serão enviados')
     }
 
     const now = d.now()
