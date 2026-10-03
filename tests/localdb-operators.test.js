@@ -45,3 +45,10 @@ test('.limit(n) corta depois do order; 0 e n maior que o total se comportam como
   assert.deepEqual(names(await supabase.from('fourbase_tags').select('name').order('name').limit(100)), ['a', 'b', 'c', 'd'])
   assert.deepEqual((await supabase.from('fourbase_tags').select('name').limit(0)).data, [])
 })
+
+test('.neq(col, val) exclui só as linhas com aquele valor (usado para filtrar tarefas concluídas)', async () => {
+  const res = await supabase.from('fourbase_tags').select('name').neq('name', 'b').order('name')
+  assert.deepEqual(names(res), ['a', 'c', 'd'])
+  const none = await supabase.from('fourbase_tags').select('name').neq('workspace_id', ws)
+  assert.deepEqual(none.data, [])
+})

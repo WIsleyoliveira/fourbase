@@ -132,6 +132,9 @@ export async function materializeDueNotifications({ userId, workspaceId, today }
     .select('id, title, column_key, due_date, due_date_end')
     .eq('workspace_id', workspaceId)
     .eq('assigned_to', userId)
+    // Concluídas não geram nem mantêm aviso de prazo; filtrar no banco evita que
+    // o corte de 1000 linhas do Supabase real esconda tarefas abertas.
+    .neq('column_key', 'done')
   if (tasksError) throw tasksError
 
   const openTasks = new Map(
