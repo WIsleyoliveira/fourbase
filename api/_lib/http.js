@@ -1,5 +1,7 @@
-// Origem do app para montar links (convites, e-mails de aviso): APP_URL tem
-// prioridade; senão o Origin da requisição; senão protocolo + host.
+// Origem do app para montar o link de convite (/activate/:token): APP_URL tem
+// prioridade; senão o Origin da requisição; senão protocolo + host. Só o fluxo
+// de convite usa isto — os e-mails de notificação usam SOMENTE APP_URL (nunca o
+// Origin, que o chamador controla).
 export const appOrigin = (req) =>
   process.env.APP_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`
 

@@ -55,6 +55,8 @@ export const useTask = (id) =>
     queryFn: () => api.getTask(id),
     enabled: Boolean(id) && Boolean(getAuth()?.user?.id),
     retry: false,
+    // Uma tarefa editada/excluída nunca deve aparecer velha ao reabrir o link
+    staleTime: 0,
   })
 
 // ── Ações ───────────────────────────────────────────────────────────────────
