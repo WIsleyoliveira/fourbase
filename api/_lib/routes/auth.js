@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { supabase } from '../supabase.js'
 import { asyncRoute, appOrigin } from '../http.js'
-import { auth, gestorOnly, workspaceOf, signToken, publicUser, DUMMY_HASH } from '../auth.js'
+import { auth, gestorOnly, workspaceOf, signToken, publicUser, getDummyHash } from '../auth.js'
 
 const router = Router()
 export default router
@@ -18,7 +18,8 @@ router.post('/api/auth/login', asyncRoute(async (req, res) => {
     .eq('email', email.trim().toLowerCase())
     .maybeSingle()
   if (error) throw error
-  const passwordOk = await bcrypt.compare(String(password), user?.password_hash || DUMMY_HASH)
+  const dummyHash = getDummyHash()
+  const passwordOk = await bcrypt.compare(String(password), user?.password_hash || dummyHash)
   if (!user || !passwordOk) {
     return res.status(401).json({ error: 'E-mail ou senha incorretos' })
   }

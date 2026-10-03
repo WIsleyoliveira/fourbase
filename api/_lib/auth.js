@@ -14,14 +14,24 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fourbase-dev-secret-troque-em-prod
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 20,
+  // Só tentativas que falham (status >= 400) gastam o limite: vários logins
+  // legítimos atrás do mesmo IP (um escritório) não se bloqueiam.
+  skipSuccessfulRequests: true,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' },
 })
 
 // Hash usado quando o e-mail não existe, para o login levar o mesmo tempo nos
-// dois casos e não revelar quais e-mails têm conta.
-export const DUMMY_HASH = bcrypt.hashSync('fourbase-dummy-password', 10)
+// dois casos e não revelar quais e-mails têm conta. Calculado na primeira
+// chamada (e guardado): o bcrypt síncrono custa ~100 ms e não deve pesar em
+// todo cold start. O login o pede SEMPRE antes de comparar, então só o primeiro
+// login da instância paga o custo, exista a conta ou não.
+let dummyHash = null
+export const getDummyHash = () => {
+  if (!dummyHash) dummyHash = bcrypt.hashSync('fourbase-dummy-password', 10)
+  return dummyHash
+}
 
 // ---------- Auth ----------
 // O JWT carrega o workspace do usuário: toda consulta é filtrada por ele, e ele

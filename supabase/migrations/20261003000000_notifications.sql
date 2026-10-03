@@ -42,6 +42,11 @@ create unique index if not exists fourbase_notifications_dedupe_idx
 create index if not exists fourbase_notifications_user_created_idx
   on fourbase_notifications (user_id, created_at desc);
 
+-- Apagar uma tarefa apaga os avisos dela (on delete cascade): o índice evita
+-- varrer a tabela inteira nesse caso e nas consultas por tarefa.
+create index if not exists fourbase_notifications_task_idx
+  on fourbase_notifications (task_id);
+
 -- RLS ligado e SEM policies: anon/authenticated não alcançam a tabela, só a API
 -- (service_role). A migration 20261002000000_lock_down_table_rls.sql só varreu
 -- as tabelas que existiam quando rodou, então esta precisa ser explícita.
