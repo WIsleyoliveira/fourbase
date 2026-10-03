@@ -27,6 +27,9 @@ import {
 import { getPreview } from '../textPreview.js'
 import { supabase, CLIENT_MEDIA_BUCKET, storagePathFromUrl } from '../supabase.js'
 import { api } from '../api.js'
+import { useNoteActions, useNotes } from '../hooks/useNotes.js'
+
+const EMPTY_NOTES = []
 import { assigneeColor } from '../colors.js'
 
 // Grupo das pastas sem cliente vinculado (legado / criadas antes da migração)
@@ -564,13 +567,16 @@ function ancestorIds(folders, id) {
 // `clientId` — quando definido, o painel opera no escopo de um único cliente
 //              (usado pela aba "Documentos" dentro do Espaço do Cliente)
 export default function DocumentsView({
-  onError, targetFolderId, onConsumeTarget, onOpenNote, onUnlinkNote,
+  onError, targetFolderId, onConsumeTarget, onOpenNote,
   clients = [], clientId = null,
 }) {
+  // Notas: lista compartilhada (mesmo cache de Notas e Painel) — desvincular uma
+  // nota daqui reflete nas outras telas sem sincronização manual.
+  const notes = useNotes().data ?? EMPTY_NOTES
+  const { linkNoteFolder } = useNoteActions()
   const [folders, setFolders]           = useState([])
   // Clientes expandidos na árvore (no modo escopo não é usado)
   const [expandedClients, setExpandedClients] = useState(() => new Set())
-  const [notes, setNotes]               = useState([])
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
 
@@ -609,7 +615,6 @@ export default function DocumentsView({
 
   // ── Carregamento inicial ─────────────────────────────────────────────────
   useEffect(() => {
-    api.getNotes().then(setNotes).catch(() => {})
     api.getFolders()
       .then((all) => {
         // No modo escopo, trabalha apenas com as pastas do cliente ativo
@@ -801,13 +806,8 @@ export default function DocumentsView({
     }
   }
 
-  // Atualiza a cópia local de notas otimisticamente — este componente busca as notas
-  // uma vez ao montar e não escuta as mudanças feitas em App.jsx, então precisa refletir
-  // a alteração aqui também para a nota sumir imediatamente da árvore/galeria
-  const unlinkNote = (noteId) => {
-    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, folder_id: null } : n)))
-    onUnlinkNote(noteId)
-  }
+  // Desvincula a nota da pasta (otimista: some da árvore/galeria na hora)
+  const unlinkNote = (noteId) => linkNoteFolder(noteId, null)
 
   // Abre o modal de confirmação em vez de depender do confirm() nativo do
   // navegador — browsers suprimem/auto-rejeitam diálogos nativos repetidos

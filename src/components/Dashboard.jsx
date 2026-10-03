@@ -3,6 +3,7 @@ import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus } from '../
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import { useFolders } from '../hooks/useFolders.js'
+import { useNotes } from '../hooks/useNotes.js'
 import { memberColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -39,13 +40,15 @@ const dueLabel = (due_date, due_date_end, due_time) => {
 const EMPTY = []
 
 export default function Dashboard({
-  notes, members, clients, currentUser, columns, tags,
+  members, clients, currentUser, columns, tags,
   onNavigate, onCreateTask, onCreateTag,
 }) {
   const [detailTaskId, setDetailTaskId] = useState(null)
   const tasks = useMyTasks(currentUser.id).data ?? EMPTY
   const { updateTask: onUpdateTask, moveTask: onMoveTask, deleteTask: onDeleteTask } =
     useTaskActions({ userId: currentUser.id })
+  const notesQuery = useNotes()
+  const notes = notesQuery.data ?? EMPTY
   // null = ainda carregando — mantém o widget com o mesmo layout enquanto busca
   const folders = useFolders()
   const folderCount = folders.data ? folders.data.length : folders.isError ? 0 : null
@@ -81,7 +84,9 @@ export default function Dashboard({
       key: 'notas',
       icon: <IconNotes size={18} />,
       title: 'Notas',
-      subtitle: latestNote
+      subtitle: notesQuery.isLoading
+        ? 'Carregando...'
+        : latestNote
         ? `${notes.length} nota${notes.length === 1 ? '' : 's'} · última: "${latestNote.title || 'Sem título'}"`
         : 'Nenhuma nota criada ainda',
     },

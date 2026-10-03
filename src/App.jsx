@@ -5,6 +5,7 @@ import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
 import { tagColor } from './colors.js'
 import { TASK_KEYS } from './taskCache.js'
+import { NOTE_KEYS } from './noteCache.js'
 import {
   useClientTaskStats, useClientTasks, useMyTasks, useTaskActions,
 } from './hooks/useTasks.js'
@@ -118,7 +119,6 @@ export default function App() {
   const { activationToken, view, clientId: selectedClientId, tab: clientTab } = route
   const queryClient = useQueryClient()
   const [session, setSession] = useState(getAuth)
-  const [notes, setNotes] = useState([])
   const [members, setMembers] = useState([])
   const [clients, setClients] = useState([])
   const [tags, setTags] = useState([])
@@ -178,12 +178,7 @@ export default function App() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [n, mb] = await Promise.all([
-        api.getNotes(),
-        api.getMembers(),
-      ])
-      setNotes(n)
-      setMembers(mb)
+      setMembers(await api.getMembers())
     } catch (err) {
       handleError(err)
     } finally {
@@ -222,6 +217,7 @@ export default function App() {
   // Recarga manual / recuperação de erro: também revalida as tarefas.
   const refreshAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: TASK_KEYS.all })
+    queryClient.invalidateQueries({ queryKey: NOTE_KEYS.all })
     return loadAll()
   }, [queryClient, loadAll])
 
@@ -240,7 +236,6 @@ export default function App() {
     // Descarta o cache: a próxima pessoa a entrar neste navegador não pode
     // ver nem por um instante os dados de quem saiu.
     queryClient.clear()
-    setNotes([])
     setClientsLoaded(false)
     navigate('/', { replace: true })
   }
@@ -306,51 +301,6 @@ export default function App() {
       setTags((prev) => (prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]))
       return tag
     }).catch((err) => { handleError(err); throw err })
-
-  // ---- notas ----
-  const createNote = () =>
-    api
-      .createNote('Nova nota', '')
-      .then((n) => {
-        setNotes((prev) => [n, ...prev])
-        return n
-      })
-      .catch((err) => {
-        handleError(err)
-        return null
-      })
-
-  const saveNote = (id, title, content) =>
-    api
-      .updateNote(id, title, content)
-      .then((n) => {
-        setNotes((prev) => {
-          const rest = prev.filter((x) => x.id !== id)
-          return [n, ...rest]
-        })
-        showToast('Nota salva.')
-      })
-      .catch(handleError)
-
-  const deleteNote = (id) => {
-    setNotes((prev) => prev.filter((n) => n.id !== id))
-    api.deleteNote(id).catch((err) => {
-      handleError(err)
-      loadAll()
-    })
-  }
-
-  const linkNoteFolder = (id, folderId) =>
-    api
-      .updateNoteFolder(id, folderId)
-      .then((n) => setNotes((prev) => prev.map((x) => (x.id === id ? n : x))))
-      .catch(handleError)
-
-  const updateNoteAttachments = (id, attachments) =>
-    api
-      .updateNoteAttachments(id, attachments)
-      .then((n) => setNotes((prev) => prev.map((x) => (x.id === id ? n : x))))
-      .catch(handleError)
 
   // Navega para o Espaço do Cliente dono da pasta, já na sub-aba Documentações
   // com a pasta indicada aberta/selecionada. Documentações não existe mais como
@@ -514,14 +464,8 @@ export default function App() {
       case 'notas':
         return (
           <NotesView
-            notes={notes}
             currentUser={user}
-            onCreate={createNote}
-            onSave={saveNote}
-            onDelete={deleteNote}
             onSendToKanban={openSendToKanban}
-            onLinkFolder={linkNoteFolder}
-            onUpdateAttachments={updateNoteAttachments}
             onNavigateToFolder={navigateToFolder}
             targetNoteId={targetNoteId}
             onConsumeNoteTarget={() => setTargetNoteId(null)}
@@ -557,7 +501,6 @@ export default function App() {
             onCreateTag={createTag}
             onError={handleError}
             onOpenNote={navigateToNote}
-            onUnlinkNote={(id) => linkNoteFolder(id, null)}
           />
         ) : (
           <ClientsView
@@ -592,7 +535,6 @@ export default function App() {
       default:
         return (
           <Dashboard
-            notes={notes}
             members={members}
             clients={clients}
             currentUser={user}

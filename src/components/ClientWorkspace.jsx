@@ -17,7 +17,7 @@ const TABS = [
 export default function ClientWorkspace({
   client, tasks, members, currentUser, columns, tags,
   onBack, onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag,
-  onError, onOpenNote, onUnlinkNote,
+  onError, onOpenNote,
   tab: controlledTab, onTabChange, targetFolderId, onConsumeTarget,
 }) {
   const [internalTab, setInternalTab] = useState('kanban')
@@ -133,7 +133,6 @@ export default function ClientWorkspace({
           targetFolderId={targetFolderId}
           onConsumeTarget={onConsumeTarget}
           onOpenNote={onOpenNote}
-          onUnlinkNote={onUnlinkNote}
         />
       )}
     </div>
