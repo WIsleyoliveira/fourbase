@@ -4,6 +4,7 @@ import { asyncRoute } from '../http.js'
 import { auth, workspaceOf } from '../auth.js'
 import { inWorkspace, validMemberIds } from '../validation.js'
 import { emitTaskNotifications } from '../notifications.js'
+import { canViewTask } from '../notificationRules.js'
 
 const router = Router()
 export default router
@@ -80,6 +81,23 @@ router.get('/api/tasks/client-stats', auth, asyncRoute(async (req, res) => {
     s.progress = s.total ? Math.round((s.done / s.total) * 100) : 0
   }
   res.json(map)
+}))
+
+// Uma tarefa pelo id (usada ao abrir o aviso do sino). DEVE ficar depois das
+// rotas fixas acima (by-client, client-linked, client-stats), senão o :id as
+// engoliria. Inexistente, de outro workspace ou sem permissão: o mesmo 404.
+router.get('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
+  const { data, error } = await supabase
+    .from('fourbase_tasks')
+    .select('*')
+    .eq('id', req.params.id)
+    .eq('workspace_id', workspaceOf(req))
+    .single()
+  if (error) throw error
+  if (!canViewTask(data, req.user)) {
+    return res.status(404).json({ error: 'Registro não encontrado' })
+  }
+  res.json(data)
 }))
 
 router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
