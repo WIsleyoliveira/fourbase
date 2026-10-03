@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { IconUserCheck, IconBuilding, IconPlus } from '../icons.jsx'
 import TeamMemberModal from './TeamMemberModal.jsx'
 import ClientModal from './ClientModal.jsx'
+import { useClientActions } from '../hooks/useWorkspaceData.js'
 
 // Central de Cadastros — ponto de partida para cadastrar membros da equipe e clientes.
-export default function RegistryView({ isGestor, onCreateMember, onCreateClient }) {
+export default function RegistryView({ isGestor, onCreateMember }) {
+  const { createClient: onCreateClient } = useClientActions()
   const [openModal, setOpenModal] = useState(null) // 'member' | 'client' | null
 
   const cards = [

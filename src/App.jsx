@@ -3,40 +3,16 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
-import { tagColor } from './colors.js'
-import { TASK_KEYS } from './taskCache.js'
-import { NOTE_KEYS } from './noteCache.js'
+import { useClientTasks, useMyTasks, useTaskActions } from './hooks/useTasks.js'
 import {
-  useClientTaskStats, useClientTasks, useMyTasks, useTaskActions,
-} from './hooks/useTasks.js'
+  useClientActions, useClients, useColumnActions, useColumns, useTagActions, useTags,
+} from './hooks/useWorkspaceData.js'
 import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath } from './routes.js'
 
 // Referências estáveis para "ainda sem dados" — um `[]` novo a cada render
 // invalidaria useMemo/memo nas telas.
 const EMPTY = []
-const EMPTY_OBJECT = {}
 
-// Colunas padrão — usadas como fallback antes de qualquer persistência
-const DEFAULT_COLUMNS = [
-  { id: 'col-todo',  key: 'todo',  label: 'A Fazer',       position: 0, color: '#9ca3af' },
-  { id: 'col-doing', key: 'doing', label: 'Em Progresso',  position: 1, color: '#14b8c4' },
-  { id: 'col-done',  key: 'done',  label: 'Concluído',     position: 2, color: '#2ec27e' },
-]
-
-// Paleta de cores para novas colunas (evita conflito com as 3 padrão)
-const EXTRA_COLORS = ['#a855f7', '#f2a93b', '#e85d75', '#4f8ff7', '#f97316', '#0ea5e9', '#ec4899']
-
-const colsLsKey = (uid) => `fb_cols_${uid}`
-
-// Gera um slug URL-safe + sufixo único baseado em timestamp
-const toColKey = (label) => {
-  const slug = label
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'col'
-  return `${slug}-${Date.now().toString(36)}`
-}
 import Login from './components/Login.jsx'
 import Activate from './components/Activate.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -120,11 +96,6 @@ export default function App() {
   const queryClient = useQueryClient()
   const [session, setSession] = useState(getAuth)
   const [members, setMembers] = useState([])
-  const [clients, setClients] = useState([])
-  const [tags, setTags] = useState([])
-  // Só depois que os clientes chegam dá para dizer que /clientes/:id aponta
-  // para um cliente que não existe (ver o efeito mais abaixo).
-  const [clientsLoaded, setClientsLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   // Barra lateral recolhível — lembra a preferência entre sessões
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('fb_sidebar_open') !== '0')
@@ -142,34 +113,31 @@ export default function App() {
   const [targetFolderId, setTargetFolderId] = useState(null)
   const [targetNoteId, setTargetNoteId] = useState(null)
 
-  // Colunas do Kanban — inicializa do localStorage; sincroniza com a API quando disponível
-  const [columns, setColumns] = useState(() => {
-    const auth = getAuth()
-    if (!auth?.user?.id) return DEFAULT_COLUMNS
-    try {
-      const saved = JSON.parse(localStorage.getItem(colsLsKey(auth.user.id)) || 'null')
-      if (Array.isArray(saved) && saved.length > 0) return saved
-    } catch {}
-    return DEFAULT_COLUMNS
-  })
-
   const { showToast, handleError } = useToast()
+
+  // ---- clientes, etiquetas e colunas (TanStack Query) ----
+  // Cada tela lê estas listas direto do cache; aqui ficam as que o App ainda
+  // repassa por props (Kanban e quadro do cliente) e o cliente aberto na URL.
+  const clientsQuery = useClients()
+  const clients = clientsQuery.data ?? EMPTY
+  const tags = useTags().data ?? EMPTY
+  const columns = useColumns().data
+  const { createTag } = useTagActions()
+  const { addColumn } = useColumnActions()
 
   // ---- tarefas (TanStack Query) ----
   // Visões da mesma coleção, todas no cache do Query (ver taskCache.js). Aqui
   // ficam as que o App ainda repassa por props (Kanban, quadro do cliente,
-  // progresso da lista de clientes); Calendário e Painel leem o cache sozinhos.
+  // calendário e painel leem o cache sozinhos).
   const sessionActive = Boolean(session) && !activationToken
   const userId = session?.user?.id
   const myTasksQuery = useMyTasks(userId, sessionActive)
   const clientTasksQuery = useClientTasks(sessionActive ? selectedClientId : null)
-  const statsQuery = useClientTaskStats(sessionActive && view === 'clientes' && !selectedClientId)
   const tasks = myTasksQuery.data ?? EMPTY
   // Spinner da primeira carga: dados gerais + tarefas (sem isso Kanban/Painel
   // piscariam vazios antes de a lista chegar).
   const busy = loading || myTasksQuery.isLoading
   const clientTasks = clientTasksQuery.data ?? EMPTY
-  const clientStats = statsQuery.data ?? EMPTY_OBJECT
   const taskActions = useTaskActions({ userId })
 
   // Falha ao carregar tarefas avisa por toast; o cache segue com o último dado.
@@ -184,30 +152,6 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-
-    // Clientes — tabela pode não existir ainda (antes da migração); falha silenciosa
-    api.getClients()
-      .then((c) => { if (Array.isArray(c)) setClients(c) })
-      .catch(() => { /* tabela fourbase_clients ainda não criada */ })
-      .finally(() => setClientsLoaded(true))
-
-    // Etiquetas — tabela pode não existir ainda (antes da migração); falha silenciosa
-    api.getTags()
-      .then((tg) => { if (Array.isArray(tg)) setTags(tg) })
-      .catch(() => { /* tabela fourbase_tags ainda não criada */ })
-
-    // Tenta carregar colunas da API (tabela pode não existir ainda — falha silenciosa)
-    api.getColumns()
-      .then((cols) => {
-        if (Array.isArray(cols) && cols.length > 0) {
-          setColumns(cols)
-          const auth = getAuth()
-          if (auth?.user?.id) {
-            localStorage.setItem(colsLsKey(auth.user.id), JSON.stringify(cols))
-          }
-        }
-      })
-      .catch(() => { /* tabela ainda não criada — usa localStorage/padrão */ })
   }, [])
 
   useEffect(() => {
@@ -216,8 +160,7 @@ export default function App() {
 
   // Recarga manual / recuperação de erro: também revalida as tarefas.
   const refreshAll = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: TASK_KEYS.all })
-    queryClient.invalidateQueries({ queryKey: NOTE_KEYS.all })
+    queryClient.invalidateQueries() // revalida todo o cache (tarefas, notas, clientes…)
     return loadAll()
   }, [queryClient, loadAll])
 
@@ -236,7 +179,6 @@ export default function App() {
     // Descarta o cache: a próxima pessoa a entrar neste navegador não pode
     // ver nem por um instante os dados de quem saiu.
     queryClient.clear()
-    setClientsLoaded(false)
     navigate('/', { replace: true })
   }
 
@@ -263,23 +205,6 @@ export default function App() {
       .then(applyProfileUpdate)
       .catch(handleError)
 
-  // ---- colunas ----
-  const addColumn = (label) => {
-    const key = toColKey(label)
-    const color = EXTRA_COLORS[columns.length % EXTRA_COLORS.length]
-    const newCol = { id: `col-${key}`, key, label: label.trim(), position: columns.length, color }
-
-    setColumns((prev) => {
-      const next = [...prev, newCol]
-      const auth = getAuth()
-      if (auth?.user?.id) localStorage.setItem(colsLsKey(auth.user.id), JSON.stringify(next))
-      return next
-    })
-
-    // Tenta sincronizar com o banco — silencioso se a tabela ainda não existir
-    api.createColumn(newCol.label, key, newCol.position, color).catch(() => {})
-  }
-
   // ---- tarefas: ações (otimistas, em todas as listas do cache) ----
   // Mover/atualizar/excluir valem igual no Kanban pessoal, no quadro do
   // cliente, no Calendário e no Painel — o hook atualiza todas as listas.
@@ -293,14 +218,6 @@ export default function App() {
     setKanbanDraft(null)
     showToast('Enviado para o Kanban.')
   }
-
-  // Cria uma etiqueta nova (usada pelo TagPicker ao digitar um nome inexistente).
-  // Se o nome já existir, a API devolve a etiqueta existente em vez de duplicar.
-  const createTag = (name) =>
-    api.createTag(name.trim(), tagColor(name.trim(), tags)).then((tag) => {
-      setTags((prev) => (prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]))
-      return tag
-    }).catch((err) => { handleError(err); throw err })
 
   // Navega para o Espaço do Cliente dono da pasta, já na sub-aba Documentações
   // com a pasta indicada aberta/selecionada. Documentações não existe mais como
@@ -332,35 +249,6 @@ export default function App() {
     })
     // erro propagado para o modal exibir a mensagem
 
-  // ---- clientes ----
-  const createClient = (client) =>
-    api.createClient(client).then((c) => {
-      setClients((prev) => [c, ...prev])
-      showToast('Cliente cadastrado.')
-      return c
-    }).catch((err) => { handleError(err); throw err })
-
-  const updateClient = (id, updates) =>
-    api.updateClient(id, updates).then((c) => {
-      setClients((prev) => prev.map((x) => (x.id === id ? c : x)))
-      showToast('Cliente atualizado.')
-      return c
-    }).catch((err) => { handleError(err); throw err })
-
-  // mode: 'archive' mantém as pastas de documentação (desvinculadas) |
-  //       'cascade' exclui as pastas do cliente
-  const deleteClient = (id, mode = 'archive') => {
-    setClients((prev) => prev.filter((c) => c.id !== id))
-    // Se o cliente aberto foi excluído, volta para a listagem
-    if (selectedClientId === id) navigate(viewPath('clientes'), { replace: true })
-    return api.deleteClient(id, mode)
-      .then(() => showToast(mode === 'cascade' ? 'Cliente e pastas excluídos.' : 'Cliente excluído; pastas arquivadas.'))
-      .catch((err) => {
-        handleError(err)
-        refreshAll()
-      })
-  }
-
   // Cliente aberto no workspace
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === selectedClientId) || null,
@@ -385,11 +273,11 @@ export default function App() {
   // /clientes/:id com um id que não existe (apagado, de outro workspace, link
   // velho) volta para a listagem em vez de mostrar uma tela vazia.
   useEffect(() => {
-    if (!session || !clientsLoaded || !selectedClientId) return
+    if (!session || clientsQuery.isPending || !selectedClientId) return
     if (!clients.some((c) => c.id === selectedClientId)) {
       navigate(viewPath('clientes'), { replace: true })
     }
-  }, [session, clientsLoaded, clients, selectedClientId, navigate])
+  }, [session, clientsQuery.isPending, clients, selectedClientId, navigate])
 
   // Fecha o drawer mobile com ESC, igual aos modais do app
   useEffect(() => {
@@ -452,14 +340,7 @@ export default function App() {
         )
       case 'calendario':
         return (
-          <Calendar
-            members={members}
-            clients={clients}
-            currentUser={user}
-            columns={columns}
-            tags={tags}
-            onCreateTag={createTag}
-          />
+          <Calendar members={members} currentUser={user} />
         )
       case 'notas':
         return (
@@ -476,7 +357,6 @@ export default function App() {
           <RegistryView
             isGestor={isGestor}
             onCreateMember={inviteMember}
-            onCreateClient={createClient}
           />
         )
       case 'clientes':
@@ -503,13 +383,7 @@ export default function App() {
             onOpenNote={navigateToNote}
           />
         ) : (
-          <ClientsView
-            clients={clients}
-            taskStats={clientStats}
-            onUpdate={updateClient}
-            onDelete={deleteClient}
-            onOpenClient={openClient}
-          />
+          <ClientsView onOpenClient={openClient} />
         )
       case 'equipe':
         return isGestor ? <TeamView onError={handleError} /> : null
@@ -524,25 +398,15 @@ export default function App() {
         )
       case 'relatorios':
         return isGestor ? (
-          <ReportsView
-            members={members}
-            clients={clients}
-            columns={columns}
-            currentUser={user}
-            onError={handleError}
-          />
+          <ReportsView members={members} currentUser={user} onError={handleError} />
         ) : null
       default:
         return (
           <Dashboard
             members={members}
-            clients={clients}
             currentUser={user}
-            columns={columns}
-            tags={tags}
             onNavigate={changeView}
             onCreateTask={() => openSendToKanban('', '')}
-            onCreateTag={createTag}
           />
         )
     }

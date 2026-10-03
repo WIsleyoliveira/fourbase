@@ -5,6 +5,11 @@ import {
 } from '../icons.jsx'
 import ClientModal from './ClientModal.jsx'
 import { assigneeColor } from '../colors.js'
+import { useClientTaskStats } from '../hooks/useTasks.js'
+import { useClientActions, useClients } from '../hooks/useWorkspaceData.js'
+
+const NO_CLIENTS = []
+const NO_STATS = {}
 
 const VIEW_MODES = [
   { key: 'grid',  icon: IconLayoutGrid, label: 'Catálogo' },
@@ -134,7 +139,13 @@ function ClientProgress({ stats }) {
   )
 }
 
-export default function ClientsView({ clients, taskStats = {}, onUpdate, onDelete, onOpenClient }) {
+export default function ClientsView({ onOpenClient }) {
+  const clientsQuery = useClients()
+  const clients = clientsQuery.data ?? NO_CLIENTS
+  const { updateClient: onUpdate, deleteClient: onDelete } = useClientActions()
+  // Progresso por cliente: agregado do servidor (conta as tarefas de toda a equipe).
+  // Revalida a cada 15 s enquanto a lista está aberta e ao voltar o foco da aba.
+  const taskStats = useClientTaskStats(true).data ?? NO_STATS
   const [search, setSearch] = useState('')
   const [mode, setMode] = useState(storedMode)
   const [editing, setEditing] = useState(null)
@@ -316,7 +327,9 @@ export default function ClientsView({ clients, taskStats = {}, onUpdate, onDelet
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {clientsQuery.isLoading ? (
+        <div className="empty-hint">Carregando clientes...</div>
+      ) : filtered.length === 0 ? (
         <div className="empty-hint">
           {clients.length === 0
             ? 'Nenhum cliente cadastrado ainda. Use a aba Cadastro para adicionar.'

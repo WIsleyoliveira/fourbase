@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { mergeCalendarTasks } from '../taskCache.js'
 import { useClientLinkedTasks, useMyTasks, useTaskActions } from '../hooks/useTasks.js'
+import { useClients, useColumns, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -47,7 +48,11 @@ const COLLAPSE_MS = 280
 
 const EMPTY = []
 
-export default function Calendar({ members, clients = [], currentUser, columns, tags = [], onCreateTag }) {
+export default function Calendar({ members, currentUser }) {
+  const clients = useClients().data ?? EMPTY
+  const columns = useColumns().data
+  const tags = useTags().data ?? EMPTY
+  const { createTag: onCreateTag } = useTagActions()
   // Tarefas pessoais + tarefas de cliente de toda a equipe (sem duplicar a que está
   // nas duas). Lê direto do cache; a lista de clientes revalida a cada 15 s e ao
   // voltar o foco da aba, para mostrar o que a equipe agenda sem F5.

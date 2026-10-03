@@ -4,6 +4,7 @@ import TaskDetailModal from './TaskDetailModal.jsx'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import { useFolders } from '../hooks/useFolders.js'
 import { useNotes } from '../hooks/useNotes.js'
+import { useClients, useColumns, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
 import { memberColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -40,9 +41,13 @@ const dueLabel = (due_date, due_date_end, due_time) => {
 const EMPTY = []
 
 export default function Dashboard({
-  members, clients, currentUser, columns, tags,
-  onNavigate, onCreateTask, onCreateTag,
+  members, currentUser,
+  onNavigate, onCreateTask,
 }) {
+  const clients = useClients().data ?? EMPTY
+  const columns = useColumns().data
+  const tags = useTags().data ?? EMPTY
+  const { createTag: onCreateTag } = useTagActions()
   const [detailTaskId, setDetailTaskId] = useState(null)
   const tasks = useMyTasks(currentUser.id).data ?? EMPTY
   const { updateTask: onUpdateTask, moveTask: onMoveTask, deleteTask: onDeleteTask } =

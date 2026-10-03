@@ -8,10 +8,10 @@ import {
   IconHeading, IconParagraph,
   IconFolderFilled, IconClose, IconPaperclip, IconBuilding, IconFilePdf,
 } from '../icons.jsx'
-import { api } from '../api.js'
 import { useToast } from '../toast.jsx'
 import { useNoteActions, useNotes } from '../hooks/useNotes.js'
 import { useFolders } from '../hooks/useFolders.js'
+import { useClients } from '../hooks/useWorkspaceData.js'
 import { getPreview } from '../textPreview.js'
 import { supabase, NOTE_FILES_BUCKET, storagePathFromUrl } from '../supabase.js'
 import NoteAttachments, { extOf, isImageAttachment } from './NoteAttachments.jsx'
@@ -76,7 +76,7 @@ function NotesWorkspace({
   // Pastas de Documentações (carregadas à parte, só para o seletor "Relacionar")
   // Pastas de Documentações — usadas no badge e no seletor "Relacionar"
   const folders = useFolders().data ?? EMPTY
-  const [clients, setClients]         = useState([])
+  const clients = useClients().data ?? EMPTY
   const [relateOpen, setRelateOpen]   = useState(false)
   const [relateSearch, setRelateSearch] = useState('')
   const relateRef = useRef(null)
@@ -135,11 +135,6 @@ function NotesWorkspace({
       setActiveId(notes[0]?.id ?? null)
     }
   }, [notes]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Carrega os clientes — só para mostrar de quem é a pasta no seletor "Relacionar"
-  useEffect(() => {
-    api.getClients().then(setClients).catch(() => {})
-  }, [])
 
   // Consome o alvo de navegação vindo de Documentações (só precisa disparar uma vez, ao montar)
   useEffect(() => {
