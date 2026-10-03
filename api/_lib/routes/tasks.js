@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { supabase } from '../supabase.js'
-import { asyncRoute } from '../http.js'
+import { asyncRoute, appOrigin } from '../http.js'
 import { auth, workspaceOf } from '../auth.js'
 import { inWorkspace, validMemberIds } from '../validation.js'
+import { emitTaskNotifications } from '../notifications.js'
 
 const router = Router()
 export default router
@@ -136,6 +137,8 @@ router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
     .select()
     .single()
   if (error) throw error
+  // Avisos de menção/atribuição (nunca lança; before = null na criação)
+  await emitTaskNotifications(null, data, { ...req.user, appUrl: appOrigin(req) })
   res.status(201).json(data)
 }))
 
@@ -207,6 +210,18 @@ router.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   if (tags !== undefined) updates.tags = Array.isArray(tags) ? tags : []
   if (mentioned_users !== undefined) updates.mentioned_users = await validMemberIds(mentioned_users, workspaceId)
 
+  // Só lê a tarefa antes quando o corpo pode gerar aviso (responsável/menções)
+  let before = null
+  if (assigned_to !== undefined || mentioned_users !== undefined) {
+    const { data: row } = await supabase
+      .from('fourbase_tasks')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle()
+    before = row
+  }
+
   const query = supabase
     .from('fourbase_tasks')
     .update(updates)
@@ -215,6 +230,8 @@ router.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   if (req.user.role !== 'gestor') query.eq('assigned_to', req.user.id)
   const { data, error } = await query.select().single()
   if (error) throw error
+  // Só depois de o update dar certo (a regra de autorização acima já valeu)
+  if (before) await emitTaskNotifications(before, data, { ...req.user, appUrl: appOrigin(req) })
   res.json(data)
 }))
 

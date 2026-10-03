@@ -3,7 +3,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { supabase } from '../supabase.js'
-import { asyncRoute } from '../http.js'
+import { asyncRoute, appOrigin } from '../http.js'
 import { auth, gestorOnly, workspaceOf, signToken, publicUser, DUMMY_HASH } from '../auth.js'
 
 const router = Router()
@@ -79,9 +79,6 @@ const publicInvitation = (inv) => ({
   accepted_at: inv.accepted_at ?? null,
   created_at: inv.created_at ?? null,
 })
-
-const appOrigin = (req) =>
-  process.env.APP_URL || req.headers.origin || `${req.protocol}://${req.get('host')}`
 
 router.post('/api/members/invite', auth, gestorOnly, asyncRoute(async (req, res) => {
   const { name, email, role = 'funcionario', job_title = '' } = req.body
