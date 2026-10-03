@@ -429,3 +429,39 @@ test('/api/tasks/client-stats continua funcionando (ordem de rotas)', async () =
   assert.equal(byClient.status, 200)
   assert.equal(byClient.body.length, 2)
 })
+
+test('due_soon vira overdue: depois que o prazo passa só o aviso de atrasada aparece (uma linha)', async () => {
+  // Prazo D = data do servidor. Dentro da tolerância de ±1 dia do `today`:
+  // D-1 (véspera, due_soon) e D+1 (dia seguinte, overdue).
+  const D = TODAY
+  const task = await mkTask({ title: 'Relatório', due_date: D })
+
+  const eve = await getBell('funcA', addDays(D, -1))
+  assert.equal(eve.status, 200)
+  assert.equal(eve.body.items.length, 1)
+  assert.equal(eve.body.items[0].kind, 'due_soon')
+  assert.equal(eve.body.items[0].task_id, task.id)
+  assert.equal(eve.body.unread, 1)
+
+  const late = await getBell('funcA', addDays(D, 1))
+  assert.equal(late.status, 200)
+  const forTask = late.body.items.filter((n) => n.task_id === task.id)
+  assert.equal(forTask.length, 1, 'só uma linha para a tarefa atrasada')
+  assert.equal(forTask[0].kind, 'overdue')
+  assert.equal(late.body.items.length, 1)
+  assert.equal(late.body.unread, 1)
+
+  // As duas linhas existem no banco; a de due_soon só fica escondida
+  const kinds = (await notifRows(ids.funcA)).map((n) => n.kind).sort()
+  assert.deepEqual(kinds, ['due_soon', 'overdue'])
+})
+
+test('due_soon continua visível no próprio dia do prazo e na véspera', async () => {
+  const todayTask = await mkTask({ title: 'Hoje', due_date: TODAY })
+  const tomorrowTask = await mkTask({ title: 'Amanhã', due_date: addDays(TODAY, 1) })
+  const r = await getBell('funcA')
+  assert.equal(r.body.items.length, 2)
+  const byTask = Object.fromEntries(r.body.items.map((n) => [n.task_id, n.kind]))
+  assert.equal(byTask[todayTask.id], 'due_soon')
+  assert.equal(byTask[tomorrowTask.id], 'due_soon')
+})

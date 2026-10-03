@@ -171,7 +171,8 @@ export async function materializeDueNotifications({ userId, workspaceId, today }
 
 // { items, unread } sobre a janela dos 200 avisos mais recentes do usuário:
 // esconde avisos de prazo cuja tarefa não vale mais (excluída, concluída, com
-// outro responsável, ou com prazo diferente do que o aviso diz) e devolve os 50
+// outro responsável, ou com prazo diferente do que o aviso diz; due_soon cujo
+// prazo já passou também some: vale o overdue) e devolve os 50
 // primeiros; `unread` conta as não lidas da janela já filtrada.
 // Menção/atribuição nunca são escondidas pelo estado da tarefa.
 export async function listNotifications({ userId, workspaceId, today }) {
@@ -189,7 +190,11 @@ export async function listNotifications({ userId, workspaceId, today }) {
   const visible = (data || []).filter((n) => {
     if (!DUE_KINDS.has(n.kind)) return true
     if (!openTasks.has(n.task_id)) return false
-    return n.meta?.due_date === openTasks.get(n.task_id)
+    if (n.meta?.due_date !== openTasks.get(n.task_id)) return false
+    // Depois do prazo, o aviso de atrasada (overdue) representa a tarefa: o
+    // due_soon da mesma data ficaria duplicado e com o texto de "atrasada".
+    if (n.kind === 'due_soon' && n.meta?.due_date < today) return false
+    return true
   })
 
   return {
