@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
 import { tagColor } from './colors.js'
-import { TASK_KEYS, mergeCalendarTasks } from './taskCache.js'
+import { TASK_KEYS } from './taskCache.js'
 import {
-  useClientLinkedTasks, useClientTaskStats, useClientTasks, useMyTasks, useTaskActions,
+  useClientTaskStats, useClientTasks, useMyTasks, useTaskActions,
 } from './hooks/useTasks.js'
 import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath } from './routes.js'
 
@@ -125,7 +126,6 @@ export default function App() {
   // para um cliente que não existe (ver o efeito mais abaixo).
   const [clientsLoaded, setClientsLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [toast, setToast] = useState('')
   // Barra lateral recolhível — lembra a preferência entre sessões
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('fb_sidebar_open') !== '0')
   const toggleSidebar = () => {
@@ -153,42 +153,28 @@ export default function App() {
     return DEFAULT_COLUMNS
   })
 
-  const showToast = (msg) => {
-    setToast(msg)
-    setTimeout(() => setToast(''), 2500)
-  }
-
-  const handleError = (err) => {
-    console.error(err)
-    showToast(`Erro: ${err.message}`)
-  }
+  const { showToast, handleError } = useToast()
 
   // ---- tarefas (TanStack Query) ----
-  // Quatro visões da mesma coleção, todas no cache do Query (ver taskCache.js):
-  // minhas tarefas, quadro do cliente aberto, tarefas de cliente do Calendário
-  // e o progresso por cliente da listagem. Cada uma só busca quando a tela que
-  // a usa está aberta e se mantém atualizada sozinha (polling + foco da aba).
+  // Visões da mesma coleção, todas no cache do Query (ver taskCache.js). Aqui
+  // ficam as que o App ainda repassa por props (Kanban, quadro do cliente,
+  // progresso da lista de clientes); Calendário e Painel leem o cache sozinhos.
   const sessionActive = Boolean(session) && !activationToken
   const userId = session?.user?.id
   const myTasksQuery = useMyTasks(userId, sessionActive)
   const clientTasksQuery = useClientTasks(sessionActive ? selectedClientId : null)
-  const linkedTasksQuery = useClientLinkedTasks(sessionActive && view === 'calendario')
   const statsQuery = useClientTaskStats(sessionActive && view === 'clientes' && !selectedClientId)
   const tasks = myTasksQuery.data ?? EMPTY
+  // Spinner da primeira carga: dados gerais + tarefas (sem isso Kanban/Painel
+  // piscariam vazios antes de a lista chegar).
+  const busy = loading || myTasksQuery.isLoading
   const clientTasks = clientTasksQuery.data ?? EMPTY
   const clientStats = statsQuery.data ?? EMPTY_OBJECT
-  const taskActions = useTaskActions({ userId, onError: handleError })
+  const taskActions = useTaskActions({ userId })
 
   // Falha ao carregar tarefas avisa por toast; o cache segue com o último dado.
   useEffect(() => { if (myTasksQuery.error) handleError(myTasksQuery.error) }, [myTasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (clientTasksQuery.error) handleError(clientTasksQuery.error) }, [clientTasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Lista efetiva do Calendário: tarefas pessoais + tarefas de cliente de toda
-  // a equipe, sem duplicar a que está nas duas.
-  const calendarTasks = useMemo(
-    () => mergeCalendarTasks(tasks, linkedTasksQuery.data ?? EMPTY),
-    [tasks, linkedTasksQuery.data],
-  )
 
   const loadAll = useCallback(async () => {
     try {
@@ -303,13 +289,6 @@ export default function App() {
   // Mover/atualizar/excluir valem igual no Kanban pessoal, no quadro do
   // cliente, no Calendário e no Painel — o hook atualiza todas as listas.
   const { addTask, addClientTask, moveTask, updateTask, deleteTask } = taskActions
-
-  // Criação com o objeto completo, vinda do modal de especificações da tarefa
-  const createTask = async (draft) => {
-    const t = await taskActions.createTask(draft)
-    if (t) showToast('Tarefa criada.')
-    return t
-  }
 
   const openSendToKanban = (title, description = '') => setKanbanDraft({ title, description })
 
@@ -524,16 +503,11 @@ export default function App() {
       case 'calendario':
         return (
           <Calendar
-            tasks={calendarTasks}
             members={members}
             clients={clients}
             currentUser={user}
             columns={columns}
             tags={tags}
-            onCreate={createTask}
-            onUpdate={updateTask}
-            onMove={moveTask}
-            onDelete={deleteTask}
             onCreateTag={createTag}
           />
         )
@@ -618,7 +592,6 @@ export default function App() {
       default:
         return (
           <Dashboard
-            tasks={tasks}
             notes={notes}
             members={members}
             clients={clients}
@@ -627,9 +600,6 @@ export default function App() {
             tags={tags}
             onNavigate={changeView}
             onCreateTask={() => openSendToKanban('', '')}
-            onUpdateTask={updateTask}
-            onMoveTask={moveTask}
-            onDeleteTask={deleteTask}
             onCreateTag={createTag}
           />
         )
@@ -777,7 +747,7 @@ export default function App() {
             <p>{current.subtitle}</p>
           </div>
         </section>
-        {loading ? (
+        {busy ? (
           <div className="loading-wrap">
             <div className="spinner" />
             <p>Carregando dados do banco...</p>
@@ -788,10 +758,9 @@ export default function App() {
           </section>
         )}
       </main>
-      {view === 'painel' && !loading && !user.has_completed_onboarding && (
+      {view === 'painel' && !busy && !user.has_completed_onboarding && (
         <Onboarding onFinish={completeOnboarding} onSkip={completeOnboarding} />
       )}
-      {toast && <div className="toast">{toast}</div>}
       {kanbanDraft && (
         <SendToKanbanModal
           draft={kanbanDraft}

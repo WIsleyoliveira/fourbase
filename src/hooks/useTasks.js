@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api.js'
+import { useToast } from '../toast.jsx'
 import {
   TASK_KEYS, patchTask, removeTask, patchAllTaskLists, snapshotTaskLists,
   restoreTaskLists, addTaskToLists,
@@ -48,9 +49,11 @@ export const useClientTaskStats = (enabled) =>
 
 // Criar/mover/atualizar/excluir com as mesmas assinaturas que o App.jsx já
 // expunha às telas. Mover, atualizar e excluir são otimistas: a tela muda na
-// hora e, se a API falhar, volta ao estado anterior e avisa via `onError`.
-export function useTaskActions({ userId, onError }) {
+// hora e, se a API falhar, volta ao estado anterior e avisa por toast. Qualquer
+// tela pode usar direto — não precisa receber callbacks por props.
+export function useTaskActions({ userId }) {
   const queryClient = useQueryClient()
+  const { showToast, handleError: onError } = useToast()
 
   const refreshStats = () => queryClient.invalidateQueries({ queryKey: TASK_KEYS.stats })
 
@@ -88,7 +91,11 @@ export function useTaskActions({ userId, onError }) {
     // Formulário rápido do quadro de um cliente: só entra em "minhas" se for minha.
     addClientTask: (...args) => created(() => api.addTask(...args)),
     // Modal completo de tarefa (Calendário/Kanban) com o objeto inteiro.
-    createTask: (fields) => created(() => api.createTask(fields), { forceMine: true }),
+    createTask: async (fields) => {
+      const task = await created(() => api.createTask(fields), { forceMine: true })
+      if (task) showToast('Tarefa criada.')
+      return task
+    },
     moveTask: (id, column_key) =>
       optimistic((l) => patchTask(l, id, { column_key }), () => api.moveTask(id, column_key)),
     updateTask: (id, updates) =>

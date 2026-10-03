@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
-import { api } from '../api.js'
+import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
+import { useFolders } from '../hooks/useFolders.js'
 import { memberColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -35,19 +36,19 @@ const dueLabel = (due_date, due_date_end, due_time) => {
   return (due_date_end ? `${new Date(`${due_date}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} – ${label}` : label) + timeSuffix
 }
 
+const EMPTY = []
+
 export default function Dashboard({
-  tasks, notes, members, clients, currentUser, columns, tags,
-  onNavigate, onCreateTask, onUpdateTask, onMoveTask, onDeleteTask, onCreateTag,
+  notes, members, clients, currentUser, columns, tags,
+  onNavigate, onCreateTask, onCreateTag,
 }) {
   const [detailTaskId, setDetailTaskId] = useState(null)
+  const tasks = useMyTasks(currentUser.id).data ?? EMPTY
+  const { updateTask: onUpdateTask, moveTask: onMoveTask, deleteTask: onDeleteTask } =
+    useTaskActions({ userId: currentUser.id })
   // null = ainda carregando — mantém o widget com o mesmo layout enquanto busca
-  const [folderCount, setFolderCount] = useState(null)
-
-  useEffect(() => {
-    api.getFolders()
-      .then((list) => setFolderCount(list.length))
-      .catch(() => setFolderCount(0))
-  }, [])
+  const folders = useFolders()
+  const folderCount = folders.data ? folders.data.length : folders.isError ? 0 : null
 
   const counts = {
     todo: tasks.filter((t) => t.column_key === 'todo').length,

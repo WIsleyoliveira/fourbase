@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import TaskDetailModal from './TaskDetailModal.jsx'
+import { mergeCalendarTasks } from '../taskCache.js'
+import { useClientLinkedTasks, useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -43,7 +45,17 @@ const formatTime = (time) => (time ? time.slice(0, 5) : '')
 // o desmonte do painel de detalhes é adiado até o fim da transição para não interrompê-la.
 const COLLAPSE_MS = 280
 
-export default function Calendar({ tasks, members, clients = [], currentUser, columns, tags = [], onCreate, onUpdate, onMove, onDelete, onCreateTag }) {
+const EMPTY = []
+
+export default function Calendar({ members, clients = [], currentUser, columns, tags = [], onCreateTag }) {
+  // Tarefas pessoais + tarefas de cliente de toda a equipe (sem duplicar a que está
+  // nas duas). Lê direto do cache; a lista de clientes revalida a cada 15 s e ao
+  // voltar o foco da aba, para mostrar o que a equipe agenda sem F5.
+  const myTasks = useMyTasks(currentUser.id).data ?? EMPTY
+  const linkedTasks = useClientLinkedTasks(true).data ?? EMPTY
+  const tasks = useMemo(() => mergeCalendarTasks(myTasks, linkedTasks), [myTasks, linkedTasks])
+  const { createTask: onCreate, updateTask: onUpdate, moveTask: onMove, deleteTask: onDelete } =
+    useTaskActions({ userId: currentUser.id })
   const today = useMemo(() => new Date(), [])
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDate, setSelectedDate] = useState(today)
