@@ -9,6 +9,15 @@ import { sendMail, buildNotificationEmail, runInBackground } from './mailer.js'
 // Janela em que um mesmo evento (pessoa + tarefa + tipo) não reenvia e-mail
 const EMAIL_THROTTLE_MS = 10 * 60 * 1000
 
+// Teto de e-mails por destinatário numa hora móvel, contado a partir dos avisos
+// mention/assignment dele nesta tabela (o sino é sempre criado). Sem o teto,
+// criar várias tarefas mencionando todo mundo inundaria as caixas e a cota do
+// Resend. Avisos criados quando o e-mail não saiu (APP_URL ausente,
+// notify_email desligado) também contam: é uma aproximação aceitável.
+export const MAX_EMAILS_PER_HOUR = 20
+const EMAIL_CAP_WINDOW_MS = 60 * 60 * 1000
+const EMAIL_KINDS = ['mention', 'assignment']
+
 const DEFAULT_DEPS = {
   sendMail,
   runInBackground,
@@ -63,6 +72,30 @@ export async function emitTaskNotifications(before, after, actor, deps = {}) {
           return age < EMAIL_THROTTLE_MS
         })
 
+        const recipient = byId.get(item.user_id)
+        // notify_email ausente (usuário anterior à migration) conta como ligado
+        let sendEmail = !throttled && Boolean(appUrl) && Boolean(recipient?.email) && recipient.notify_email !== false
+
+        // Teto por hora, também ANTES de inserir o aviso novo. Lê só os MAX mais
+        // recentes: se o MAX-ésimo ainda está na janela, o teto foi atingido.
+        if (sendEmail) {
+          const { data: recent, error: recentError } = await supabase
+            .from('fourbase_notifications')
+            .select('created_at')
+            .eq('user_id', item.user_id)
+            .in('kind', EMAIL_KINDS)
+            .order('created_at', { ascending: false })
+            .limit(MAX_EMAILS_PER_HOUR)
+          if (recentError) throw recentError
+          const inWindow = (recent || []).filter(
+            (n) => now.getTime() - new Date(n.created_at).getTime() < EMAIL_CAP_WINDOW_MS,
+          )
+          if (inWindow.length >= MAX_EMAILS_PER_HOUR) {
+            sendEmail = false
+            console.warn(`[notifications] teto de ${MAX_EMAILS_PER_HOUR} e-mails/hora atingido para ${item.user_id}: e-mail não enviado (o aviso do sino foi criado)`)
+          }
+        }
+
         const { error: insertError } = await supabase
           .from('fourbase_notifications')
           .insert({
@@ -76,10 +109,7 @@ export async function emitTaskNotifications(before, after, actor, deps = {}) {
           })
         if (insertError) throw insertError
 
-        const recipient = byId.get(item.user_id)
-        if (throttled || !appUrl) continue
-        // notify_email ausente (usuário anterior à migration) conta como ligado
-        if (!recipient?.email || recipient.notify_email === false) continue
+        if (!sendEmail) continue
 
         const message = {
           to: recipient.email,

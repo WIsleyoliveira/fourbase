@@ -226,3 +226,31 @@ test('runInBackground: fora da Vercel não lança, executa a promessa e engole r
   // entrada que não é promessa também não lança
   assert.doesNotThrow(() => runInBackground(undefined))
 })
+
+test('buildNotificationEmail: título longo é truncado em 120 caracteres com reticências; nome longo em 60', () => {
+  const base = { kind: 'mention', taskId: 't1', appUrl: 'https://app.exemplo.com' }
+
+  const longo = buildNotificationEmail({ ...base, actorName: 'Maria', title: 'a'.repeat(500) })
+  assert.equal(longo.subject, `Maria mencionou você em “${'a'.repeat(119)}…”`)
+  assert.ok(longo.text.includes(`“${'a'.repeat(119)}…”`))
+  assert.ok(!longo.text.includes('a'.repeat(120)))
+
+  const nomeLongo = buildNotificationEmail({ ...base, actorName: 'N'.repeat(200), title: 'Curto' })
+  assert.equal(nomeLongo.subject, `${'N'.repeat(59)}… mencionou você em “Curto”`)
+
+  // trunca DEPOIS de colapsar espaços: espaços repetidos não consomem o limite
+  const espacos = buildNotificationEmail({ ...base, actorName: 'Maria', title: `${'x '.repeat(70)}fim` })
+  const titulo = espacos.subject.match(/“(.*)”/)[1]
+  assert.ok(titulo.length <= 120)
+  assert.ok(!/\s{2,}/.test(titulo))
+})
+
+test('buildNotificationEmail: título e nome curtos (no limite) ficam inalterados', () => {
+  const base = { kind: 'assignment', taskId: 't1', appUrl: 'https://app.exemplo.com' }
+  const exato = buildNotificationEmail({ ...base, actorName: 'B'.repeat(60), title: 'c'.repeat(120) })
+  assert.equal(exato.subject, `${'B'.repeat(60)} atribuiu a você “${'c'.repeat(120)}”`)
+  assert.ok(!exato.subject.includes('…'))
+
+  const curto = buildNotificationEmail({ ...base, actorName: 'Maria', title: 'Título' })
+  assert.equal(curto.subject, 'Maria atribuiu a você “Título”')
+})

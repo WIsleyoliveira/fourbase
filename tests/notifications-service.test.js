@@ -367,3 +367,56 @@ test('e-mail: sem APP_URL (mesmo com Origin forjado) não envia e-mail, mas cria
   assert.equal(doGestor.length, 1)
   assert.equal(doGestor[0].kind, 'mention')
 })
+
+// Teto de e-mails por destinatário: 20 por hora móvel, contados a partir dos
+// avisos mention/assignment dele (o sino é sempre criado).
+const mencionarVezes = async (n, prefix = 'Tarefa') => {
+  for (let i = 0; i < n; i += 1) {
+    const c = await call('gestorA', 'POST', '/api/tasks', { title: `${prefix} ${i}`, mentioned_users: [ids.funcA] })
+    assert.equal(c.status, 201)
+  }
+  await flush()
+}
+
+test('teto de e-mail: 20 por hora são enviados; o 21º é pulado com aviso no log, mas o sino é criado', async () => {
+  const { MAX_EMAILS_PER_HOUR } = await import('../api/_lib/notifications.js')
+  assert.equal(MAX_EMAILS_PER_HOUR, 20)
+
+  await mencionarVezes(20)
+  assert.equal(mails.length, 20, 'os 20 primeiros foram enviados')
+
+  const avisos = []
+  const warnOriginal = console.warn
+  console.warn = (...a) => avisos.push(a.join(' '))
+  try {
+    clock = new Date(clock.getTime() + 30 * 60 * 1000)
+    const c = await call('gestorA', 'POST', '/api/tasks', { title: 'Vigésima primeira', mentioned_users: [ids.funcA] })
+    assert.equal(c.status, 201)
+    await flush()
+    assert.equal(mails.length, 20, 'o 21º e-mail não foi enviado')
+    assert.equal((await notifsOf(ids.funcA, c.body.id)).length, 1, 'o aviso do sino existe')
+    assert.ok(avisos.some((m) => m.includes('[notifications]') && m.includes(ids.funcA)), 'registrou o motivo no log')
+  } finally {
+    console.warn = warnOriginal
+  }
+})
+
+test('teto de e-mail: passada a hora, volta a enviar', async () => {
+  await mencionarVezes(20)
+  assert.equal(mails.length, 20)
+
+  clock = new Date(clock.getTime() + 61 * 60 * 1000)
+  const c = await call('gestorA', 'POST', '/api/tasks', { title: 'Nova hora', mentioned_users: [ids.funcA] })
+  assert.equal(c.status, 201)
+  await flush()
+  assert.equal(mails.length, 21, 'nova hora libera o envio')
+})
+
+test('teto de e-mail é por destinatário: outra pessoa continua recebendo', async () => {
+  await mencionarVezes(20)
+  const c = await call('gestorA', 'POST', '/api/tasks', { title: 'Para outro', mentioned_users: [ids.funcOutro] })
+  assert.equal(c.status, 201)
+  await flush()
+  assert.equal(mails.length, 21)
+  assert.equal(mails[20].to, 'outro@a.test')
+})

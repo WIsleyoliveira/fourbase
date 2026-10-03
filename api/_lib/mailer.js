@@ -10,6 +10,16 @@ const TIMEOUT_MS = 4000
 // Evita quebra de linha no assunto (injeção de cabeçalho) e texto torto no corpo.
 const oneLine = (value) => String(value ?? '').replace(/\s+/g, ' ').trim()
 
+// Limites do texto livre que entra no e-mail (título da tarefa e nome do autor):
+// sem eles um membro mandaria um texto longo, estilo phishing, do domínio
+// confiável. Contam caracteres (não pares substitutos) e incluem a reticência.
+export const MAX_TITLE_LENGTH = 120
+export const MAX_NAME_LENGTH = 60
+const truncate = (text, max) => {
+  const chars = Array.from(text)
+  return chars.length <= max ? text : `${chars.slice(0, max - 1).join('')}…`
+}
+
 // Envia um e-mail de texto simples. `deps` existe para os testes injetarem
 // fetch/env/log (e um timeout curto) sem rede.
 export async function sendMail({ to, subject, text }, deps = {}) {
@@ -61,8 +71,8 @@ export async function sendMail({ to, subject, text }, deps = {}) {
 // Assunto e corpo (texto simples, em português) do e-mail de menção/atribuição.
 // O título é tratado como texto: nada de HTML, só aspas tipográficas ao redor.
 export function buildNotificationEmail({ kind, actorName, title, taskId, appUrl }) {
-  const nome = oneLine(actorName) || 'Alguém'
-  const titulo = `“${oneLine(title)}”`
+  const nome = truncate(oneLine(actorName), MAX_NAME_LENGTH) || 'Alguém'
+  const titulo = `“${truncate(oneLine(title), MAX_TITLE_LENGTH)}”`
   const link = `${String(appUrl ?? '').replace(/\/+$/, '')}/painel?tarefa=${taskId}`
 
   const frase =
