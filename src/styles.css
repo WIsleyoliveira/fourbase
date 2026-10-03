@@ -7447,3 +7447,19 @@ textarea:focus {
     max-width: none;
   }
 }
+
+/* Tablet (769-900px): o .topbar empilha em coluna; o sino continua no canto
+   superior direito (como no desktop) e o título ganha folga para não ficar sob ele. */
+@media (min-width: 769px) and (max-width: 900px) {
+  .topbar {
+    position: relative;
+  }
+  .topbar > .notif-wrap-desktop {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+  .topbar > div:first-child {
+    padding-right: 56px;
+  }
+}
