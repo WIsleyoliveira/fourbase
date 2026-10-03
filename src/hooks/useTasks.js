@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api.js'
+import { api, getAuth } from '../api.js'
 import { useToast } from '../toast.jsx'
 import {
   TASK_KEYS, patchTask, removeTask, patchAllTaskLists, snapshotTaskLists,
@@ -43,6 +43,18 @@ export const useClientTaskStats = (enabled) =>
     queryFn: api.getClientTaskStats,
     enabled,
     refetchInterval: 15000,
+  })
+
+// Uma tarefa avulsa, para o painel aberto por link (?tarefa=). A chave fica FORA
+// do prefixo ['tasks'] de propósito: os helpers das listas (patchAllTaskLists
+// etc.) não podem tocar nela. 404 (sem acesso ou inexistente) vira isError, sem
+// novas tentativas.
+export const useTask = (id) =>
+  useQuery({
+    queryKey: ['task', id],
+    queryFn: () => api.getTask(id),
+    enabled: Boolean(id) && Boolean(getAuth()?.user?.id),
+    retry: false,
   })
 
 // ── Ações ───────────────────────────────────────────────────────────────────

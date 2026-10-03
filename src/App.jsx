@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
 import { useTaskActions } from './hooks/useTasks.js'
 import { patchMemberInCache, useClients } from './hooks/useWorkspaceData.js'
-import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath } from './routes.js'
+import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath, withTaskParam } from './routes.js'
 
 import Login from './components/Login.jsx'
 import Activate from './components/Activate.jsx'
@@ -21,6 +21,7 @@ import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
 import NotificationBell from './components/NotificationBell.jsx'
+import TaskPeekModal from './components/TaskPeekModal.jsx'
 import {
   IconDashboard,
   IconKanban,
@@ -213,6 +214,15 @@ export default function App() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [mobileMenuOpen])
+
+  // Fecha o painel da tarefa (?tarefa=): tira o parâmetro da URL com replace,
+  // sem criar entrada no histórico e mantendo a tela de baixo.
+  const closeTaskPeek = useCallback(() => {
+    navigate(
+      { pathname: location.pathname, search: withTaskParam(location.search, null) },
+      { replace: true },
+    )
+  }, [navigate, location.pathname, location.search])
 
   // Abre o Espaço de um cliente sempre começando pelo Kanban
   const openClient = (id) => navigate(clientPath(id))
@@ -469,6 +479,7 @@ export default function App() {
           onConfirm={confirmSendToKanban}
         />
       )}
+      {route.taskId && <TaskPeekModal taskId={route.taskId} onClose={closeTaskPeek} />}
     </div>
   )
 }
