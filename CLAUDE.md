@@ -15,7 +15,7 @@ npm start             # node server.js (single-process, used by `vercel dev` / p
 npm test              # node:test — tests/*.test.js (API against a temp local DB, no network; the mailer's fetch is injected, nothing is sent)
 ```
 
-Tests use the built-in `node:test` runner, no extra framework. `tests/workspace-isolation.test.js` boots the Express app against a throwaway `FOURBASE_DB_PATH` fixture with two workspaces and asserts no cross-tenant reads/writes and correct gestor/funcionário gating — run it after touching any route's `workspace_id`/`user_id` filters. There is no lint config.
+Tests use the built-in `node:test` runner, no extra framework. `tests/workspace-isolation.test.js` boots the Express app against a throwaway `FOURBASE_DB_PATH` fixture with two workspaces and asserts no cross-tenant reads/writes and correct gestor/funcionário gating — run it after touching any route's `workspace_id`/`user_id` filters. `tests/workspace-isolation-extra.test.js` covers the remaining mutating routes (todos, media, columns, folders and their documents, report activities, member/invitation removal); `tests/auth-rate-limit.test.js` is its own file because the login limiter (20 failed attempts per 15 min per IP, successful logins do not count) keeps per-process state. There is no lint config.
 
 The Vite dev server proxies `/api/*` to `http://localhost:3001` (see `vite.config.js`) — always hit the frontend through `:5173`, not `:3001` directly, so the proxy and cookies/headers behave like production.
 
