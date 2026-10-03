@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import Onboarding from './Onboarding.jsx'
 import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import { useFolders } from '../hooks/useFolders.js'
 import { useNotes } from '../hooks/useNotes.js'
-import { useClients, useColumns, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
+import { useClients, useColumns, useMembers, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
+import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
 import { memberColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -40,10 +43,11 @@ const dueLabel = (due_date, due_date_end, due_time) => {
 
 const EMPTY = []
 
-export default function Dashboard({
-  members, currentUser,
+function DashboardView({
+  currentUser,
   onNavigate, onCreateTask,
 }) {
+  const members = useMembers().data ?? EMPTY
   const clients = useClients().data ?? EMPTY
   const columns = useColumns().data
   const tags = useTags().data ?? EMPTY
@@ -207,5 +211,21 @@ export default function Dashboard({
         />
       )}
     </div>
+  )
+}
+
+// Spinner só na primeira carga de tarefas e membros; depois a tela fica de pé.
+// O onboarding do primeiro acesso aparece por cima do Painel, já carregado. Vai num
+// portal porque é um overlay fixo e a tela tem animação com transform.
+export default function Dashboard({ onCompleteOnboarding, ...props }) {
+  if (anyLoading(useMyTasks(props.currentUser.id), useMembers())) return <LoadingBlock text="Carregando painel..." />
+  return (
+    <>
+      <DashboardView {...props} />
+      {!props.currentUser.has_completed_onboarding && createPortal(
+        <Onboarding onFinish={onCompleteOnboarding} onSkip={onCompleteOnboarding} />,
+        document.body,
+      )}
+    </>
   )
 }

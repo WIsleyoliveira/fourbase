@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { IconClose, IconKanban } from '../icons.jsx'
+import { useMembers } from '../hooks/useWorkspaceData.js'
 
-export default function SendToKanbanModal({ draft, members, currentUser, onCancel, onConfirm }) {
+const EMPTY = []
+
+export default function SendToKanbanModal({ draft, currentUser, onCancel, onConfirm }) {
+  const members = useMembers().data ?? EMPTY
   const [title, setTitle] = useState(draft.title)
   const [description, setDescription] = useState(draft.description || '')
   const [priority, setPriority] = useState('Média')

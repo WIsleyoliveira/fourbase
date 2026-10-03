@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { mergeCalendarTasks } from '../taskCache.js'
 import { useClientLinkedTasks, useMyTasks, useTaskActions } from '../hooks/useTasks.js'
-import { useClients, useColumns, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
+import { useClients, useColumns, useMembers, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
+import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
 import {
   IconArrowLeft,
   IconArrowRight,
@@ -48,7 +49,8 @@ const COLLAPSE_MS = 280
 
 const EMPTY = []
 
-export default function Calendar({ members, currentUser }) {
+function CalendarView({ currentUser }) {
+  const members = useMembers().data ?? EMPTY
   const clients = useClients().data ?? EMPTY
   const columns = useColumns().data
   const tags = useTags().data ?? EMPTY
@@ -692,4 +694,10 @@ export default function Calendar({ members, currentUser }) {
       )}
     </div>
   )
+}
+
+// Spinner só na primeira carga de tarefas e membros; depois a tela fica de pé.
+export default function Calendar({ currentUser }) {
+  if (anyLoading(useMyTasks(currentUser.id), useMembers())) return <LoadingBlock text="Carregando calendário..." />
+  return <CalendarView currentUser={currentUser} />
 }

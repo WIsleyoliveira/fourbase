@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconPlus, IconTrash, IconDownload, IconChevronDown } from '../icons.jsx'
 import { api } from '../api.js'
 import { memberColor } from '../colors.js'
-import { useClients, useColumns } from '../hooks/useWorkspaceData.js'
+import { useClients, useColumns, useMembers } from '../hooks/useWorkspaceData.js'
 
 const NO_CLIENTS = []
 
@@ -77,7 +77,8 @@ function ExportMenu({ onExportCsv, onExportPdf }) {
   )
 }
 
-export default function ReportsView({ members, currentUser, onError }) {
+export default function ReportsView({ currentUser, onError }) {
+  const members = useMembers().data ?? NO_CLIENTS
   const clients = useClients().data ?? NO_CLIENTS
   const columns = useColumns().data
   const [activities, setActivities] = useState([])

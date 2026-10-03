@@ -1,8 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IconArrowLeft, IconBuilding, IconUser, IconPhone, IconMail, IconKanban, IconFolder } from '../icons.jsx'
 import Kanban from './Kanban.jsx'
 import DocumentsView from './DocumentsView.jsx'
+import LoadingBlock from './LoadingBlock.jsx'
 import { assigneeColor } from '../colors.js'
+import { useToast } from '../toast.jsx'
+import { useClientTasks, useTaskActions } from '../hooks/useTasks.js'
+
+const EMPTY = []
 
 const TABS = [
   { key: 'kanban', label: 'Kanban', icon: IconKanban },
@@ -15,11 +20,18 @@ const TABS = [
 // ao navegar de uma pasta vinculada a este cliente); sem controle externo,
 // mantém estado próprio começando pelo Kanban.
 export default function ClientWorkspace({
-  client, tasks, members, currentUser, columns, tags,
-  onBack, onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag,
-  onError, onOpenNote,
+  client, currentUser, onBack, onOpenNote,
   tab: controlledTab, onTabChange, targetFolderId, onConsumeTarget,
 }) {
+  const { handleError: onError } = useToast()
+  // Tarefas de TODOS os responsáveis deste cliente (não só as do usuário logado);
+  // revalidam a cada 6 s para mostrar o que a equipe mexeu sem F5.
+  const tasksQuery = useClientTasks(client.id)
+  const tasks = tasksQuery.data ?? EMPTY
+  const { addClientTask: onAdd } = useTaskActions({ userId: currentUser.id })
+  // Falha ao carregar avisa por toast; o quadro segue com o último dado.
+  useEffect(() => { if (tasksQuery.error) onError(tasksQuery.error) }, [tasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [internalTab, setInternalTab] = useState('kanban')
   const tab = controlledTab ?? internalTab
   const setTab = onTabChange ?? setInternalTab
@@ -108,20 +120,16 @@ export default function ClientWorkspace({
       </div>
 
       {tab === 'kanban' ? (
-        <Kanban
-          tasks={tasks}
-          members={members}
-          clients={[client]}
-          currentUser={currentUser}
-          columns={columns}
-          tags={tags}
-          onAdd={handleAdd}
-          onMove={onMove}
-          onUpdate={onUpdate}
-          onDelete={onDelete}
-          onAddColumn={onAddColumn}
-          onCreateTag={onCreateTag}
-        />
+        tasksQuery.isLoading ? (
+          <LoadingBlock text="Carregando tarefas..." />
+        ) : (
+          <Kanban
+            tasks={tasks}
+            clients={[client]}
+            currentUser={currentUser}
+            onAdd={handleAdd}
+          />
+        )
       ) : (
         /* Documentações no escopo deste cliente — a chave força remontagem ao
            trocar de cliente, recarregando as pastas do novo escopo */

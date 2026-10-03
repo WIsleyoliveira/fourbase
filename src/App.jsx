@@ -1,22 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
-import { useClientTasks, useMyTasks, useTaskActions } from './hooks/useTasks.js'
-import {
-  useClientActions, useClients, useColumnActions, useColumns, useTagActions, useTags,
-} from './hooks/useWorkspaceData.js'
+import { useTaskActions } from './hooks/useTasks.js'
+import { patchMemberInCache, useClients } from './hooks/useWorkspaceData.js'
 import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath } from './routes.js'
-
-// Referências estáveis para "ainda sem dados" — um `[]` novo a cada render
-// invalidaria useMemo/memo nas telas.
-const EMPTY = []
 
 import Login from './components/Login.jsx'
 import Activate from './components/Activate.jsx'
 import Dashboard from './components/Dashboard.jsx'
-import Kanban from './components/Kanban.jsx'
+import { MyKanban } from './components/Kanban.jsx'
 import Calendar from './components/Calendar.jsx'
 import NotesView from './components/NotesView.jsx'
 import TeamView from './components/TeamView.jsx'
@@ -26,7 +20,6 @@ import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
-import Onboarding from './components/Onboarding.jsx'
 import {
   IconDashboard,
   IconKanban,
@@ -95,8 +88,6 @@ export default function App() {
   const { activationToken, view, clientId: selectedClientId, tab: clientTab } = route
   const queryClient = useQueryClient()
   const [session, setSession] = useState(getAuth)
-  const [members, setMembers] = useState([])
-  const [loading, setLoading] = useState(true)
   // Barra lateral recolhível — lembra a preferência entre sessões
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('fb_sidebar_open') !== '0')
   const toggleSidebar = () => {
@@ -115,59 +106,16 @@ export default function App() {
 
   const { showToast, handleError } = useToast()
 
-  // ---- clientes, etiquetas e colunas (TanStack Query) ----
-  // Cada tela lê estas listas direto do cache; aqui ficam as que o App ainda
-  // repassa por props (Kanban e quadro do cliente) e o cliente aberto na URL.
+  // Só o cliente aberto na URL precisa dos dados aqui (título, guarda de rota e o
+  // quadro do cliente); cada tela lê o resto direto do cache (hooks/*).
   const clientsQuery = useClients()
-  const clients = clientsQuery.data ?? EMPTY
-  const tags = useTags().data ?? EMPTY
-  const columns = useColumns().data
-  const { createTag } = useTagActions()
-  const { addColumn } = useColumnActions()
-
-  // ---- tarefas (TanStack Query) ----
-  // Visões da mesma coleção, todas no cache do Query (ver taskCache.js). Aqui
-  // ficam as que o App ainda repassa por props (Kanban, quadro do cliente,
-  // calendário e painel leem o cache sozinhos).
-  const sessionActive = Boolean(session) && !activationToken
+  const clients = clientsQuery.data ?? []
   const userId = session?.user?.id
-  const myTasksQuery = useMyTasks(userId, sessionActive)
-  const clientTasksQuery = useClientTasks(sessionActive ? selectedClientId : null)
-  const tasks = myTasksQuery.data ?? EMPTY
-  // Spinner da primeira carga: dados gerais + tarefas (sem isso Kanban/Painel
-  // piscariam vazios antes de a lista chegar).
-  const busy = loading || myTasksQuery.isLoading
-  const clientTasks = clientTasksQuery.data ?? EMPTY
-  const taskActions = useTaskActions({ userId })
-
-  // Falha ao carregar tarefas avisa por toast; o cache segue com o último dado.
-  useEffect(() => { if (myTasksQuery.error) handleError(myTasksQuery.error) }, [myTasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (clientTasksQuery.error) handleError(clientTasksQuery.error) }, [clientTasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadAll = useCallback(async () => {
-    try {
-      setMembers(await api.getMembers())
-    } catch (err) {
-      handleError(err)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (session && !activationToken) loadAll()
-  }, [session, activationToken, loadAll])
-
-  // Recarga manual / recuperação de erro: também revalida as tarefas.
-  const refreshAll = useCallback(() => {
-    queryClient.invalidateQueries() // revalida todo o cache (tarefas, notas, clientes…)
-    return loadAll()
-  }, [queryClient, loadAll])
+  const { addTask } = useTaskActions({ userId })
 
   const login = (auth) => {
     setAuth(auth)
     setSession(auth)
-    setLoading(true)
     // Quem chegou por um link direto (ex.: /kanban) entra nele; URL que não
     // é tela (ex.: "/") vai para o painel.
     if (!route.valid || route.activationToken) navigate(viewPath(DEFAULT_VIEW), { replace: true })
@@ -189,13 +137,7 @@ export default function App() {
     setAuth(next)
     setSession(next)
     // A lista de membros alimenta avatares/cores em Kanban, Calendário etc.
-    setMembers((prev) =>
-      prev.map((m) =>
-        m.id === updated.id
-          ? { ...m, name: updated.name, color: updated.color, avatar_url: updated.avatar_url }
-          : m,
-      ),
-    )
+    patchMemberInCache(queryClient, updated)
   }
 
   // Onboarding do primeiro acesso — a flag mora no banco (não em
@@ -204,11 +146,6 @@ export default function App() {
     api.updateProfile({ has_completed_onboarding: true })
       .then(applyProfileUpdate)
       .catch(handleError)
-
-  // ---- tarefas: ações (otimistas, em todas as listas do cache) ----
-  // Mover/atualizar/excluir valem igual no Kanban pessoal, no quadro do
-  // cliente, no Calendário e no Painel — o hook atualiza todas as listas.
-  const { addTask, addClientTask, moveTask, updateTask, deleteTask } = taskActions
 
   const openSendToKanban = (title, description = '') => setKanbanDraft({ title, description })
 
@@ -237,17 +174,6 @@ export default function App() {
     setTargetNoteId(noteId)
     navigate(viewPath('notas'))
   }
-
-  // ---- convite de membro (gestor) ----
-  // Devolve { invitation, activation_url } para o modal exibir o link — a
-  // pessoa convidada só vira membro depois de ativar a conta, então a lista de
-  // membros não muda aqui.
-  const inviteMember = (invite) =>
-    api.inviteMember(invite).then((result) => {
-      showToast('Convite criado.')
-      return result
-    })
-    // erro propagado para o modal exibir a mensagem
 
   // Cliente aberto no workspace
   const selectedClient = useMemo(
@@ -323,24 +249,11 @@ export default function App() {
     switch (view) {
       case 'kanban':
         return (
-          <Kanban
-            tasks={tasks}
-            members={members}
-            clients={clients}
-            currentUser={user}
-            columns={columns}
-            tags={tags}
-            onAdd={addTask}
-            onMove={moveTask}
-            onUpdate={updateTask}
-            onDelete={deleteTask}
-            onAddColumn={addColumn}
-            onCreateTag={createTag}
-          />
+          <MyKanban currentUser={user} />
         )
       case 'calendario':
         return (
-          <Calendar members={members} currentUser={user} />
+          <Calendar currentUser={user} />
         )
       case 'notas':
         return (
@@ -354,32 +267,18 @@ export default function App() {
         )
       case 'cadastro':
         return (
-          <RegistryView
-            isGestor={isGestor}
-            onCreateMember={inviteMember}
-          />
+          <RegistryView isGestor={isGestor} />
         )
       case 'clientes':
         return selectedClient ? (
           <ClientWorkspace
             client={selectedClient}
-            tasks={clientTasks}
-            members={members}
             currentUser={user}
-            columns={columns}
-            tags={tags}
             tab={clientTab}
             onTabChange={changeClientTab}
             targetFolderId={targetFolderId}
             onConsumeTarget={() => setTargetFolderId(null)}
             onBack={() => navigate(viewPath('clientes'))}
-            onAdd={addClientTask}
-            onMove={moveTask}
-            onUpdate={updateTask}
-            onDelete={deleteTask}
-            onAddColumn={addColumn}
-            onCreateTag={createTag}
-            onError={handleError}
             onOpenNote={navigateToNote}
           />
         ) : (
@@ -398,15 +297,15 @@ export default function App() {
         )
       case 'relatorios':
         return isGestor ? (
-          <ReportsView members={members} currentUser={user} onError={handleError} />
+          <ReportsView currentUser={user} onError={handleError} />
         ) : null
       default:
         return (
           <Dashboard
-            members={members}
             currentUser={user}
             onNavigate={changeView}
             onCreateTask={() => openSendToKanban('', '')}
+            onCompleteOnboarding={completeOnboarding}
           />
         )
     }
@@ -540,7 +439,7 @@ export default function App() {
             <IconLogout size={16} />
           </button>
         </div>
-        <button className="action" onClick={refreshAll}>
+        <button className="action" onClick={() => queryClient.invalidateQueries()}>
           <IconRefresh />
           <span>Recarregar dados</span>
         </button>
@@ -553,24 +452,13 @@ export default function App() {
             <p>{current.subtitle}</p>
           </div>
         </section>
-        {busy ? (
-          <div className="loading-wrap">
-            <div className="spinner" />
-            <p>Carregando dados do banco...</p>
-          </div>
-        ) : (
-          <section className="view" key={view}>
-            {renderView()}
-          </section>
-        )}
+        <section className="view" key={view}>
+          {renderView()}
+        </section>
       </main>
-      {view === 'painel' && !busy && !user.has_completed_onboarding && (
-        <Onboarding onFinish={completeOnboarding} onSkip={completeOnboarding} />
-      )}
       {kanbanDraft && (
         <SendToKanbanModal
           draft={kanbanDraft}
-          members={members}
           currentUser={user}
           onCancel={() => setKanbanDraft(null)}
           onConfirm={confirmSendToKanban}

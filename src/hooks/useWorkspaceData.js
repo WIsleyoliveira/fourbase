@@ -15,6 +15,7 @@ const asList = (data) => (Array.isArray(data) ? data : [])
 
 export const CLIENT_KEYS = { all: ['clients'], mine: (userId) => ['clients', userId] }
 export const TAG_KEYS = { all: ['tags'], mine: (userId) => ['tags', userId] }
+export const MEMBER_KEYS = { all: ['members'], mine: (userId) => ['members', userId] }
 
 // ── Clientes ────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,44 @@ export function useClientActions() {
         handleError(err)
         queryClient.invalidateQueries({ queryKey: key })
       }
+    },
+  }
+}
+
+// ── Membros ─────────────────────────────────────────────────────────────────
+
+// Membros do workspace (id, nome, cor, avatar) — alimentam avatares, cores e os
+// seletores de responsável em Kanban, Calendário, Painel e Relatórios.
+export const useMembers = () => {
+  const userId = sessionUserId()
+  return useQuery({
+    queryKey: MEMBER_KEYS.mine(userId),
+    queryFn: async () => asList(await api.getMembers()),
+    enabled: Boolean(userId),
+  })
+}
+
+// Perfil salvo: reflete nome/cor/avatar do próprio usuário na lista de membros
+// (que alimenta avatares e cores em Kanban, Calendário etc.) sem refazer a busca.
+export function patchMemberInCache(queryClient, updated) {
+  queryClient.setQueryData(MEMBER_KEYS.mine(updated.id), (old) =>
+    Array.isArray(old)
+      ? old.map((m) => (m.id === updated.id
+        ? { ...m, name: updated.name, color: updated.color, avatar_url: updated.avatar_url }
+        : m))
+      : old)
+}
+
+// Gestor convida uma pessoa: devolve { invitation, activation_url } para o modal
+// exibir o link. A pessoa só vira membro depois de ativar a conta, então a lista
+// de membros não muda aqui. O erro é repassado para o modal mostrar a mensagem.
+export function useMemberActions() {
+  const { showToast } = useToast()
+  return {
+    inviteMember: async (invite) => {
+      const result = await api.inviteMember(invite)
+      showToast('Convite criado.')
+      return result
     },
   }
 }

@@ -10,6 +10,13 @@ import {
 import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
 import Avatar from './Avatar.jsx'
+import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
+import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
+import {
+  useClients, useColumnActions, useColumns, useMembers, useTagActions, useTags,
+} from '../hooks/useWorkspaceData.js'
+
+const EMPTY = []
 import { memberColor, tagColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -130,7 +137,19 @@ function AddGroupButton({ onAdd }) {
 }
 
 // ─── Componente principal ──────────────────────────────────────────────────────
-export default function Kanban({ tasks, members, clients = [], currentUser, columns, tags = [], onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag }) {
+// Quadro de tarefas. Recebe só o que muda de um uso para outro — a lista de
+// tarefas, os clientes disponíveis e como criar (`onAdd`) — porque é usado no
+// Kanban pessoal (MyKanban, abaixo) e no quadro de um cliente (ClientWorkspace,
+// que passa `clients={[client]}` e vincula as novas tarefas a ele). Membros,
+// colunas, etiquetas e as ações de mover/editar/excluir vêm direto do cache.
+export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
+  const members = useMembers().data ?? EMPTY
+  const columns = useColumns().data
+  const tags = useTags().data ?? EMPTY
+  const { createTag: onCreateTag } = useTagActions()
+  const { addColumn: onAddColumn } = useColumnActions()
+  const { moveTask: onMove, updateTask: onUpdate, deleteTask: onDelete } =
+    useTaskActions({ userId: currentUser?.id })
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('Média')
@@ -400,4 +419,15 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
       })()}
     </div>
   )
+}
+
+// Kanban pessoal: as tarefas atribuídas a quem está logado.
+export function MyKanban({ currentUser }) {
+  const tasksQuery = useMyTasks(currentUser.id)
+  const clients = useClients().data ?? EMPTY
+  const membersQuery = useMembers()
+  const { addTask } = useTaskActions({ userId: currentUser.id })
+
+  if (anyLoading(tasksQuery, membersQuery)) return <LoadingBlock text="Carregando tarefas..." />
+  return <Kanban tasks={tasksQuery.data ?? EMPTY} clients={clients} currentUser={currentUser} onAdd={addTask} />
 }
