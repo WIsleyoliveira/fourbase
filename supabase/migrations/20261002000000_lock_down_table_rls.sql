@@ -1,3 +1,9 @@
+-- ############################################################################
+-- ATENÇÃO — ORDEM DE DEPLOY: leia docs/deploy-runbook.md ANTES de aplicar.
+-- Esta migration derruba a API antiga (e o login) assim que roda.
+-- Não rode `supabase db push` antes de o código novo estar no ar com
+-- SUPABASE_SERVICE_ROLE_KEY configurada na Vercel.
+-- ############################################################################
 -- Fecha o acesso direto às tabelas da aplicação.
 --
 -- Até aqui todas as tabelas fourbase_*/weflow_* tinham RLS com política

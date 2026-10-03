@@ -20,6 +20,8 @@ As credenciais do Supabase ficam em `.env` (já configurado; veja `.env.example`
 
 ## Deploy na Vercel
 
+> **Atenção: não rode `supabase db push` antes do deploy.** A migration `20261002000000_lock_down_table_rls.sql` fecha o acesso anon às tabelas: se ela rodar antes de o código novo estar no ar com `SUPABASE_SERVICE_ROLE_KEY` configurada, a API inteira (inclusive o login) para de funcionar. Siga o passo a passo em [docs/deploy-runbook.md](docs/deploy-runbook.md).
+
 ```bash
 npm i -g vercel
 vercel
@@ -35,10 +37,12 @@ Ou conecte o repositório no painel da Vercel. O `vercel.json` já:
 
 | Nome | Valor |
 |---|---|
-| `SUPABASE_URL` | `https://uamjgaeawwkfdlrlpmfc.supabase.co` |
-| `SUPABASE_ANON_KEY` | chave publishable do projeto (veja `.env.example`) |
+| `SUPABASE_URL` | URL do projeto Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | chave `service_role` (secreta, só no servidor) |
+| `APP_URL` | origem pública do app (links de convite e de e-mail) |
+| `RESEND_API_KEY`, `EMAIL_FROM` | opcionais, para os e-mails de aviso |
 
-O código tem fallback para esses valores, então o deploy funciona mesmo sem configurá-las — mas configure-as para poder trocar de projeto sem alterar código.
+No `.env` local **não** defina `SUPABASE_URL`: sem ela o servidor usa o banco mockado em `data/db.json` e não toca em produção.
 
 ## Login e perfis
 

@@ -1,7 +1,13 @@
+-- ############################################################################
+-- ATENÇÃO — ORDEM DE DEPLOY: leia docs/deploy-runbook.md ANTES de aplicar.
+-- Roda junto (no db push) com a 20261002000000, que fecha o RLS.
+-- Não rode `supabase db push` antes de o código novo estar no ar com
+-- SUPABASE_SERVICE_ROLE_KEY configurada na Vercel.
+-- ############################################################################
 -- Notificações no app (sino) + preferência de e-mail.
 --
--- Aditiva e segura de aplicar antes do deploy: cria uma tabela nova e uma
--- coluna com default. Nada em dados existentes muda.
+-- Aditiva: cria uma tabela nova e uma coluna com default. Nada em dados
+-- existentes muda. (O código novo funciona sem ela; o sino só fica vazio.)
 --
 -- fourbase_notifications guarda os avisos por destinatário. Tipos:
 --   mention     — alguém mencionou o usuário numa tarefa
