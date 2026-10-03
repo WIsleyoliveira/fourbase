@@ -271,6 +271,7 @@ class LocalQuery {
     this.selectCols = null
     this.wantsReturn = false
     this.orderSpec = null
+    this.limitN = null
     this._single = false
     this._maybeSingle = false
   }
@@ -291,6 +292,10 @@ class LocalQuery {
   neq(col, val) { this.filters.push({ col, op: 'neq', val }); return this }
   in(col, vals) { this.filters.push({ col, op: 'in', val: vals }); return this }
   // Só cobre o uso real deste projeto: .not(col, 'is', null) → IS NOT NULL
+  // .is(col, null) → IS NULL (como no PostgREST; coluna ausente conta como null)
+  is(col, val) { this.filters.push({ col, op: 'is', val }); return this }
+  // .limit(n): só vale em select, aplicado depois do order (como no PostgREST)
+  limit(n) { this.limitN = n; return this }
   not(col, op, val) { this.filters.push({ col, op: `not_${op}`, val }); return this }
 
   order(col, opts = {}) { this.orderSpec = { col, ascending: opts.ascending !== false }; return this }
@@ -302,6 +307,9 @@ class LocalQuery {
       if (f.op === 'eq') return row[f.col] === f.val
       if (f.op === 'neq') return row[f.col] !== f.val
       if (f.op === 'in') return f.val.includes(row[f.col])
+      if (f.op === 'is') return f.val === null || f.val === undefined
+        ? row[f.col] === null || row[f.col] === undefined
+        : row[f.col] === f.val
       if (f.op === 'not_is') return f.val === null
         ? row[f.col] !== null && row[f.col] !== undefined
         : row[f.col] !== f.val
@@ -339,6 +347,7 @@ class LocalQuery {
         const { col, ascending } = this.orderSpec
         result = [...result].sort((a, b) => (ascending ? compare(a[col], b[col]) : -compare(a[col], b[col])))
       }
+      if (typeof this.limitN === 'number') result = result.slice(0, Math.max(0, this.limitN))
       return this._finalize(result.map((r) => project(r, this.selectCols)))
     }
 

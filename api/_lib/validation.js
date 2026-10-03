@@ -27,6 +27,12 @@ export const validMemberIds = async (ids, workspaceId) => {
   return (data || []).map((u) => u.id)
 }
 
+// Ids de tabela são uuid: um id em outro formato nunca existe, e o Postgres
+// real responderia 22P02 (500) em vez de "não encontrado". As rotas usam isto
+// para devolver o 404 uniforme sem consultar o banco.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value)
+
 // Cor personalizada (escolhida no seletor de espectro do cadastro) — só aceita
 // um hex válido; qualquer outra coisa vira null (cor automática por hash).
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/

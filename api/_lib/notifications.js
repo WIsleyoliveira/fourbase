@@ -110,13 +110,22 @@ export async function emitTaskNotifications(before, after, actor, deps = {}) {
 // Toda consulta filtra por user_id E workspace_id (vindos do token, nunca do
 // cliente). Ao contrário do emitTaskNotifications, estas funções LANÇAM em caso
 // de erro de banco: a rota responde 500 e o cliente mantém o último contador.
+//
+// Nenhuma leitura aqui é ilimitada: no Supabase real o PostgREST corta em 1000
+// linhas e listas `.in()` enormes estouram o limite de URL, e os avisos não têm
+// rotina de limpeza (fora de escopo). Por isso o sino trabalha só sobre a
+// janela das WINDOW_SIZE mais recentes do usuário.
 
 const LIST_LIMIT = 50
+const WINDOW_SIZE = 200
 const DUE_KINDS = new Set(['due_soon', 'overdue'])
 
 // Cria os avisos de prazo (due_soon/overdue) pendentes do usuário. Idempotente:
-// pré-consulta as chaves já gravadas e, se uma corrida inserir a mesma chave
-// antes, a violação da chave única (23505) é ignorada.
+// pré-consulta só as chaves dos avisos candidatos e, se uma corrida inserir a
+// mesma chave antes, a violação da chave única (23505) é ignorada.
+// Devolve Map(id da tarefa -> prazo atual) das tarefas NÃO concluídas do
+// usuário no workspace: é o que o sino usa para esconder avisos de prazo
+// vencidos pelo estado da tarefa (sem consultar tarefas por lista de ids).
 export async function materializeDueNotifications({ userId, workspaceId, today }) {
   const { data: tasks, error: tasksError } = await supabase
     .from('fourbase_tasks')
@@ -125,16 +134,23 @@ export async function materializeDueNotifications({ userId, workspaceId, today }
     .eq('assigned_to', userId)
   if (tasksError) throw tasksError
 
+  const openTasks = new Map(
+    (tasks || [])
+      .filter((t) => t.column_key !== 'done')
+      .map((t) => [t.id, t.due_date_end || t.due_date || null]),
+  )
+
   const due = dueNotifications(tasks || [], today)
-  if (due.length === 0) return
+  if (due.length === 0) return openTasks
 
   const { data: existing, error: existingError } = await supabase
     .from('fourbase_notifications')
     .select('dedupe_key')
     .eq('user_id', userId)
     .eq('workspace_id', workspaceId)
+    .in('dedupe_key', due.map((d) => d.dedupe_key))
   if (existingError) throw existingError
-  const known = new Set((existing || []).map((n) => n.dedupe_key).filter(Boolean))
+  const known = new Set((existing || []).map((n) => n.dedupe_key))
 
   for (const item of due) {
     if (known.has(item.dedupe_key)) continue
@@ -150,13 +166,16 @@ export async function materializeDueNotifications({ userId, workspaceId, today }
     })
     if (error && error.code !== '23505') throw error
   }
+  return openTasks
 }
 
-// { items, unread }: as 50 mais recentes do usuário e o total de não lidas,
-// ambos depois de esconder avisos de prazo cuja tarefa não vale mais (excluída,
-// concluída ou com outro responsável). Menção/atribuição nunca são escondidas.
+// { items, unread } sobre a janela dos 200 avisos mais recentes do usuário:
+// esconde avisos de prazo cuja tarefa não vale mais (excluída, concluída, com
+// outro responsável, ou com prazo diferente do que o aviso diz) e devolve os 50
+// primeiros; `unread` conta as não lidas da janela já filtrada.
+// Menção/atribuição nunca são escondidas pelo estado da tarefa.
 export async function listNotifications({ userId, workspaceId, today }) {
-  await materializeDueNotifications({ userId, workspaceId, today })
+  const openTasks = await materializeDueNotifications({ userId, workspaceId, today })
 
   const { data, error } = await supabase
     .from('fourbase_notifications')
@@ -164,25 +183,13 @@ export async function listNotifications({ userId, workspaceId, today }) {
     .eq('user_id', userId)
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false })
+    .limit(WINDOW_SIZE)
   if (error) throw error
-  const rows = data || []
 
-  const dueTaskIds = [...new Set(rows.filter((n) => DUE_KINDS.has(n.kind) && n.task_id).map((n) => n.task_id))]
-  const live = new Map()
-  if (dueTaskIds.length > 0) {
-    const { data: tasks, error: tasksError } = await supabase
-      .from('fourbase_tasks')
-      .select('id, column_key, assigned_to')
-      .eq('workspace_id', workspaceId)
-      .in('id', dueTaskIds)
-    if (tasksError) throw tasksError
-    for (const t of tasks || []) live.set(t.id, t)
-  }
-
-  const visible = rows.filter((n) => {
+  const visible = (data || []).filter((n) => {
     if (!DUE_KINDS.has(n.kind)) return true
-    const task = live.get(n.task_id)
-    return Boolean(task) && task.column_key !== 'done' && task.assigned_to === userId
+    if (!openTasks.has(n.task_id)) return false
+    return n.meta?.due_date === openTasks.get(n.task_id)
   })
 
   return {
@@ -224,21 +231,13 @@ export async function markRead({ userId, workspaceId, id }) {
   return true
 }
 
-// Marca como lidas todas as não lidas do usuário (só as dele).
+// Marca como lidas todas as não lidas do usuário (só as dele), num único update.
 export async function markAllRead({ userId, workspaceId }) {
-  const { data, error } = await supabase
-    .from('fourbase_notifications')
-    .select('id, read_at')
-    .eq('user_id', userId)
-    .eq('workspace_id', workspaceId)
-  if (error) throw error
-  const unreadIds = (data || []).filter((n) => !n.read_at).map((n) => n.id)
-  if (unreadIds.length === 0) return
-  const { error: updateError } = await supabase
+  const { error } = await supabase
     .from('fourbase_notifications')
     .update({ read_at: new Date().toISOString() })
     .eq('user_id', userId)
     .eq('workspace_id', workspaceId)
-    .in('id', unreadIds)
-  if (updateError) throw updateError
+    .is('read_at', null)
+  if (error) throw error
 }

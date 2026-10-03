@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, workspaceOf } from '../auth.js'
-import { inWorkspace, validMemberIds } from '../validation.js'
+import { inWorkspace, validMemberIds, isUuid } from '../validation.js'
 import { emitTaskNotifications } from '../notifications.js'
 import { canViewTask } from '../notificationRules.js'
 
@@ -87,6 +87,9 @@ router.get('/api/tasks/client-stats', auth, asyncRoute(async (req, res) => {
 // rotas fixas acima (by-client, client-linked, client-stats), senão o :id as
 // engoliria. Inexistente, de outro workspace ou sem permissão: o mesmo 404.
 router.get('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
+  if (!isUuid(req.params.id)) {
+    return res.status(404).json({ error: 'Registro não encontrado' })
+  }
   const { data, error } = await supabase
     .from('fourbase_tasks')
     .select('*')

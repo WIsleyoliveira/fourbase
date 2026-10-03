@@ -1,13 +1,12 @@
 import { Router } from 'express'
 import { asyncRoute } from '../http.js'
 import { auth, workspaceOf } from '../auth.js'
+import { isUuid } from '../validation.js'
 import { resolveToday } from '../notificationRules.js'
 import { listNotifications, markRead, markAllRead } from '../notifications.js'
 
 const router = Router()
 export default router
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // ---------- Sino de notificações (sempre só do usuário logado) ----------
 // `today` é a data local do navegador; resolveToday descarta valores inválidos
@@ -23,8 +22,8 @@ router.post('/api/notifications/read-all', auth, asyncRoute(async (req, res) => 
 }))
 
 router.patch('/api/notifications/:id/read', auth, asyncRoute(async (req, res) => {
-  // id que não é UUID nunca existe: 404 sem chegar ao banco (o Postgres daria 500)
-  if (!UUID_RE.test(req.params.id)) {
+  // id que não é UUID nunca existe: 404 sem chegar ao banco
+  if (!isUuid(req.params.id)) {
     return res.status(404).json({ error: 'Registro não encontrado' })
   }
   const found = await markRead({ userId: req.user.id, workspaceId: workspaceOf(req), id: req.params.id })

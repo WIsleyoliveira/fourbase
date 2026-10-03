@@ -276,6 +276,41 @@ test('items limitado a 50 e unread conta todas as não lidas (criar 55)', async 
   assert.equal(r2.body.items.length, 50)
 })
 
+test('reagendar a tarefa esconde o aviso de prazo antigo e cria o da nova data', async () => {
+  const task = await mkTask({ title: 'Reagendada', due_date: TODAY })
+  let r = await getBell('funcA')
+  assert.equal(r.body.items.length, 1)
+  assert.equal(r.body.items[0].meta.due_date, TODAY)
+
+  const tomorrow = addDays(TODAY, 1)
+  await supabase.from('fourbase_tasks').update({ due_date: tomorrow }).eq('id', task.id)
+  r = await getBell('funcA')
+  assert.equal(r.body.items.length, 1)
+  assert.equal(r.body.items[0].meta.due_date, tomorrow)
+  assert.equal(r.body.unread, 1)
+  assert.equal((await notifRows(ids.funcA)).length, 2)
+
+  // prazo fora da janela: nenhum aviso de prazo fica visível
+  await supabase.from('fourbase_tasks').update({ due_date: addDays(TODAY, 20) }).eq('id', task.id)
+  r = await getBell('funcA')
+  assert.equal(r.body.items.length, 0)
+  assert.equal(r.body.unread, 0)
+})
+
+test('o sino lê só a janela das 200 mais recentes: items 50, unread dentro da janela', async () => {
+  const base0 = Date.parse(now)
+  for (let i = 0; i < 205; i += 1) {
+    await mkNotif({ title: `Aviso ${i}`, created_at: new Date(base0 + i * 1000).toISOString() })
+  }
+  const r = await getBell('funcA')
+  assert.equal(r.body.items.length, 50)
+  assert.equal(r.body.unread, 200)
+  assert.equal(r.body.items[0].title, 'Aviso 204')
+  // read-all marca TODAS (inclusive as 5 fora da janela), num update só
+  assert.equal((await call('funcA', 'POST', '/api/notifications/read-all')).status, 204)
+  assert.equal((await notifRows(ids.funcA)).filter((n) => !n.read_at).length, 0)
+})
+
 test('PATCH read: marca a própria; 404 para aviso de outra pessoa; read-all só afeta o próprio usuário', async () => {
   const mine = await mkNotif({ title: 'Meu' })
   const mine2 = await mkNotif({ title: 'Meu 2' })
@@ -370,6 +405,14 @@ test('GET /api/tasks/:id: responsável, mencionado e gestor 200; membro comum 40
   assert.deepEqual(cross.body, missing.body)
   assert.deepEqual(cross.body, denied.body)
   assert.equal((await call('gestorB', 'GET', `/api/tasks/${foreign.id}`)).status, 200)
+})
+
+test('GET /api/tasks/:id com id que não é UUID: mesmo 404 de inexistente', async () => {
+  const bad = await call('gestorA', 'GET', '/api/tasks/abc')
+  const missing = await call('gestorA', 'GET', `/api/tasks/${randomUUID()}`)
+  assert.equal(bad.status, 404)
+  assert.deepEqual(bad.body, { error: 'Registro não encontrado' })
+  assert.deepEqual(bad.body, missing.body)
 })
 
 test('/api/tasks/client-stats continua funcionando (ordem de rotas)', async () => {
