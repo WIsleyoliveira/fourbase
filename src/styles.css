@@ -705,7 +705,8 @@ textarea:focus {
   grid-column: 1 / -1;
 }
 .task-form-field select,
-.task-form-field input[type='date'] {
+.task-form-field input[type='date'],
+.task-form-field input[type='time'] {
   width: 100%;
   padding: 8px 10px;
   font-size: 13px;
@@ -716,6 +717,60 @@ textarea:focus {
   padding: 8px 10px;
   font-size: 13px;
   resize: vertical;
+}
+.task-form-field input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.task-form-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--primary-deep);
+  color: var(--white);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+.task-form-attachments .tdv2-attachments {
+  padding: 0;
+}
+.task-form button.task-form-submit:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+/* Os botões internos dos seletores não herdam o estilo do botão principal do formulário */
+.task-form .tag-picker-option {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 7px 9px;
+  background: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+}
+.task-form .tag-picker-option:hover,
+.task-form .tag-picker-option.active {
+  background: var(--primary-light);
+  transform: none;
+}
+.task-form .tag-pill button {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  gap: 0;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+  box-shadow: none;
+}
+.task-form .tag-pill button:hover {
+  background: rgba(0, 0, 0, 0.16);
+  transform: none;
 }
 .task-form-tags .tag-picker-pills {
   background: var(--white);

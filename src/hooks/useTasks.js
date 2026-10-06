@@ -104,6 +104,12 @@ export function useTaskActions({ userId }) {
     addTask: (...args) => created(() => api.addTask(...args), { forceMine: true }),
     // Formulário rápido do quadro de um cliente: só entra em "minhas" se for minha.
     addClientTask: (...args) => created(() => api.addTask(...args)),
+    // Formulário completo do quadro de um cliente: objeto inteiro, sem forçar "minhas".
+    createClientTask: async (fields) => {
+      const task = await created(() => api.createTask(fields))
+      if (task) showToast('Tarefa criada.')
+      return task
+    },
     // Modal completo de tarefa (Calendário/Kanban) com o objeto inteiro.
     createTask: async (fields) => {
       const task = await created(() => api.createTask(fields), { forceMine: true })

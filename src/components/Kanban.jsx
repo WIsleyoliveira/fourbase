@@ -10,11 +10,17 @@ import {
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
+import MemberPicker from './MemberPicker.jsx'
+import TaskAttachments from './TaskAttachments.jsx'
 import Avatar from './Avatar.jsx'
 import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
 import KanbanFilterBar from './KanbanFilterBar.jsx'
 import { EMPTY_FILTERS, filterTasks, hasActiveFilters, sortTasks } from '../kanbanFilters.js'
 import { localToday } from '../notificationText.js'
+import {
+  buildTaskFields, countAdvanced, emptyDraft, setDraftField, validateDraft,
+} from '../newTaskForm.js'
+import { useToast } from '../toast.jsx'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import {
   useClients, useColumnActions, useColumns, useMembers, useTagActions, useTags,
@@ -153,15 +159,18 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const { addColumn: onAddColumn } = useColumnActions()
   const { moveTask: onMove, updateTask: onUpdate, deleteTask: onDelete } =
     useTaskActions({ userId: currentUser?.id })
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState('Média')
-  const [dueDate, setDueDate] = useState('')
-  const [assignedTo, setAssignedTo] = useState(currentUser?.id || '')
-  const [clientId, setClientId] = useState('')
-  const [newTaskTags, setNewTaskTags] = useState([])
-  // "Mais opções" do formulário de criação (prioridade, prazo, cliente, descrição, etiquetas)
+  const { showToast } = useToast()
+  // Rascunho da nova tarefa: todos os campos que uma tarefa aceita. "Opções avançadas"
+  // só mostra/esconde os campos além do título.
+  const formDefaults = { assignedTo: currentUser?.id || '', columnKey: columns[0]?.key || 'todo' }
+  const [draft, setDraft] = useState(() => emptyDraft(formDefaults))
   const [showMore, setShowMore] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // Id provisório: as imagens anexadas antes de a tarefa existir vão para tasks/<id>
+  const newId = () => (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const [draftId, setDraftId] = useState(newId)
+  const setField = (field, value) => setDraft((d) => setDraftField(d, field, value))
+  const advancedCount = countAdvanced(draft, formDefaults)
   // Busca, filtros e ordem: tudo no navegador, sobre as tarefas já carregadas
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [sort, setSort] = useState(loadSort)
@@ -183,15 +192,22 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const isGestor = currentUser?.role === 'gestor'
   const memberName = (id) => members.find((m) => m.id === id)?.name || 'Sem responsável'
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
-    if (!title.trim()) return
-    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim(), clientId || null, newTaskTags)
-    setTitle('')
-    setDueDate('')
-    setDescription('')
-    setClientId('')
-    setNewTaskTags([])
+    if (saving) return
+    const problem = validateDraft(draft)
+    if (problem) { showToast(problem); return }
+    setSaving(true)
+    try {
+      const task = await onAdd(buildTaskFields(draft, { isGestor }))
+      // Só limpa quando a tarefa foi criada; se falhou, o rascunho fica para tentar de novo
+      if (task) {
+        setDraft(emptyDraft(formDefaults))
+        setDraftId(newId())
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const step = (task, direction) => {
@@ -208,7 +224,7 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   return (
     <div className="panel">
       {/* ── Formulário de criação de tarefa ── */}
-      {/* Barra de criação rápida: só o título à vista; o resto abre em "Mais opções" */}
+      {/* Barra de criação rápida: só o título à vista; o resto abre em "Opções avançadas" */}
       <form className="task-form" onSubmit={submit}>
         <div className="task-form-main">
           <input
@@ -216,8 +232,8 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
             className="task-form-title"
             placeholder="O que precisa ser feito?"
             aria-label="Título da nova tarefa"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            value={draft.title}
+            onChange={(e) => setField('title', e.target.value)}
           />
           <button
             type="button"
@@ -226,12 +242,13 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
             aria-controls="task-form-extra"
             onClick={() => setShowMore((v) => !v)}
           >
-            <span>Mais opções</span>
+            <span>Opções avançadas</span>
+            {advancedCount > 0 && <span className="task-form-badge">{advancedCount}</span>}
             <IconChevronDown size={14} />
           </button>
-          <button type="submit" className="task-form-submit">
+          <button type="submit" className="task-form-submit" disabled={saving}>
             <IconPlus size={16} />
-            <span>Adicionar</span>
+            <span>{saving ? 'Adicionando…' : 'Adicionar'}</span>
           </button>
         </div>
 
@@ -239,7 +256,7 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
           <div className="task-form-extra" id="task-form-extra">
             <label className="task-form-field">
               <span>Prioridade</span>
-              <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+              <select value={draft.priority} onChange={(e) => setField('priority', e.target.value)}>
                 <option value="Baixa">Baixa</option>
                 <option value="Média">Média</option>
                 <option value="Alta">Alta</option>
@@ -247,18 +264,24 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
               </select>
             </label>
             <label className="task-form-field">
-              <span>Prazo</span>
-              <input
-                type="date"
-                title="Prazo de entrega"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
+              <span>Status</span>
+              <select value={draft.columnKey} onChange={(e) => setField('columnKey', e.target.value)}>
+                {columns.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </select>
             </label>
             {isGestor && (
               <label className="task-form-field">
                 <span>Responsável</span>
-                <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
+                <select
+                  value={draft.assignedTo}
+                  onChange={(e) => {
+                    setField('assignedTo', e.target.value)
+                    // quem é o responsável não precisa ser "mencionado"
+                    setDraft((d) => ({ ...d, mentioned: d.mentioned.filter((id) => id !== e.target.value) }))
+                  }}
+                >
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
@@ -268,9 +291,9 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
             <label className="task-form-field">
               <span>Cliente</span>
               <select
-                value={clientId}
+                value={draft.clientId}
                 title="Vincular a um cliente (opcional)"
-                onChange={(e) => setClientId(e.target.value)}
+                onChange={(e) => setField('clientId', e.target.value)}
               >
                 <option value="">Sem cliente</option>
                 {clients.map((c) => (
@@ -278,24 +301,79 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
                 ))}
               </select>
             </label>
+            <label className="task-form-field">
+              <span>Prazo (início)</span>
+              <input
+                type="date"
+                title="Prazo de entrega"
+                value={draft.dueDate}
+                onChange={(e) => setField('dueDate', e.target.value)}
+              />
+            </label>
+            <label className="task-form-field">
+              <span>Data final</span>
+              <input
+                type="date"
+                title="Data final (para tarefas de vários dias)"
+                value={draft.dueDateEnd}
+                min={draft.dueDate || undefined}
+                disabled={!draft.dueDate}
+                onChange={(e) => setField('dueDateEnd', e.target.value)}
+              />
+            </label>
+            <label className="task-form-field">
+              <span>Horário de início</span>
+              <input
+                type="time"
+                value={draft.dueTime}
+                disabled={!draft.dueDate}
+                onChange={(e) => setField('dueTime', e.target.value)}
+              />
+            </label>
+            <label className="task-form-field">
+              <span>Horário final</span>
+              <input
+                type="time"
+                value={draft.dueTimeEnd}
+                disabled={!draft.dueTime}
+                onChange={(e) => setField('dueTimeEnd', e.target.value)}
+              />
+            </label>
+            <div className="task-form-field task-form-field-wide">
+              <span>Pessoas mencionadas</span>
+              <MemberPicker
+                value={draft.mentioned}
+                members={members}
+                excludeId={draft.assignedTo}
+                onChange={(next) => setField('mentioned', next)}
+              />
+            </div>
             <label className="task-form-field task-form-field-wide">
               <span>Descrição</span>
               <textarea
                 className="task-form-description"
                 placeholder="Descrição (opcional)"
                 rows={2}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                value={draft.description}
+                onChange={(e) => setField('description', e.target.value)}
               />
             </label>
             <div className="task-form-field task-form-field-wide task-form-tags">
               <span>Etiquetas</span>
               <TagPicker
-                value={newTaskTags}
+                value={draft.tags}
                 availableTags={tags}
                 onCreateTag={onCreateTag}
-                onChange={setNewTaskTags}
+                onChange={(next) => setField('tags', next)}
                 placeholder="Etiquetas (opcional)..."
+              />
+            </div>
+            <div className="task-form-field task-form-field-wide task-form-attachments">
+              <span>Anexos e imagens</span>
+              <TaskAttachments
+                taskId={draftId}
+                attachments={draft.attachments}
+                onChange={(next) => setField('attachments', next)}
               />
             </div>
           </div>
@@ -508,8 +586,8 @@ export function MyKanban({ currentUser }) {
   const tasksQuery = useMyTasks(currentUser.id)
   const clients = useClients().data ?? EMPTY
   const membersQuery = useMembers()
-  const { addTask } = useTaskActions({ userId: currentUser.id })
+  const { createTask } = useTaskActions({ userId: currentUser.id })
 
   if (anyLoading(tasksQuery, membersQuery)) return <LoadingBlock text="Carregando tarefas..." />
-  return <Kanban tasks={tasksQuery.data ?? EMPTY} clients={clients} currentUser={currentUser} onAdd={addTask} />
+  return <Kanban tasks={tasksQuery.data ?? EMPTY} clients={clients} currentUser={currentUser} onAdd={createTask} />
 }

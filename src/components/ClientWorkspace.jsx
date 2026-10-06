@@ -28,7 +28,7 @@ export default function ClientWorkspace({
   // revalidam a cada 6 s para mostrar o que a equipe mexeu sem F5.
   const tasksQuery = useClientTasks(client.id)
   const tasks = tasksQuery.data ?? EMPTY
-  const { addClientTask: onAdd } = useTaskActions({ userId: currentUser.id })
+  const { createClientTask: onAdd } = useTaskActions({ userId: currentUser.id })
   // Falha ao carregar avisa por toast; o quadro segue com o último dado.
   useEffect(() => { if (tasksQuery.error) onError(tasksQuery.error) }, [tasksQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -50,8 +50,7 @@ export default function ClientWorkspace({
   const color = assigneeColor(client.id, client.color)
 
   // Toda tarefa criada neste quadro nasce vinculada ao cliente ativo
-  const handleAdd = (title, priority, due_date, assigned_to, description, _clientId, tags) =>
-    onAdd(title, priority, due_date, assigned_to, description, client.id, tags)
+  const handleAdd = (fields) => onAdd({ ...fields, client_id: client.id })
 
   return (
     <div className="client-workspace">
