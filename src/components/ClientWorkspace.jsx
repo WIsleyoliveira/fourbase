@@ -124,6 +124,7 @@ export default function ClientWorkspace({
           <LoadingBlock text="Carregando tarefas..." />
         ) : (
           <Kanban
+            key={client.id}
             tasks={tasks}
             clients={[client]}
             currentUser={currentUser}

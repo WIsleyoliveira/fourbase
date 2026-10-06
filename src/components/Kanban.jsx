@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   IconPlus,
   IconArrowLeft,
@@ -12,6 +12,9 @@ import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
 import Avatar from './Avatar.jsx'
 import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
+import KanbanFilterBar from './KanbanFilterBar.jsx'
+import { EMPTY_FILTERS, filterTasks, hasActiveFilters, sortTasks } from '../kanbanFilters.js'
+import { localToday } from '../notificationText.js'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import {
   useClients, useColumnActions, useColumns, useMembers, useTagActions, useTags,
@@ -21,7 +24,6 @@ const EMPTY = []
 import { memberColor, tagColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
-const PRIORITY_RANK  = { Urgente: 0, Alta: 1, Média: 2, Baixa: 3 }
 
 const formatDate = (iso) => {
   if (!iso) return ''
@@ -45,15 +47,15 @@ const dueState = (due_date, due_date_end) => {
   return 'upcoming'
 }
 
-const sortTasks = (list) =>
-  list.slice().sort((a, b) => {
-    const rankDiff = (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2)
-    if (rankDiff !== 0) return rankDiff
-    if (a.due_date && b.due_date) return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
-    if (a.due_date) return -1
-    if (b.due_date) return 1
-    return 0
-  })
+// Ordem dos cartões escolhida pela pessoa — lembrada entre visitas (só a ordem; os
+// filtros recomeçam limpos para ninguém achar que "sumiram" tarefas).
+const SORT_KEY = 'fb_kanban_sort'
+const loadSort = () => {
+  try {
+    const saved = localStorage.getItem(SORT_KEY)
+    return ['priority', 'due', 'recent', 'title'].includes(saved) ? saved : 'priority'
+  } catch { return 'priority' }
+}
 
 // ─── Botão "+ Adicionar grupo" ─────────────────────────────────────────────────
 function AddGroupButton({ onAdd }) {
@@ -160,6 +162,16 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const [newTaskTags, setNewTaskTags] = useState([])
   // "Mais opções" do formulário de criação (prioridade, prazo, cliente, descrição, etiquetas)
   const [showMore, setShowMore] = useState(false)
+  // Busca, filtros e ordem: tudo no navegador, sobre as tarefas já carregadas
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [sort, setSort] = useState(loadSort)
+  const changeSort = (next) => {
+    setSort(next)
+    try { localStorage.setItem(SORT_KEY, next) } catch { /* armazenamento indisponível */ }
+  }
+  const today = localToday()
+  const shownTasks = useMemo(() => filterTasks(tasks, filters, today), [tasks, filters, today])
+  const filtering = hasActiveFilters(filters)
   const [dragId, setDragId] = useState(null)
   const [overColumn, setOverColumn] = useState(null)
   // Armazena apenas o ID para que o modal sempre leia os dados mais recentes de `tasks`
@@ -290,10 +302,26 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
         )}
       </form>
 
+      {/* ── Busca, filtros, ordenação e resumo ── */}
+      <KanbanFilterBar
+        tasks={tasks}
+        shownTasks={shownTasks}
+        members={members}
+        clients={clients}
+        tags={tags}
+        currentUser={currentUser}
+        today={today}
+        filters={filters}
+        onFiltersChange={setFilters}
+        sort={sort}
+        onSortChange={changeSort}
+      />
+
       {/* ── Board de colunas dinâmicas ── */}
       <div className="kanban">
         {columns.map((col) => {
-          const colTasks = sortTasks(tasks.filter((t) => t.column_key === col.key))
+          const colTasks = sortTasks(shownTasks.filter((t) => t.column_key === col.key), sort)
+          const colTotal = tasks.filter((t) => t.column_key === col.key).length
           return (
             <div className={`column column-${col.key}`} key={col.key}>
               <h4>
@@ -302,7 +330,9 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
                   <span className="column-dot" style={{ background: col.color }} />
                   {col.label}
                 </span>
-                <span className="count">{colTasks.length}</span>
+                <span className="count" title={filtering ? `${colTasks.length} de ${colTotal} nesta coluna` : undefined}>
+                  {filtering ? `${colTasks.length}/${colTotal}` : colTasks.length}
+                </span>
               </h4>
               <div
                 className={`dropzone${overColumn === col.key ? ' drag-over' : ''}`}
@@ -310,7 +340,11 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
                 onDragLeave={() => setOverColumn(null)}
                 onDrop={() => drop(col.key)}
               >
-                {colTasks.length === 0 && <div className="empty-hint">Solte cartões aqui</div>}
+                {colTasks.length === 0 && (
+                  <div className="empty-hint">
+                    {filtering && colTotal > 0 ? 'Nenhuma tarefa com esses filtros' : 'Solte cartões aqui'}
+                  </div>
+                )}
                 {colTasks.map((task) => {
                   const due = dueState(task.due_date, task.due_date_end)
                   const isDone = task.column_key === 'done'
