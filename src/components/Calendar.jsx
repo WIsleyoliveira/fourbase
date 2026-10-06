@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { mergeCalendarTasks } from '../taskCache.js'
 import { useClientLinkedTasks, useMyTasks, useTaskActions } from '../hooks/useTasks.js'
@@ -15,10 +16,12 @@ import {
   IconClose,
   IconCheckPlain,
   IconStack,
+  IconList,
 } from '../icons.jsx'
 import Avatar from './Avatar.jsx'
 import { memberColor, tagColor } from '../colors.js'
 import { layoutWeek, taskTooltip, MAX_LANES } from '../calendarLayout.js'
+import { emptyDraft, buildTaskFields } from '../newTaskForm.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -79,6 +82,12 @@ function CalendarView({ currentUser }) {
   // Rascunho de nova tarefa: abre o mesmo modal de especificações, já com a data
   const [draftTask, setDraftTask] = useState(null)
   const [sideOpen, setSideOpen] = useState(false)
+  const [drawerTab, setDrawerTab] = useState('overdue')
+  // Criação rápida ao clicar num dia: popover com só o título (a data já vem do dia)
+  const [quick, setQuick] = useState(null) // { date, left, top }
+  const [quickTitle, setQuickTitle] = useState('')
+  const [quickSaving, setQuickSaving] = useState(false)
+  const quickRef = useRef(null)
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
   const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false)
   const [assigneeFilter, setAssigneeFilter] = useState('all')
@@ -120,12 +129,14 @@ function CalendarView({ currentUser }) {
       if (tagMenuOpen && tagMenuRef.current && !tagMenuRef.current.contains(e.target)) {
         setTagMenuOpen(false)
       }
+      if (quick && quickRef.current && !quickRef.current.contains(e.target)) setQuick(null)
     }
     const handleKey = (e) => {
       if (e.key === 'Escape') {
         setViewMenuOpen(false)
         setAssigneeMenuOpen(false)
         setTagMenuOpen(false)
+        if (quick) { setQuick(null); return }
         // Primeiro ESC recolhe o painel de detalhes; segundo ESC fecha o popover do dia
         if (selectedTaskId) {
           collapseDetailPanel()
@@ -140,7 +151,7 @@ function CalendarView({ currentUser }) {
       document.removeEventListener('mousedown', handleClick)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [viewMenuOpen, assigneeMenuOpen, tagMenuOpen, selectedTaskId, collapsing])
+  }, [viewMenuOpen, assigneeMenuOpen, tagMenuOpen, selectedTaskId, collapsing, quick])
 
   const toggleTagFilter = (name) => {
     setTagFilter((prev) => {
@@ -259,11 +270,11 @@ function CalendarView({ currentUser }) {
   }
 
   // Abre o modal completo de especificações já com a data pré-preenchida
-  const openNewTask = (date) => {
+  const openNewTask = (date, title = '') => {
     const target = date || selectedDate || today
     setSelectedDate(target)
     setDraftTask({
-      title: '',
+      title,
       description: '',
       priority: 'Média',
       due_date: toKey(target),
@@ -273,6 +284,32 @@ function CalendarView({ currentUser }) {
       tags: [],
       attachments: [],
     })
+  }
+
+  // Clique num dia: abre o popover de criação rápida ao lado da célula clicada
+  const openQuick = (e, date) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const width = 288
+    setSelectedDate(date)
+    setQuickTitle('')
+    setQuick({
+      date,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      top: Math.max(8, Math.min(rect.top + 34, window.innerHeight - 170)),
+    })
+  }
+  const submitQuick = async (e) => {
+    e.preventDefault()
+    const title = quickTitle.trim()
+    if (!title || quickSaving) return
+    setQuickSaving(true)
+    try {
+      const draft = { ...emptyDraft({ assignedTo: currentUser?.id || '', columnKey: columns?.[0]?.key || 'todo' }), title, dueDate: toKey(quick.date) }
+      const task = await onCreate(buildTaskFields(draft, { isGestor: currentUser?.role === 'gestor' }))
+      if (task) setQuick(null)
+    } finally {
+      setQuickSaving(false)
+    }
   }
 
   const toggleComplete = (task) => {
@@ -291,25 +328,28 @@ function CalendarView({ currentUser }) {
     setTimeout(() => setDragging(true), 0)
   }
 
-  const dropOnDay = (e, date) => {
-    e.preventDefault()
-    setDragging(false)
-    const id = e.dataTransfer.getData('text/plain')
-    if (!id || !onUpdate) return
+  // Muda o início da tarefa para `date`. Tarefa de vários dias preserva a duração —
+  // desloca o intervalo inteiro, em vez de deixar due_date_end órfã (e antes de
+  // due_date, o que o backend rejeitaria).
+  const reschedule = (task, date) => {
+    if (!task || !onUpdate) return
     const newStart = toKey(date)
-    const task = tasks.find((t) => t.id === id)
-    // Arrastar uma tarefa de vários dias preserva a duração — só desloca o
-    // intervalo inteiro pro novo dia, em vez de deixar due_date_end órfã
-    // (e antes de due_date, o que o backend rejeitaria).
-    if (task?.due_date_end && task.due_date) {
+    if (task.due_date_end && task.due_date) {
       const spanDays = Math.round(
         (new Date(`${task.due_date_end}T00:00:00`) - new Date(`${task.due_date}T00:00:00`)) / 86400000,
       )
       const newEnd = toKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() + spanDays))
-      onUpdate(id, { due_date: newStart, due_date_end: newEnd })
+      onUpdate(task.id, { due_date: newStart, due_date_end: newEnd })
     } else {
-      onUpdate(id, { due_date: newStart })
+      onUpdate(task.id, { due_date: newStart })
     }
+  }
+
+  const dropOnDay = (e, date) => {
+    e.preventDefault()
+    setDragging(false)
+    const id = e.dataTransfer.getData('text/plain')
+    if (id) reschedule(tasks.find((t) => t.id === id), date)
   }
 
   const dayDetailLabel = selectedDate
@@ -386,6 +426,17 @@ function CalendarView({ currentUser }) {
                 </div>
               )}
             </div>
+            <button
+              className={`calview-ghost-btn calview-pending-btn${sideOpen ? ' active' : ''}`}
+              aria-expanded={sideOpen}
+              onClick={() => setSideOpen((v) => !v)}
+              title="Tarefas em atraso e sem data"
+            >
+              <IconList size={14} />
+              Pendências
+              {overdue.length > 0 && <span className="calview-side-count over">{overdue.length}</span>}
+              {unscheduled.length > 0 && <span className="calview-side-count">{unscheduled.length}</span>}
+            </button>
             <button className="calview-ghost-btn">Fechado</button>
             <div className="calview-view-select" ref={assigneeMenuRef}>
               <button
@@ -473,7 +524,7 @@ function CalendarView({ currentUser }) {
                     <div
                       key={toKey(date)}
                       className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                      onClick={() => openNewTask(date)}
+                      onClick={(e) => openQuick(e, date)}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => dropOnDay(e, date)}
                     >
@@ -544,59 +595,102 @@ function CalendarView({ currentUser }) {
         </div>
       </div>
 
-      <aside className={`calview-side${sideOpen ? ' open' : ''}`}>
-        <button className="calview-side-tab" onClick={() => setSideOpen((v) => !v)}>
-          <span className="calview-side-tab-label">
-            <span className="calview-side-count">{unscheduled.length}</span> Não agendado
-          </span>
-          <span className="calview-side-tab-label">
-            <span className="calview-side-count over">{overdue.length}</span> Em atraso
-          </span>
-        </button>
-        {sideOpen && (
-          <div className="calview-side-panel">
-            <div className="calview-side-panel-header">
-              <h4>Tarefas do calendário</h4>
-              <button className="icon-btn" onClick={() => setSideOpen(false)}>
-                <IconClose size={14} />
-              </button>
-            </div>
-            <div className="calview-side-group">
-              <h5>Não agendado ({unscheduled.length})</h5>
-              {unscheduled.length === 0 && <p className="calview-side-empty">Nenhuma tarefa sem prazo.</p>}
-              {unscheduled.map((t) => (
-                <div
-                  key={t.id}
-                  className="calview-side-task"
-                  draggable
-                  onDragStart={(e) => dragTask(e, t.id)}
-                  onClick={() => setDetailTask(t)}
-                >
-                  <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
-                  <span>{t.title}</span>
-                </div>
-              ))}
-            </div>
-            <div className="calview-side-group">
-              <h5>Em atraso ({overdue.length})</h5>
-              {overdue.length === 0 && <p className="calview-side-empty">Nenhuma tarefa atrasada.</p>}
-              {overdue.map((t) => (
-                <div
-                  key={t.id}
-                  className="calview-side-task overdue"
-                  draggable
-                  onDragStart={(e) => dragTask(e, t.id)}
-                  onClick={() => setDetailTask(t)}
-                >
-                  <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
-                  <span>{t.title}</span>
-                </div>
-              ))}
-            </div>
-            <p className="calview-side-hint">Arraste uma tarefa para um dia do calendário para definir o prazo.</p>
+      {sideOpen && (
+        <aside className="calview-drawer" aria-label="Tarefas em atraso e sem data">
+          <div className="calview-drawer-header">
+            <h4>Pendências</h4>
+            <button className="icon-btn" onClick={() => setSideOpen(false)} title="Fechar">
+              <IconClose size={14} />
+            </button>
           </div>
-        )}
-      </aside>
+          <div className="calview-drawer-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={drawerTab === 'overdue'}
+              className={drawerTab === 'overdue' ? 'active' : ''}
+              onClick={() => setDrawerTab('overdue')}
+            >
+              Em atraso <span className="calview-side-count over">{overdue.length}</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={drawerTab === 'unscheduled'}
+              className={drawerTab === 'unscheduled' ? 'active' : ''}
+              onClick={() => setDrawerTab('unscheduled')}
+            >
+              Sem data <span className="calview-side-count">{unscheduled.length}</span>
+            </button>
+          </div>
+          <div className="calview-drawer-list">
+            {(drawerTab === 'overdue' ? overdue : unscheduled).length === 0 && (
+              <p className="calview-side-empty">
+                {drawerTab === 'overdue' ? 'Nenhuma tarefa atrasada.' : 'Nenhuma tarefa sem prazo.'}
+              </p>
+            )}
+            {(drawerTab === 'overdue' ? overdue : unscheduled).map((t) => (
+              <div
+                key={t.id}
+                className={`calview-side-task${drawerTab === 'overdue' ? ' overdue' : ''}`}
+                draggable
+                onDragStart={(e) => dragTask(e, t.id)}
+                onDragEnd={() => setDragging(false)}
+                onClick={() => setDetailTask(t)}
+                title={taskTooltip(t, members.find((m) => m.id === t.assigned_to)?.name, formatDay)}
+              >
+                <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
+                <span className="calview-side-task-main">
+                  <span className="calview-side-task-title">{t.title}</span>
+                  {t.due_date && (
+                    <span className="calview-side-task-meta">Venceu em {formatDay(t.due_date_end || t.due_date).slice(0, 5)}</span>
+                  )}
+                </span>
+                <button
+                  className="calview-side-task-today"
+                  title={drawerTab === 'overdue' ? 'Reagendar para hoje' : 'Agendar para hoje'}
+                  onClick={(e) => { e.stopPropagation(); reschedule(t, today) }}
+                >
+                  Hoje
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="calview-side-hint">Arraste uma tarefa para um dia do calendário para definir o prazo.</p>
+        </aside>
+      )}
+
+      {quick && createPortal(
+        <form
+          className="calquick"
+          ref={quickRef}
+          style={{ left: quick.left, top: quick.top }}
+          onSubmit={submitQuick}
+        >
+          <div className="calquick-date">
+            {capitalize(quick.date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }))}
+          </div>
+          <input
+            className="calquick-input"
+            autoFocus
+            placeholder="Título da tarefa"
+            aria-label="Título da nova tarefa"
+            value={quickTitle}
+            onChange={(e) => setQuickTitle(e.target.value)}
+          />
+          <div className="calquick-actions">
+            <button
+              type="button"
+              className="calquick-more"
+              onClick={() => { const d = quick.date; const t = quickTitle.trim(); setQuick(null); openNewTask(d, t) }}
+            >
+              Mais opções
+            </button>
+            <button type="submit" className="calquick-save" disabled={!quickTitle.trim() || quickSaving}>
+              {quickSaving ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </form>,
+        document.body,
+      )}
 
       {isDayDetailOpen && selectedDate && (
         <div className="modal-backdrop daydetail-backdrop" onClick={closeDayDetail}>

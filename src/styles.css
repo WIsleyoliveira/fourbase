@@ -4364,39 +4364,9 @@ img.kb-avatar {
   background: var(--primary-light);
 }
 
-/* --- Barra lateral direita (drawer) --- */
-.calview-side {
-  flex-shrink: 0;
-  display: flex;
-  border-left: 1px solid var(--border);
-}
-.calview-side-tab {
-  width: 40px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  border: none;
-  border-left: 1px solid var(--border);
-  background: #f9feff;
-  padding: 16px 0;
-}
-.calview-side-tab:hover {
-  background: var(--primary-light);
-}
-.calview-side-tab-label {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  text-orientation: mixed;
-  display: inline-flex;
-  align-items: center;
+/* --- Gaveta de pendências (em atraso / sem data) — encaixa ao lado da grade --- */
+.calview-pending-btn {
   gap: 6px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: 0.02em;
 }
 .calview-side-count {
   display: inline-flex;
@@ -4409,29 +4379,167 @@ img.kb-avatar {
   background: var(--primary-soft);
   color: var(--primary-deep);
   font-size: 10.5px;
+  font-weight: 700;
 }
 .calview-side-count.over {
   background: var(--danger-soft);
   color: var(--danger);
 }
-.calview-side-panel {
-  width: 280px;
+.calview-drawer {
+  width: 300px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  overflow-y: auto;
-  max-height: calc(100vh - 170px);
+  gap: 12px;
+  padding: 14px;
+  border-left: 1px solid var(--border);
+  background: #f9feff;
+  animation: drawerIn 0.22s var(--ease);
 }
-.calview-side-panel-header {
+@keyframes drawerIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: none; }
+}
+.calview-drawer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.calview-side-panel-header h4 {
+.calview-drawer-header h4 {
   font-size: 14px;
 }
+.calview-drawer-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+}
+.calview-drawer-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.calview-drawer-tabs button.active {
+  background: var(--white);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+.calview-drawer-tabs button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.calview-drawer-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: calc(100vh - 300px);
+}
+.calview-side-task-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.calview-side-task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calview-side-task-meta {
+  font-size: 11px;
+  color: var(--muted-strong);
+}
+.calview-side-task-today {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--primary-soft);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--primary-deep);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.calview-side-task-today:hover {
+  background: var(--primary-soft);
+}
+
+/* --- Criação rápida ao clicar num dia --- */
+.calquick {
+  position: fixed;
+  z-index: 80;
+  width: 288px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(15, 60, 66, 0.18));
+  animation: fadeUp 0.15s ease;
+}
+.calquick-date {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-strong);
+}
+.calquick-input {
+  width: 100%;
+  padding: 9px 11px;
+  font-size: 14px;
+}
+.calquick-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.calquick-more,
+.calquick-save {
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.calquick-more {
+  border: none;
+  background: transparent;
+  color: var(--primary-deep);
+}
+.calquick-more:hover {
+  background: var(--primary-soft);
+}
+.calquick-save {
+  border: none;
+  background: var(--primary);
+  color: var(--white);
+}
+.calquick-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.calquick button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .calview-side-group {
   display: flex;
   flex-direction: column;
@@ -4653,9 +4761,8 @@ img.kb-avatar {
   .calview-day-number {
     font-size: 12.5px;
   }
-  .calview-side-panel {
-    width: 240px;
-    max-height: none;
+  .calview-drawer {
+    width: 250px;
   }
   .gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -4752,24 +4859,16 @@ img.kb-avatar {
   .calview {
     flex-direction: column;
   }
-  .calview-toolbar-right .calview-ghost-btn {
+  .calview-toolbar-right .calview-ghost-btn:not(.calview-pending-btn) {
     display: none;
   }
-  .calview-side {
+  .calview-drawer {
+    width: 100%;
     border-left: none;
     border-top: 1px solid var(--border);
   }
-  .calview-side-tab {
-    width: 100%;
-    flex-direction: row;
-    padding: 10px 0;
-  }
-  .calview-side-tab-label {
-    writing-mode: horizontal-tb;
-    transform: none;
-  }
-  .calview-side-panel {
-    width: 100%;
+  .calview-drawer-list {
+    max-height: 50vh;
   }
   .calview-day-number {
     font-size: 12px;
