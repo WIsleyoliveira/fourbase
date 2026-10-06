@@ -84,6 +84,9 @@ In-app bell and immediate e-mail for four kinds: `mention` and `assignment` (bel
 
 **Tests.** `tests/notificationRules.test.js` (pure rules), `mailer.test.js` (injected `fetch`), `notifications-service.test.js` (emission, throttle, due materialization), `notifications-api.test.js` (routes, isolation, `GET /api/tasks/:id`), `notificationText.test.js`, `notificationCache.test.js`, `profile-notify.test.js`, `localdb-operators.test.js` (shim `.is()` and `.limit()`).
 
+### Tags
+Tasks store tag **names** (`task.tags: string[]`); the registry is `fourbase_tags`. `DELETE /api/tags/:id` is gestor-only, workspace-scoped (404 otherwise), deletes the row and strips the name from every task of the workspace (done in JS so it works on the mock DB too). On the client `useTagActions().deleteTag(tag)` is optimistic (tag list + every cached task list) with rollback; the trash button lives in `TagPicker` rows and is shown only to gestores. Tests: `tests/tags-delete.test.js`.
+
 ### Responsive breakpoints
 ≥1101px: full sidebar. **769–1100px (iPad portrait/landscape): the sidebar is forced into the icon rail** (`compactScreen` in `App.jsx` adds the `collapsed` classes; the toggle is hidden) so content keeps the width — there is no horizontal "sidebar bar" any more. ≤900px: 2-column grids stack (Painel KPIs 2×2, `.dashboard-grid` single column) and the Calendário side panels (mini-calendar+filters, Pendências) stack above/below the grid. ≤768px: compact top bar + sliding drawer (`.mobile-topbar`, `.sidebar.mobile-open`); the desktop `.topbar-actions` are hidden (create "+" and theme live in the mobile bar, refresh in the drawer). `@media (hover: none) and (pointer: coarse)` enlarges touch targets and shows hover-only controls. The final responsive block is at the end of `styles.css`; when adding a screen, check 390, 820 and 1024px.
 

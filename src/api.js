@@ -93,6 +93,7 @@ export const api = {
   getTags: () => request('/api/tags'),
   createTag: (name, color) =>
     request('/api/tags', { method: 'POST', body: JSON.stringify({ name, color }) }),
+  deleteTag: (id) => request(`/api/tags/${id}`, { method: 'DELETE' }),
 
   // membros — a criação é por convite (o gestor não define a senha de ninguém).
   // inviteMember devolve { invitation, activation_url }: o link só existe nessa

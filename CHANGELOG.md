@@ -14,6 +14,7 @@ versão, atualize os dois e a `version` do `package.json`.
 - **Calendário — criação rápida** clicando num dia (data já preenchida).
 - **Calendário — Pendências**: gaveta com tarefas em atraso e sem data; arrastar para um dia ou reagendar para hoje.
 - **Calendário — mini-calendário e filtros laterais** (status, responsável, etiquetas) com contagens.
+- **Excluir etiquetas** (gestor): lixeira em cada etiqueta do seletor; a etiqueta sai também de todas as tarefas.
 - **Painel principal renovado**: gráfico de rosca de progresso, concluir tarefas pela lista de próximos prazos (atrasadas em destaque, com responsável), agenda de hoje, nota rápida e atalho de criar tarefa nos cartões; "Criar Tarefa" e "Recarregar dados" foram para o topo (no celular, "+" no cabeçalho e recarregar no menu).
 - **"O que há de novo"** exibido uma vez por versão ao entrar, e reaberto pelo botão "Novidades" do menu.
 

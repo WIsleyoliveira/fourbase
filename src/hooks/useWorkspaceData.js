@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, getAuth } from '../api.js'
 import { tagColor } from '../colors.js'
 import { useToast } from '../toast.jsx'
-import { TASK_KEYS } from '../taskCache.js'
+import { TASK_KEYS, patchAllTaskLists, restoreTaskLists, snapshotTaskLists } from '../taskCache.js'
 import {
   COLUMN_KEYS, buildColumn, readCachedColumns, writeCachedColumns,
 } from '../columnCache.js'
@@ -130,7 +130,7 @@ export const useTags = () => {
 
 export function useTagActions() {
   const queryClient = useQueryClient()
-  const { handleError } = useToast()
+  const { handleError, showToast } = useToast()
   const key = TAG_KEYS.mine(sessionUserId())
 
   return {
@@ -147,6 +147,29 @@ export function useTagActions() {
         }
         return tag
       } catch (err) { handleError(err); throw err }
+    },
+
+    // Exclui a etiqueta (só gestor). Some na hora da lista e de todas as tarefas em
+    // cache (as tarefas guardam o NOME); se a API recusar, tudo volta ao que era.
+    deleteTag: async (tag) => {
+      await queryClient.cancelQueries({ queryKey: TASK_KEYS.all })
+      const tagsBefore = queryClient.getQueryData(key)
+      const tasksBefore = snapshotTaskLists(queryClient)
+      queryClient.setQueryData(key, (old) => (Array.isArray(old) ? old.filter((t) => t.id !== tag.id) : old))
+      patchAllTaskLists(queryClient, (list) => list.map((task) => (
+        task.tags?.includes(tag.name) ? { ...task, tags: task.tags.filter((n) => n !== tag.name) } : task
+      )))
+      try {
+        await api.deleteTag(tag.id)
+        showToast(`Etiqueta “${tag.name}” excluída.`)
+        return true
+      } catch (err) {
+        queryClient.setQueryData(key, tagsBefore)
+        restoreTaskLists(queryClient, tasksBefore)
+        handleError(err)
+        queryClient.invalidateQueries({ queryKey: key })
+        return false
+      }
     },
   }
 }

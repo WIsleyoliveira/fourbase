@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { IconClose, IconPlus, IconTag } from '../icons.jsx'
+import { IconClose, IconPlus, IconTag, IconTrash } from '../icons.jsx'
 import { tagColor } from '../colors.js'
+import { getAuth } from '../api.js'
+import { useTagActions } from '../hooks/useWorkspaceData.js'
 
 // Multi-select criável de etiquetas (estilo Notion/Combobox): mostra as
 // etiquetas selecionadas como badges removíveis + um campo que busca entre as
@@ -14,6 +16,9 @@ export default function TagPicker({ value = [], onChange, availableTags = [], on
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
+  // Excluir uma etiqueta afeta todo o workspace (sai de todas as tarefas): só o gestor.
+  const { deleteTag } = useTagActions()
+  const canDelete = getAuth()?.user?.role === 'gestor'
   const containerRef = useRef(null)
   const inputRef = useRef(null)
   const menuRef = useRef(null)
@@ -71,6 +76,13 @@ export default function TagPicker({ value = [], onChange, availableTags = [], on
     }
   }
 
+  const removeFromWorkspace = async (tag) => {
+    if (!window.confirm(`Excluir a etiqueta “${tag.name}”? Ela será removida de todas as tarefas que a usam.`)) return
+    const ok = await deleteTag(tag)
+    if (ok) onChange(value.filter((v) => v !== tag.name))
+    inputRef.current?.focus()
+  }
+
   const chooseOption = (opt) => {
     if (!opt) return
     if (opt.kind === 'create') handleCreate()
@@ -123,16 +135,28 @@ export default function TagPicker({ value = [], onChange, availableTags = [], on
       {open && (
         <div className="tag-picker-menu" ref={menuRef}>
           {matches.map((t, i) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`tag-picker-option${activeIndex === i ? ' active' : ''}`}
-              onMouseEnter={() => setActiveIndex(i)}
-              onClick={() => addTag(t.name)}
-            >
-              <span className="tag-picker-dot" style={{ background: t.color }} />
-              {t.name}
-            </button>
+            <div className="tag-picker-row" key={t.id}>
+              <button
+                type="button"
+                className={`tag-picker-option${activeIndex === i ? ' active' : ''}`}
+                onMouseEnter={() => setActiveIndex(i)}
+                onClick={() => addTag(t.name)}
+              >
+                <span className="tag-picker-dot" style={{ background: t.color }} />
+                {t.name}
+              </button>
+              {canDelete && (
+                <button
+                  type="button"
+                  className="tag-picker-del"
+                  title={`Excluir a etiqueta “${t.name}”`}
+                  aria-label={`Excluir a etiqueta ${t.name}`}
+                  onClick={() => removeFromWorkspace(t)}
+                >
+                  <IconTrash size={13} />
+                </button>
+              )}
+            </div>
           ))}
 
           {canCreate && (

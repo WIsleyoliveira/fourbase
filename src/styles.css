@@ -5985,6 +5985,46 @@ img.kb-avatar {
   background: var(--primary-light);
 }
 
+.tag-picker-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.tag-picker .tag-picker-del {
+  position: absolute;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-strong);
+  box-shadow: none;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.tag-picker-row:hover .tag-picker-del,
+.tag-picker-row:focus-within .tag-picker-del {
+  opacity: 1;
+}
+.tag-picker .tag-picker-del:hover,
+.tag-picker .tag-picker-del:focus-visible {
+  background: var(--danger-soft);
+  color: var(--danger);
+  transform: none;
+  outline: none;
+}
+@media (hover: none) {
+  .tag-picker .tag-picker-del {
+    opacity: 1;
+  }
+}
 .tag-picker-dot {
   width: 9px;
   height: 9px;
