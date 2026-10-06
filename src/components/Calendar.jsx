@@ -91,6 +91,15 @@ function CalendarView({ currentUser }) {
   const [quickTitle, setQuickTitle] = useState('')
   const [quickSaving, setQuickSaving] = useState(false)
   const quickRef = useRef(null)
+  const drawerRef = useRef(null)
+  const leftRef = useRef(null)
+
+  // Em telas estreitas (≤900px) os painéis ficam empilhados acima/abaixo da grade:
+  // ao abrir um, a página rola até ele para a pessoa não achar que nada aconteceu.
+  const scrollTarget = useRef(null)
+  const scrollToPanel = (ref) => {
+    if (window.innerWidth <= 900) scrollTarget.current = ref
+  }
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
   // Painel lateral esquerdo (mini-calendário + filtros): lembrado entre visitas
   const [leftOpen, setLeftOpen] = useState(() => {
@@ -105,6 +114,12 @@ function CalendarView({ currentUser }) {
     return !v
   })
   const [filters, setFilters] = useState(EMPTY_CAL_FILTERS)
+  // depois de o painel entrar na tela (o efeito roda com o DOM já atualizado)
+  useEffect(() => {
+    const ref = scrollTarget.current
+    scrollTarget.current = null
+    ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [sideOpen, leftOpen])
   const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
   // Arrastando uma tarefa: as faixas deixam de captar o mouse para o dia embaixo receber o drop
@@ -363,7 +378,7 @@ function CalendarView({ currentUser }) {
   return (
     <div className="calview">
       {leftOpen && (
-        <aside className="calview-left" aria-label="Mini-calendário e filtros">
+        <aside className="calview-left" ref={leftRef} aria-label="Mini-calendário e filtros">
           <MiniCalendar
             month={cursor}
             selectedDate={selectedDate}
@@ -461,7 +476,7 @@ function CalendarView({ currentUser }) {
             <button
               className={`calview-ghost-btn calview-filters-btn${leftOpen ? ' active' : ''}`}
               aria-expanded={leftOpen}
-              onClick={toggleLeft}
+              onClick={() => { if (!leftOpen) scrollToPanel(leftRef); toggleLeft() }}
               title="Mini-calendário e filtros"
             >
               <IconFilter size={14} />
@@ -471,7 +486,7 @@ function CalendarView({ currentUser }) {
             <button
               className={`calview-ghost-btn calview-pending-btn${sideOpen ? ' active' : ''}`}
               aria-expanded={sideOpen}
-              onClick={() => setSideOpen((v) => !v)}
+              onClick={() => { if (!sideOpen) scrollToPanel(drawerRef); setSideOpen((v) => !v) }}
               title="Tarefas em atraso e sem data"
             >
               <IconList size={14} />
@@ -605,7 +620,7 @@ function CalendarView({ currentUser }) {
       </div>
 
       {sideOpen && (
-        <aside className="calview-drawer" aria-label="Tarefas em atraso e sem data">
+        <aside className="calview-drawer" ref={drawerRef} aria-label="Tarefas em atraso e sem data">
           <div className="calview-drawer-header">
             <h4>Pendências</h4>
             <button className="icon-btn" onClick={() => setSideOpen(false)} title="Fechar">
