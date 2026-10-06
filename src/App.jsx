@@ -22,12 +22,16 @@ import ProfileView from './components/ProfileView.jsx'
 import SendToKanbanModal from './components/SendToKanbanModal.jsx'
 import NotificationBell from './components/NotificationBell.jsx'
 import TaskPeekModal from './components/TaskPeekModal.jsx'
+import WhatsNewModal from './components/WhatsNewModal.jsx'
+import { RELEASES, LATEST_VERSION } from './releaseNotes.js'
+import { markSeen, readSeenVersion, shouldShowWhatsNew } from './whatsNew.js'
 import {
   IconDashboard,
   IconKanban,
   IconCalendar,
   IconNotes,
   IconRefresh,
+  IconRocket,
   IconTeam,
   IconUserPlus,
   IconBuilding,
@@ -114,6 +118,22 @@ export default function App() {
   const clients = clientsQuery.data ?? []
   const userId = session?.user?.id
   const { addTask } = useTaskActions({ userId })
+
+  // "O que há de novo": abre sozinho uma vez por versão, ao entrar (depois do tutorial
+  // de boas-vindas); o botão "Novidades" do menu reabre a qualquer momento.
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
+  const onboarded = session?.user?.has_completed_onboarding
+  useEffect(() => {
+    if (!userId) { setWhatsNewOpen(false); return }
+    const seenVersion = readSeenVersion(userId)
+    if (shouldShowWhatsNew({ onboarded, seenVersion }, RELEASES)) setWhatsNewOpen(true)
+    // quem ainda está no tutorial já está conhecendo o produto: não precisa ver depois
+    else if (!onboarded && seenVersion !== LATEST_VERSION) markSeen(userId, LATEST_VERSION)
+  }, [userId, onboarded])
+  const closeWhatsNew = () => {
+    setWhatsNewOpen(false)
+    if (userId) markSeen(userId, LATEST_VERSION)
+  }
 
   const login = (auth) => {
     setAuth(auth)
@@ -453,6 +473,10 @@ export default function App() {
             <IconLogout size={16} />
           </button>
         </div>
+        <button className="action" onClick={() => setWhatsNewOpen(true)}>
+          <IconRocket />
+          <span>Novidades</span>
+        </button>
         <button className="action" onClick={() => queryClient.invalidateQueries()}>
           <IconRefresh />
           <span>Recarregar dados</span>
@@ -477,6 +501,13 @@ export default function App() {
           currentUser={user}
           onCancel={() => setKanbanDraft(null)}
           onConfirm={confirmSendToKanban}
+        />
+      )}
+      {whatsNewOpen && (
+        <WhatsNewModal
+          releases={RELEASES}
+          onClose={closeWhatsNew}
+          onNavigate={(path) => navigate(path)}
         />
       )}
       {route.taskId && <TaskPeekModal taskId={route.taskId} onClose={closeTaskPeek} />}
