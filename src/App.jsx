@@ -24,6 +24,7 @@ import TaskPeekModal from './components/TaskPeekModal.jsx'
 import WhatsNewModal from './components/WhatsNewModal.jsx'
 import { RELEASES, LATEST_VERSION } from './releaseNotes.js'
 import { markSeen, readSeenVersion, shouldShowWhatsNew } from './whatsNew.js'
+import { applyTheme, nextTheme, readTheme, saveTheme } from './theme.js'
 import {
   IconDashboard,
   IconKanban,
@@ -32,6 +33,8 @@ import {
   IconRefresh,
   IconRocket,
   IconPlus,
+  IconSun,
+  IconMoon,
   IconTeam,
   IconUserPlus,
   IconBuilding,
@@ -94,6 +97,16 @@ export default function App() {
   const { activationToken, view, clientId: selectedClientId, tab: clientTab } = route
   const queryClient = useQueryClient()
   const fetching = useIsFetching() > 0
+  // Tema dia/noite: a escolha fica salva neste navegador (src/theme.js)
+  const [theme, setTheme] = useState(readTheme)
+  useEffect(() => { applyTheme(theme) }, [theme])
+  const toggleTheme = () => setTheme((t) => {
+    const next = nextTheme(t)
+    saveTheme(next)
+    return next
+  })
+  const themeLabel = theme === 'dark' ? 'Mudar para o tema dia' : 'Mudar para o tema noite'
+  const ThemeIcon = theme === 'dark' ? IconSun : IconMoon
   const [session, setSession] = useState(getAuth)
   // Barra lateral recolhível — lembra a preferência entre sessões
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('fb_sidebar_open') !== '0')
@@ -352,6 +365,9 @@ export default function App() {
         </button>
         <img src="/fourbase-logo.png" alt="fourbase" className="mobile-topbar-logo" />
         <div className="mobile-topbar-actions">
+          <button className="mobile-topbar-theme" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>
+            <ThemeIcon size={18} />
+          </button>
           {view === 'painel' && (
             <button
               className="mobile-topbar-create"
@@ -499,6 +515,9 @@ export default function App() {
                 Criar Tarefa
               </button>
             )}
+            <button className="icon-btn topbar-theme" title={themeLabel} aria-label={themeLabel} onClick={toggleTheme}>
+              <ThemeIcon size={15} />
+            </button>
             <button
               className={`icon-btn topbar-refresh${fetching ? ' spinning' : ''}`}
               title="Recarregar dados"

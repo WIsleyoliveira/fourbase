@@ -11,9 +11,19 @@ export const RELEASES = [
   {
     version: '1.1.0',
     date: '2026-10-05',
-    title: 'Notificações, novo Painel, Kanban turbinado e Calendário renovado',
+    title: 'Tema noite, notificações, novo Painel, Kanban e Calendário',
     intro: 'Reunimos as melhorias dessa rodada. Veja o que mudou:',
     items: [
+      {
+        kind: 'Novo',
+        icon: 'IconMoon',
+        title: 'Tema dia e tema noite',
+        text: 'Prefere um visual mais escuro? Agora você escolhe entre o tema dia e o tema noite, em todas as telas.',
+        points: [
+          'O botão de lua/sol fica no topo da página (no celular, no cabeçalho)',
+          'Sua escolha fica salva; sem escolha, usamos o tema do seu dispositivo',
+        ],
+      },
       {
         kind: 'Novo',
         icon: 'IconBell',

@@ -7,6 +7,7 @@ versão, atualize os dois e a `version` do `package.json`.
 ## 1.1.0 — 2026-10-05 (ainda não publicada em produção)
 
 ### Novo
+- **Tema dia/noite**: botão no topo (e no cabeçalho do celular); a escolha fica salva no navegador e, sem escolha, segue o tema do sistema.
 - **Sino de notificações**: avisos de menção e atribuição (no app e por e-mail) e de prazos chegando/vencidos; preferência de e-mail em Meu Perfil.
 - **Kanban — opções avançadas ao criar tarefa**: status, responsável, cliente, prioridade, prazo, data final, horário de início/fim, mencionados, descrição, etiquetas e imagens.
 - **Kanban — busca e filtros**: busca por título/descrição/etiqueta; filtros de responsável, mencionados, etiquetas, prioridade, prazo e cliente; ordenação; resumo do quadro; visual renovado.
