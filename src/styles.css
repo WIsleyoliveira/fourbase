@@ -5073,95 +5073,10 @@ img.kb-avatar {
   .topbar h2 {
     font-size: 23px;
   }
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ---------- Tablet retrato / mobile grande (até 900px) ---------- */
 @media (max-width: 900px) {
-  .app {
-    grid-template-columns: 1fr;
-  }
-  .sidebar,
-  .sidebar.collapsed {
-    width: auto;
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 14px;
-    padding: 12px 16px;
-    height: auto;
-    min-width: 0;
-    position: sticky;
-    top: 0;
-    z-index: 5;
-  }
-  /* Sem espaço pra recolher numa barra horizontal — o botão some e o estado
-     "collapsed" (persistido do desktop) é ignorado no layout mobile. */
-  .sidebar-toggle {
-    display: none;
-  }
-  .sidebar.collapsed .brand > div,
-  .sidebar.collapsed .footer-note {
-    display: block;
-  }
-  .sidebar.collapsed .brand h1,
-  .sidebar.collapsed .brand p,
-  .sidebar.collapsed .menu button span,
-  .sidebar.collapsed .sidebar-profile-btn span,
-  .sidebar.collapsed .sidebar-group-label,
-  .sidebar.collapsed .sidebar button.action span {
-    display: inline;
-  }
-  .sidebar.collapsed .user-box-id {
-    display: flex;
-  }
-  .sidebar.collapsed .logout-btn {
-    display: inline-flex;
-  }
-  .brand {
-    flex: 0 0 auto;
-  }
-  .brand p {
-    display: none;
-  }
-  .menu {
-    flex-direction: row;
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    gap: 6px;
-  }
-  .menu::-webkit-scrollbar {
-    display: none;
-  }
-  .menu button {
-    white-space: nowrap;
-    padding: 10px 12px;
-    font-size: 13px;
-  }
-  .sidebar-section,
-  .footer-note,
-  .sidebar button.action {
-    display: none;
-  }
-  .user-box {
-    margin-top: 0;
-    padding: 8px 10px;
-    flex: 0 0 auto;
-  }
-  .user-box-id strong {
-    max-width: 110px;
-  }
-  .user-box-id .role-badge {
-    display: none;
-  }
   .member-stats {
     grid-template-columns: repeat(5, 1fr);
   }
@@ -5170,11 +5085,6 @@ img.kb-avatar {
   }
   .dropzone {
     min-height: 200px;
-  }
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
   }
   .notes-layout,
   .media-layout {
@@ -8651,21 +8561,6 @@ img.kb-avatar {
   }
 }
 
-/* Tablet (769-900px): o .topbar empilha em coluna; o sino continua no canto
-   superior direito (como no desktop) e o título ganha folga para não ficar sob ele. */
-@media (min-width: 769px) and (max-width: 900px) {
-  .topbar {
-    position: relative;
-  }
-  .topbar > .notif-wrap-desktop {
-    position: absolute;
-    top: 0;
-    right: 0;
-  }
-  .topbar > div:first-child {
-    padding-right: 56px;
-  }
-}
 /* ---------- Painel somente leitura da tarefa (?tarefa=) ---------- */
 .modal.task-peek {
   max-width: 560px;
@@ -9134,4 +9029,135 @@ img.kb-avatar {
 }
 .mobile-topbar-theme:hover {
   background: rgba(255, 255, 255, 0.08);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Tablet / iPad / celular
+   • 769–1100px (iPad em pé e deitado): a barra lateral vira trilho de ícones (a classe
+     "collapsed" é forçada em App.jsx) e o conteúdo ganha toda a largura.
+   • ≤900px: grades de 2 colunas empilham; painéis do Calendário vão para cima/baixo da grade.
+   • ≤768px: cabeçalho compacto + menu deslizante (blocos acima).
+   ══════════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 769px) and (max-width: 1100px) {
+  .sidebar-toggle {
+    display: none;
+  }
+  .topbar > div:first-child {
+    min-width: 0;
+  }
+  .topbar h2 {
+    font-size: 22px;
+  }
+  .main {
+    padding: 20px 18px;
+  }
+  .main-wide,
+  .main-full {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-col > .panel:last-child,
+  .dashboard-col > .dashboard-side {
+    flex: none;
+  }
+  /* Calendário: mini-calendário/filtros e Pendências ficam acima/abaixo da grade */
+  .calview {
+    flex-direction: column;
+  }
+  .calview-left {
+    width: 100%;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) 1fr;
+    align-items: start;
+    gap: 18px 24px;
+  }
+  .calview-drawer {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .calview-drawer-list {
+    max-height: 50vh;
+  }
+  .calview-toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  /* Kanban: o filtro e a criação ocupam a largura toda */
+  .kb-filters {
+    padding: 10px;
+  }
+}
+@media (max-width: 640px) {
+  .calview-left {
+    grid-template-columns: 1fr;
+  }
+  .main {
+    padding: 16px 12px;
+  }
+  .panel {
+    padding: 16px;
+  }
+  .topbar h2 {
+    font-size: 21px;
+  }
+  /* Rosca e legenda lado a lado também no celular */
+  .donut-body {
+    justify-content: center;
+  }
+  .stat-card {
+    padding: 14px;
+  }
+  .stat-value {
+    font-size: 26px;
+  }
+  /* Modais viram "folhas" que sobem de baixo, com rolagem interna */
+  .whatsnew-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .whatsnew {
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+}
+/* Telas de toque (iPad inclusive): alvos maiores e sem depender de hover */
+@media (hover: none) and (pointer: coarse) {
+  .upcoming-check {
+    width: 24px;
+    height: 24px;
+  }
+  .calview-cell-add {
+    opacity: 1;
+    transform: none;
+  }
+  .minical-day {
+    height: 34px;
+  }
+  .calfilters-option {
+    padding: 8px 6px;
+  }
+  .calview-side-task-today,
+  .calquick-more,
+  .calquick-save {
+    min-height: 36px;
+  }
+}
+
+/* Trilho de ícones: os botões de ação do rodapé ficam só com o ícone */
+.sidebar.collapsed button.action span {
+  display: none;
+}
+.sidebar.collapsed button.action {
+  padding: 12px 0;
 }

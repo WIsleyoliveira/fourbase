@@ -110,6 +110,17 @@ export default function App() {
   const [session, setSession] = useState(getAuth)
   // Barra lateral recolhível — lembra a preferência entre sessões
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('fb_sidebar_open') !== '0')
+  // iPad e telas médias (769–1100px): a barra lateral fica sempre como trilho de ícones
+  const [compactScreen, setCompactScreen] = useState(
+    () => window.matchMedia('(min-width: 769px) and (max-width: 1100px)').matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 769px) and (max-width: 1100px)')
+    const onChange = (e) => setCompactScreen(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  const sidebarExpanded = sidebarOpen && !compactScreen
   const toggleSidebar = () => {
     setSidebarOpen((prev) => {
       const next = !prev
@@ -349,7 +360,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${sidebarOpen ? '' : ' sidebar-collapsed'}`}>
+    <div className={`app${sidebarExpanded ? '' : ' sidebar-collapsed'}`}>
       {/* Cabeçalho compacto — só visível abaixo de 768px (ver styles.css) */}
       <header className="mobile-topbar">
         <button
@@ -398,7 +409,7 @@ export default function App() {
         <div className="sidebar-backdrop" onClick={() => setMobileMenuOpen(false)} />
       )}
 
-      <aside className={`sidebar${sidebarOpen ? '' : ' collapsed'}${mobileMenuOpen ? ' mobile-open' : ''}`}>
+      <aside className={`sidebar${sidebarExpanded ? '' : ' collapsed'}${mobileMenuOpen ? ' mobile-open' : ''}`}>
         <button
           className="sidebar-toggle"
           title={sidebarOpen ? 'Recolher barra lateral' : 'Expandir barra lateral'}
