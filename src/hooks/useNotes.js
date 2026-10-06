@@ -57,6 +57,13 @@ export function useNoteActions() {
     createNote: async () =>
       (await fromServer(() => api.createNote('Nova nota', ''), addNoteFirst)) ?? null,
 
+    // Nota já com título e conteúdo (HTML) — "nota rápida" do Painel. Devolve a nota ou null.
+    addNote: async (title, content) => {
+      const note = await fromServer(() => api.createNote(title, content), addNoteFirst)
+      if (note) showToast('Nota criada.')
+      return note ?? null
+    },
+
     // Devolve true se salvou — quem chama só marca "sem alterações" nesse caso.
     saveNote: async (id, title, content) => {
       const note = await fromServer(() => api.updateNote(id, title, content), addNoteFirst)

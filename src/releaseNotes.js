@@ -87,6 +87,19 @@ export const RELEASES = [
       },
       {
         kind: 'Melhoria',
+        icon: 'IconDashboard',
+        title: 'Painel principal renovado',
+        text: 'O painel ficou mais útil e mais equilibrado, com tudo à mão para começar o dia.',
+        points: [
+          'Gráfico de rosca com a proporção de tarefas a fazer, em progresso e concluídas',
+          'Marque tarefas como concluídas direto na lista de próximos prazos; as atrasadas ficam em destaque',
+          'Nova agenda de hoje e criação rápida de nota e de tarefa nos atalhos',
+          '“Criar Tarefa” e “Recarregar dados” agora ficam no topo da página',
+        ],
+        cta: { label: 'Ver o painel', path: '/painel' },
+      },
+      {
+        kind: 'Melhoria',
         icon: 'IconShield',
         title: 'Mais rápido e mais seguro',
         text: 'Reforçamos a proteção dos seus dados e deixamos as telas mais ágeis: as mudanças aparecem na hora e voltam sozinhas se algo der errado.',

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
 import { useTaskActions } from './hooks/useTasks.js'
@@ -32,6 +32,7 @@ import {
   IconNotes,
   IconRefresh,
   IconRocket,
+  IconPlus,
   IconTeam,
   IconUserPlus,
   IconBuilding,
@@ -93,6 +94,7 @@ export default function App() {
   )
   const { activationToken, view, clientId: selectedClientId, tab: clientTab } = route
   const queryClient = useQueryClient()
+  const fetching = useIsFetching() > 0
   const [session, setSession] = useState(getAuth)
   // Barra lateral recolhível — lembra a preferência entre sessões
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem('fb_sidebar_open') !== '0')
@@ -359,6 +361,16 @@ export default function App() {
         </button>
         <img src="/fourbase-logo.png" alt="fourbase" className="mobile-topbar-logo" />
         <div className="mobile-topbar-actions">
+          {view === 'painel' && (
+            <button
+              className="mobile-topbar-create"
+              title="Criar tarefa"
+              aria-label="Criar tarefa"
+              onClick={() => openSendToKanban('', '')}
+            >
+              <IconPlus size={18} />
+            </button>
+          )}
           <NotificationBell className="notif-wrap-mobile" />
           <button
             className="mobile-topbar-profile"
@@ -477,7 +489,7 @@ export default function App() {
           <IconRocket />
           <span>Novidades</span>
         </button>
-        <button className="action" onClick={() => queryClient.invalidateQueries()}>
+        <button className="action action-refresh" onClick={() => queryClient.invalidateQueries()}>
           <IconRefresh />
           <span>Recarregar dados</span>
         </button>
@@ -489,7 +501,23 @@ export default function App() {
             <h2>{current.title}</h2>
             <p>{current.subtitle}</p>
           </div>
-          <NotificationBell className="notif-wrap-desktop" />
+          <div className="topbar-actions">
+            {view === 'painel' && (
+              <button className="topbar-create-btn" onClick={() => openSendToKanban('', '')}>
+                <IconPlus size={15} />
+                Criar Tarefa
+              </button>
+            )}
+            <button
+              className={`icon-btn topbar-refresh${fetching ? ' spinning' : ''}`}
+              title="Recarregar dados"
+              aria-label="Recarregar dados"
+              onClick={() => queryClient.invalidateQueries()}
+            >
+              <IconRefresh size={15} />
+            </button>
+            <NotificationBell className="notif-wrap-desktop" />
+          </div>
         </section>
         <section className="view" key={view}>
           {renderView()}

@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import Onboarding from './Onboarding.jsx'
-import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus } from '../icons.jsx'
+import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus, IconCheckPlain, IconCalendar } from '../icons.jsx'
+import Avatar from './Avatar.jsx'
+import QuickNoteModal from './QuickNoteModal.jsx'
+import { DONUT_RADIUS, donutSegments, todayAgenda } from '../dashboardData.js'
+import { localToday } from '../notificationText.js'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import { useFolders } from '../hooks/useFolders.js'
@@ -11,7 +15,7 @@ import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
 import { memberColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
-const MAX_UPCOMING = 4
+const MAX_UPCOMING = 5
 
 // Estado do prazo em relação a hoje — reaproveita a mesma lógica usada no Kanban.
 // due_date_end (tarefa de vários dias) é o que decide "atrasada", não o início.
@@ -43,6 +47,40 @@ const dueLabel = (due_date, due_date_end, due_time) => {
 
 const EMPTY = []
 
+const DONUT_LEGEND = [
+  { key: 'todo', label: 'A fazer' },
+  { key: 'doing', label: 'Em progresso' },
+  { key: 'done', label: 'Concluídas' },
+]
+
+// Rosca de progresso: proporção entre A fazer / Em progresso / Concluídas, com o
+// percentual concluído no centro. Sem tarefas, só o anel vazio.
+function ProgressDonut({ counts, total, progress }) {
+  const segments = donutSegments(counts)
+  return (
+    <div className="donut">
+      <svg viewBox="0 0 120 120" className="donut-svg" role="img" aria-label={`${progress}% das tarefas concluídas`}>
+        <circle className="donut-ring" cx="60" cy="60" r={DONUT_RADIUS} />
+        {segments.map((seg) => (
+          <circle
+            key={seg.key}
+            className={`donut-seg donut-seg-${seg.key}`}
+            cx="60"
+            cy="60"
+            r={DONUT_RADIUS}
+            strokeDasharray={`${seg.length} ${seg.circumference - seg.length}`}
+            strokeDashoffset={seg.offset}
+          />
+        ))}
+      </svg>
+      <div className="donut-center">
+        <strong>{progress}%</strong>
+        <small>{total ? 'concluído' : 'sem tarefas'}</small>
+      </div>
+    </div>
+  )
+}
+
 function DashboardView({
   currentUser,
   onNavigate, onCreateTask,
@@ -53,6 +91,7 @@ function DashboardView({
   const tags = useTags().data ?? EMPTY
   const { createTag: onCreateTag } = useTagActions()
   const [detailTaskId, setDetailTaskId] = useState(null)
+  const [quickNoteOpen, setQuickNoteOpen] = useState(false)
   const tasks = useMyTasks(currentUser.id).data ?? EMPTY
   const { updateTask: onUpdateTask, moveTask: onMoveTask, deleteTask: onDeleteTask } =
     useTaskActions({ userId: currentUser.id })
@@ -83,6 +122,11 @@ function DashboardView({
     .sort((a, b) => a.due_date.localeCompare(b.due_date))
     .slice(0, MAX_UPCOMING)
 
+  const todayKey = localToday()
+  const agenda = todayAgenda(tasks, todayKey)
+  const completeTask = (task) => onMoveTask(task.id, 'done')
+  const assigneeOf = (task) => members.find((m) => m.id === task.assigned_to)
+
   const detailTask = detailTaskId ? tasks.find((t) => t.id === detailTaskId) : null
   const latestNote = notes[0] || null
 
@@ -93,6 +137,7 @@ function DashboardView({
       key: 'notas',
       icon: <IconNotes size={18} />,
       title: 'Notas',
+      action: { label: 'Nova nota rápida', run: () => setQuickNoteOpen(true) },
       subtitle: notesQuery.isLoading
         ? 'Carregando...'
         : latestNote
@@ -113,87 +158,166 @@ function DashboardView({
       key: 'kanban',
       icon: <IconKanban size={18} />,
       title: 'Kanban',
+      action: { label: 'Criar tarefa', run: onCreateTask },
       subtitle: `${tasks.length} tarefa${tasks.length === 1 ? '' : 's'} · ${taskProgress}% concluído`,
     },
   ]
 
   return (
     <div className="dashboard">
-      <div className="dashboard-header">
-        <div className="stats-grid">
-          {stats.map((s) => (
-            <div className={`stat-card tone-${s.tone}`} key={s.label}>
-              <span className="stat-value">{s.value}</span>
-              <span className="stat-label">{s.label}</span>
-            </div>
-          ))}
-        </div>
-        <button className="dashboard-create-btn" onClick={onCreateTask}>
-          <IconPlus size={16} />
-          Criar Tarefa
-        </button>
-      </div>
-
-      <div className="panel progress-panel">
-        <div className="panel-header">
-          <div>
-            <h3>Progresso geral</h3>
-            <span>Andamento das tarefas do quadro</span>
+      <div className="stats-grid">
+        {stats.map((s) => (
+          <div className={`stat-card tone-${s.tone}`} key={s.label}>
+            <span className="stat-value">{s.value}</span>
+            <span className="stat-label">{s.label}</span>
           </div>
-          <strong className="progress-number">{taskProgress}%</strong>
-        </div>
-        <div className="progress-track">
-          <div className="progress-fill" style={{ width: `${taskProgress}%` }} />
-        </div>
+        ))}
       </div>
 
-      {/* Grid principal: prazos (2/3) + atalhos empilhados (1/3) — mesma altura, colunas simétricas */}
+      {/* Duas colunas equilibradas: prazos + agenda de hoje | progresso + atalhos */}
       <div className="dashboard-grid">
-        <div className="panel upcoming-panel dashboard-grid-main">
-          <div className="panel-header">
-            <div>
-              <h3>Próximos prazos</h3>
-              <span>Suas tarefas com vencimento mais próximo</span>
+        <div className="dashboard-col">
+          <div className="panel upcoming-panel">
+            <div className="panel-header">
+              <div>
+                <h3>Próximos prazos</h3>
+                <span>Suas tarefas com vencimento mais próximo</span>
+              </div>
+            </div>
+            <div className="upcoming-list">
+              {upcomingTasks.length === 0 && (
+                <div className="empty-hint">Nenhuma tarefa com prazo definido no momento.</div>
+              )}
+              {upcomingTasks.map((t) => {
+                const state = dueState(t.due_date, t.due_date_end)
+                const assignee = assigneeOf(t)
+                return (
+                  <div
+                    key={t.id}
+                    className={`upcoming-item${state === 'overdue' ? ' is-overdue' : ''}`}
+                    style={{ '--owner': memberColor(t.assigned_to, members) }}
+                  >
+                    <button
+                      type="button"
+                      className="upcoming-check"
+                      onClick={() => completeTask(t)}
+                      title="Concluir tarefa"
+                      aria-label={`Concluir a tarefa ${t.title}`}
+                    >
+                      <IconCheckPlain size={11} />
+                    </button>
+                    <button type="button" className="upcoming-main" onClick={() => setDetailTaskId(t.id)}>
+                      <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>
+                        {t.priority}
+                      </span>
+                      <span className="upcoming-item-title">{t.title}</span>
+                      <span className={`due-tag due-${state}`}>
+                        {dueLabel(t.due_date, t.due_date_end, t.due_time)}
+                      </span>
+                      {assignee && (
+                        <Avatar id={assignee.id} name={assignee.name} list={members} className="member-avatar sm" />
+                      )}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+            <button type="button" className="panel-link" onClick={() => onNavigate('calendario')}>
+              Ver todos no Calendário <IconArrowRight size={13} />
+            </button>
+          </div>
+
+          <div className="panel today-panel">
+            <div className="panel-header">
+              <div>
+                <h3>Agenda de hoje</h3>
+                <span>
+                  {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </span>
+              </div>
+              <span className="today-count">{agenda.length}</span>
+            </div>
+            <div className="upcoming-list">
+              {agenda.length === 0 && (
+                <div className="empty-hint">Nada marcado para hoje. Aproveite para adiantar o que vem aí.</div>
+              )}
+              {agenda.map((t) => {
+                const assignee = assigneeOf(t)
+                return (
+                  <button
+                    type="button"
+                    key={t.id}
+                    className="today-item"
+                    style={{ '--owner': memberColor(t.assigned_to, members) }}
+                    onClick={() => setDetailTaskId(t.id)}
+                  >
+                    <span className="today-time">
+                      {t.due_time ? formatTime(t.due_time) : 'Dia todo'}
+                    </span>
+                    <span className="upcoming-item-title">{t.title}</span>
+                    {assignee && (
+                      <Avatar id={assignee.id} name={assignee.name} list={members} className="member-avatar sm" />
+                    )}
+                  </button>
+                )
+              })}
             </div>
           </div>
-          <div className="upcoming-list">
-            {upcomingTasks.length === 0 && (
-              <div className="empty-hint">Nenhuma tarefa com prazo definido no momento.</div>
-            )}
-            {upcomingTasks.map((t) => (
-              <button
-                key={t.id}
-                className="upcoming-item"
-                style={{ borderLeft: `3px solid ${memberColor(t.assigned_to, members)}`, paddingLeft: 10 }}
-                onClick={() => setDetailTaskId(t.id)}
-              >
-                <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>
-                  {t.priority}
-                </span>
-                <span className="upcoming-item-title">{t.title}</span>
-                <span className={`due-tag due-${dueState(t.due_date, t.due_date_end)}`}>
-                  {dueLabel(t.due_date, t.due_date_end, t.due_time)}
-                </span>
-              </button>
+        </div>
+
+        <aside className="dashboard-col">
+          <div className="panel donut-panel">
+            <div className="panel-header">
+              <div>
+                <h3>Progresso geral</h3>
+                <span>Andamento das tarefas do quadro</span>
+              </div>
+            </div>
+            <div className="donut-body">
+              <ProgressDonut counts={counts} total={tasks.length} progress={taskProgress} />
+              <ul className="donut-legend">
+                {DONUT_LEGEND.map((item) => (
+                  <li key={item.key}>
+                    <span className={`donut-dot donut-seg-${item.key}`} />
+                    <span className="donut-legend-label">{item.label}</span>
+                    <strong>{counts[item.key]}</strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="dashboard-side">
+            {sideWidgets.map((w) => (
+              <div className="dashboard-widget" key={w.key}>
+                <button type="button" className="dashboard-widget-main" onClick={() => onNavigate(w.key)}>
+                  <span className="dashboard-widget-left">
+                    <span className="dashboard-widget-icon">{w.icon}</span>
+                    <span className="dashboard-widget-text">
+                      <strong>{w.title}</strong>
+                      <small>{w.subtitle}</small>
+                    </span>
+                  </span>
+                  <IconArrowRight size={15} className="dashboard-widget-arrow" />
+                </button>
+                {w.action && (
+                  <button
+                    type="button"
+                    className="dashboard-widget-add"
+                    title={w.action.label}
+                    aria-label={w.action.label}
+                    onClick={w.action.run}
+                  >
+                    <IconPlus size={15} />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
-        </div>
-
-        <aside className="dashboard-side">
-          {sideWidgets.map((w) => (
-            <button className="dashboard-widget" key={w.key} onClick={() => onNavigate(w.key)}>
-              <span className="dashboard-widget-left">
-                <span className="dashboard-widget-icon">{w.icon}</span>
-                <span className="dashboard-widget-text">
-                  <strong>{w.title}</strong>
-                  <small>{w.subtitle}</small>
-                </span>
-              </span>
-              <IconArrowRight size={15} className="dashboard-widget-arrow" />
-            </button>
-          ))}
         </aside>
       </div>
+
+      {quickNoteOpen && <QuickNoteModal onClose={() => setQuickNoteOpen(false)} />}
 
       {detailTask && (
         <TaskDetailModal
