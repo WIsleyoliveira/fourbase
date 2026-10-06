@@ -182,7 +182,7 @@ export default function TaskDetailModal({
     if (!title || saving) return
     setSaving(true)
     try {
-      await onCreate({
+      const created = await onCreate({
         title,
         description: descDraft.trim(),
         priority: local.priority || 'Média',
@@ -197,7 +197,8 @@ export default function TaskDetailModal({
         attachments: local.attachments || [],
         mentioned_users: local.mentioned_users || [],
       })
-      onClose()
+      // se falhou, o aviso de erro já foi dado e o rascunho continua aberto para tentar de novo
+      if (created) onClose()
     } finally {
       setSaving(false)
     }

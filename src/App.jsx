@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
-import { useTaskActions } from './hooks/useTasks.js'
 import { patchMemberInCache, useClients } from './hooks/useWorkspaceData.js'
 import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath, withTaskParam } from './routes.js'
 
@@ -19,7 +18,7 @@ import ClientsView from './components/ClientsView.jsx'
 import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
-import SendToKanbanModal from './components/SendToKanbanModal.jsx'
+import NewTaskModal from './components/NewTaskModal.jsx'
 import NotificationBell from './components/NotificationBell.jsx'
 import TaskPeekModal from './components/TaskPeekModal.jsx'
 import WhatsNewModal from './components/WhatsNewModal.jsx'
@@ -119,7 +118,6 @@ export default function App() {
   const clientsQuery = useClients()
   const clients = clientsQuery.data ?? []
   const userId = session?.user?.id
-  const { addTask } = useTaskActions({ userId })
 
   // "O que há de novo": abre sozinho uma vez por versão, ao entrar (depois do tutorial
   // de boas-vindas); o botão "Novidades" do menu reabre a qualquer momento.
@@ -172,13 +170,6 @@ export default function App() {
       .catch(handleError)
 
   const openSendToKanban = (title, description = '') => setKanbanDraft({ title, description })
-
-  const confirmSendToKanban = async (data) => {
-    const t = await addTask(data.title, data.priority, data.due_date, data.assigned_to, data.description)
-    if (!t) return
-    setKanbanDraft(null)
-    showToast('Enviado para o Kanban.')
-  }
 
   // Navega para o Espaço do Cliente dono da pasta, já na sub-aba Documentações
   // com a pasta indicada aberta/selecionada. Documentações não existe mais como
@@ -524,11 +515,10 @@ export default function App() {
         </section>
       </main>
       {kanbanDraft && (
-        <SendToKanbanModal
+        <NewTaskModal
           draft={kanbanDraft}
           currentUser={user}
-          onCancel={() => setKanbanDraft(null)}
-          onConfirm={confirmSendToKanban}
+          onClose={() => setKanbanDraft(null)}
         />
       )}
       {whatsNewOpen && (
