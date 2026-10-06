@@ -11,7 +11,6 @@ import {
   IconPlus,
   IconChevronDown,
   IconFilter,
-  IconUser,
   IconSearch,
   IconClose,
   IconCheckPlain,
@@ -22,6 +21,10 @@ import Avatar from './Avatar.jsx'
 import { memberColor, tagColor } from '../colors.js'
 import { layoutWeek, taskTooltip, MAX_LANES } from '../calendarLayout.js'
 import { emptyDraft, buildTaskFields } from '../newTaskForm.js'
+import MiniCalendar from './MiniCalendar.jsx'
+import {
+  EMPTY_CAL_FILTERS, toggleCalFilter, countCalFilters, filterCalendarTasks, countOptions,
+} from '../calendarFilters.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -89,18 +92,25 @@ function CalendarView({ currentUser }) {
   const [quickSaving, setQuickSaving] = useState(false)
   const quickRef = useRef(null)
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
-  const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false)
-  const [assigneeFilter, setAssigneeFilter] = useState('all')
-  const [tagMenuOpen, setTagMenuOpen] = useState(false)
-  const [tagFilter, setTagFilter] = useState(() => new Set())
+  // Painel lateral esquerdo (mini-calendário + filtros): lembrado entre visitas
+  const [leftOpen, setLeftOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fb_cal_left')
+      if (saved !== null) return saved === '1'
+    } catch { /* armazenamento indisponível */ }
+    return typeof window !== 'undefined' && window.innerWidth >= 1100
+  })
+  const toggleLeft = () => setLeftOpen((v) => {
+    try { localStorage.setItem('fb_cal_left', v ? '0' : '1') } catch { /* ignora */ }
+    return !v
+  })
+  const [filters, setFilters] = useState(EMPTY_CAL_FILTERS)
   const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
   // Arrastando uma tarefa: as faixas deixam de captar o mouse para o dia embaixo receber o drop
   const [dragging, setDragging] = useState(false)
 
   const viewMenuRef = useRef(null)
-  const assigneeMenuRef = useRef(null)
-  const tagMenuRef = useRef(null)
   const collapseTimerRef = useRef(null)
 
   // Recolhe o painel de detalhes com animação: a largura do popover começa a encolher
@@ -117,25 +127,17 @@ function CalendarView({ currentUser }) {
   // Limpa qualquer timer de colapso pendente ao desmontar o componente
   useEffect(() => () => clearTimeout(collapseTimerRef.current), [])
 
-  // Fecha os menus (visualização / responsável) ao clicar fora ou pressionar ESC
+  // Fecha os menus e popovers ao clicar fora ou pressionar ESC
   useEffect(() => {
     const handleClick = (e) => {
       if (viewMenuOpen && viewMenuRef.current && !viewMenuRef.current.contains(e.target)) {
         setViewMenuOpen(false)
-      }
-      if (assigneeMenuOpen && assigneeMenuRef.current && !assigneeMenuRef.current.contains(e.target)) {
-        setAssigneeMenuOpen(false)
-      }
-      if (tagMenuOpen && tagMenuRef.current && !tagMenuRef.current.contains(e.target)) {
-        setTagMenuOpen(false)
       }
       if (quick && quickRef.current && !quickRef.current.contains(e.target)) setQuick(null)
     }
     const handleKey = (e) => {
       if (e.key === 'Escape') {
         setViewMenuOpen(false)
-        setAssigneeMenuOpen(false)
-        setTagMenuOpen(false)
         if (quick) { setQuick(null); return }
         // Primeiro ESC recolhe o painel de detalhes; segundo ESC fecha o popover do dia
         if (selectedTaskId) {
@@ -151,25 +153,15 @@ function CalendarView({ currentUser }) {
       document.removeEventListener('mousedown', handleClick)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [viewMenuOpen, assigneeMenuOpen, tagMenuOpen, selectedTaskId, collapsing, quick])
-
-  const toggleTagFilter = (name) => {
-    setTagFilter((prev) => {
-      const next = new Set(prev)
-      next.has(name) ? next.delete(name) : next.add(name)
-      return next
-    })
-  }
+  }, [viewMenuOpen, selectedTaskId, collapsing, quick])
 
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return tasks.filter((t) => {
-      if (assigneeFilter !== 'all' && t.assigned_to !== assigneeFilter) return false
-      if (tagFilter.size > 0 && !(t.tags || []).some((name) => tagFilter.has(name))) return false
-      if (q && !t.title.toLowerCase().includes(q)) return false
-      return true
-    })
-  }, [tasks, search, assigneeFilter, tagFilter])
+    const byFilters = filterCalendarTasks(tasks, filters)
+    return q ? byFilters.filter((t) => t.title.toLowerCase().includes(q)) : byFilters
+  }, [tasks, search, filters])
+  const optionCounts = useMemo(() => countOptions(tasks), [tasks])
+  const activeFilterCount = countCalFilters(filters)
 
   // Tarefas de vários dias aparecem em toda data do intervalo [due_date,
   // due_date_end] — não só no dia de início. Iterar por string 'YYYY-MM-DD'
@@ -198,6 +190,14 @@ function CalendarView({ currentUser }) {
     })
     return map
   }, [filteredTasks])
+
+  const busyDays = useMemo(() => new Set(Object.keys(tasksByDay)), [tasksByDay])
+
+  // Salta o calendário para um dia escolhido no mini-calendário
+  const jumpToDate = (date) => {
+    setCursor(new Date(date.getFullYear(), date.getMonth(), 1))
+    setSelectedDate(date)
+  }
 
   // Tarefas do dia selecionado no popover — memoizado, reage a mudanças de data ou da lista de tarefas
   const tasksForSelectedDate = useMemo(() => {
@@ -362,6 +362,74 @@ function CalendarView({ currentUser }) {
 
   return (
     <div className="calview">
+      {leftOpen && (
+        <aside className="calview-left" aria-label="Mini-calendário e filtros">
+          <MiniCalendar
+            month={cursor}
+            selectedDate={selectedDate}
+            today={today}
+            busyDays={busyDays}
+            onPick={jumpToDate}
+          />
+          <div className="calfilters">
+            <div className="calfilters-head">
+              <h4>Filtros</h4>
+              {activeFilterCount > 0 && (
+                <button type="button" className="calfilters-clear" onClick={() => setFilters(EMPTY_CAL_FILTERS)}>
+                  Limpar
+                </button>
+              )}
+            </div>
+            <fieldset className="calfilters-group">
+              <legend>Status</legend>
+              {columns.map((c) => (
+                <label key={c.key} className="calfilters-option">
+                  <input
+                    type="checkbox"
+                    checked={filters.statuses.includes(c.key)}
+                    onChange={() => setFilters((f) => toggleCalFilter(f, 'statuses', c.key))}
+                  />
+                  <span className="calfilters-dot" style={{ background: c.color }} />
+                  <span className="calfilters-label">{c.label}</span>
+                  <span className="calfilters-count">{optionCounts.statuses[c.key] || 0}</span>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="calfilters-group">
+              <legend>Responsável</legend>
+              {members.map((m) => (
+                <label key={m.id} className="calfilters-option">
+                  <input
+                    type="checkbox"
+                    checked={filters.assignees.includes(m.id)}
+                    onChange={() => setFilters((f) => toggleCalFilter(f, 'assignees', m.id))}
+                  />
+                  <span className="calfilters-dot" style={{ background: memberColor(m.id, members) }} />
+                  <span className="calfilters-label">{m.name}</span>
+                  <span className="calfilters-count">{optionCounts.assignees[m.id] || 0}</span>
+                </label>
+              ))}
+            </fieldset>
+            {tags.length > 0 && (
+              <fieldset className="calfilters-group">
+                <legend>Etiquetas</legend>
+                {tags.map((t) => (
+                  <label key={t.id} className="calfilters-option">
+                    <input
+                      type="checkbox"
+                      checked={filters.tags.includes(t.name)}
+                      onChange={() => setFilters((f) => toggleCalFilter(f, 'tags', t.name))}
+                    />
+                    <span className="calfilters-dot" style={{ background: t.color }} />
+                    <span className="calfilters-label">{t.name}</span>
+                    <span className="calfilters-count">{optionCounts.tags[t.name] || 0}</span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+          </div>
+        </aside>
+      )}
       <div className="calview-main">
         <header className="calview-toolbar">
           <div className="calview-toolbar-left">
@@ -390,42 +458,16 @@ function CalendarView({ currentUser }) {
             </h2>
           </div>
           <div className="calview-toolbar-right">
-            <div className="calview-view-select" ref={tagMenuRef}>
-              <button
-                className={`calview-ghost-btn${tagFilter.size > 0 ? ' active' : ''}`}
-                onClick={() => setTagMenuOpen((v) => !v)}
-              >
-                <IconFilter size={14} />
-                {tagFilter.size === 0 ? 'Etiquetas' : `Etiquetas (${tagFilter.size})`}
-                <IconChevronDown size={14} />
-              </button>
-              {tagMenuOpen && (
-                <div className="calview-view-menu calview-assignee-menu calview-tag-menu">
-                  {tags.length === 0 && (
-                    <p className="calview-tag-menu-empty">Nenhuma etiqueta cadastrada.</p>
-                  )}
-                  {tags.map((t) => {
-                    const active = tagFilter.has(t.name)
-                    return (
-                      <button
-                        key={t.id}
-                        className={active ? 'active' : ''}
-                        onClick={() => toggleTagFilter(t.name)}
-                      >
-                        <span className="calview-tag-menu-dot" style={{ background: t.color }} />
-                        {t.name}
-                        {active && <IconCheckPlain size={12} style={{ marginLeft: 'auto' }} />}
-                      </button>
-                    )
-                  })}
-                  {tagFilter.size > 0 && (
-                    <button className="calview-tag-menu-clear" onClick={() => setTagFilter(new Set())}>
-                      Limpar filtro
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            <button
+              className={`calview-ghost-btn calview-filters-btn${leftOpen ? ' active' : ''}`}
+              aria-expanded={leftOpen}
+              onClick={toggleLeft}
+              title="Mini-calendário e filtros"
+            >
+              <IconFilter size={14} />
+              Filtros
+              {activeFilterCount > 0 && <span className="calview-side-count">{activeFilterCount}</span>}
+            </button>
             <button
               className={`calview-ghost-btn calview-pending-btn${sideOpen ? ' active' : ''}`}
               aria-expanded={sideOpen}
@@ -437,39 +479,6 @@ function CalendarView({ currentUser }) {
               {overdue.length > 0 && <span className="calview-side-count over">{overdue.length}</span>}
               {unscheduled.length > 0 && <span className="calview-side-count">{unscheduled.length}</span>}
             </button>
-            <button className="calview-ghost-btn">Fechado</button>
-            <div className="calview-view-select" ref={assigneeMenuRef}>
-              <button
-                className={`calview-ghost-btn${assigneeFilter !== 'all' ? ' active' : ''}`}
-                onClick={() => setAssigneeMenuOpen((v) => !v)}
-              >
-                <IconUser size={14} />
-                {assigneeFilter === 'all'
-                  ? 'Responsável'
-                  : members.find((m) => m.id === assigneeFilter)?.name || 'Responsável'}
-                <IconChevronDown size={14} />
-              </button>
-              {assigneeMenuOpen && (
-                <div className="calview-view-menu calview-assignee-menu">
-                  <button
-                    className={assigneeFilter === 'all' ? 'active' : ''}
-                    onClick={() => { setAssigneeFilter('all'); setAssigneeMenuOpen(false) }}
-                  >
-                    Todos
-                  </button>
-                  {members.map((m) => (
-                    <button
-                      key={m.id}
-                      className={assigneeFilter === m.id ? 'active' : ''}
-                      onClick={() => { setAssigneeFilter(m.id); setAssigneeMenuOpen(false) }}
-                    >
-                      <Avatar id={m.id} name={m.name} list={members} className="member-avatar sm" />
-                      {m.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
             <Avatar
               id={currentUser?.id}
               name={currentUser?.name}

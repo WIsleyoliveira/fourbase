@@ -4364,6 +4364,170 @@ img.kb-avatar {
   background: var(--primary-light);
 }
 
+/* --- Painel esquerdo: mini-calendário + filtros --- */
+.calview-left {
+  width: 248px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px;
+  border-right: 1px solid var(--border);
+  background: #f9feff;
+  overflow-y: auto;
+  max-height: calc(100vh - 150px);
+  animation: drawerInLeft 0.22s var(--ease);
+}
+@keyframes drawerInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: none; }
+}
+.minical-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.minical-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.minical-nav {
+  display: flex;
+  gap: 2px;
+}
+.minical-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px 0;
+}
+.minical-weekday {
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted-strong);
+  padding-bottom: 2px;
+}
+.minical-day {
+  position: relative;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.minical-day:hover {
+  background: var(--primary-soft);
+}
+.minical-day.out {
+  color: #b3c9cc;
+}
+.minical-day.today {
+  background: var(--primary);
+  color: var(--white);
+}
+.minical-day.selected:not(.today) {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+.minical-day.busy::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.minical-day.today.busy::after {
+  background: var(--white);
+}
+.minical-day:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.calfilters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.calfilters-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.calfilters-head h4 {
+  font-size: 13px;
+}
+.calfilters-clear {
+  border: none;
+  background: transparent;
+  color: var(--primary-deep);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.calfilters-group {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.calfilters-group legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted-strong);
+}
+.calfilters-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.calfilters-option:hover {
+  background: var(--primary-soft);
+}
+.calfilters-option input {
+  margin: 0;
+  accent-color: var(--primary);
+}
+.calfilters-option:focus-within {
+  box-shadow: var(--focus-ring);
+}
+.calfilters-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.calfilters-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calfilters-count {
+  font-size: 11.5px;
+  color: var(--muted-strong);
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- Gaveta de pendências (em atraso / sem data) — encaixa ao lado da grade --- */
 .calview-pending-btn {
   gap: 6px;
@@ -4764,6 +4928,9 @@ img.kb-avatar {
   .calview-drawer {
     width: 250px;
   }
+  .calview-left {
+    width: 220px;
+  }
   .gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
@@ -4859,13 +5026,19 @@ img.kb-avatar {
   .calview {
     flex-direction: column;
   }
-  .calview-toolbar-right .calview-ghost-btn:not(.calview-pending-btn) {
+  .calview-toolbar-right .calview-ghost-btn:not(.calview-pending-btn):not(.calview-filters-btn) {
     display: none;
   }
   .calview-drawer {
     width: 100%;
     border-left: none;
     border-top: 1px solid var(--border);
+  }
+  .calview-left {
+    width: 100%;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
   }
   .calview-drawer-list {
     max-height: 50vh;
