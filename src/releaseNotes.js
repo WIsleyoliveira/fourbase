@@ -11,7 +11,7 @@ export const RELEASES = [
   {
     version: '1.1.0',
     date: '2026-10-05',
-    title: 'Notificações, Kanban turbinado e novo Calendário',
+    title: 'Notificações, novo Painel, Kanban turbinado e Calendário renovado',
     intro: 'Reunimos as melhorias dessa rodada. Veja o que mudou:',
     items: [
       {
@@ -24,6 +24,20 @@ export const RELEASES = [
           'Prefere sem e-mail? Desligue em Meu Perfil',
         ],
         cta: { label: 'Ver meu perfil', path: '/perfil' },
+      },
+      {
+        kind: 'Novo',
+        icon: 'IconDashboard',
+        title: 'Painel principal renovado',
+        text: 'Seu ponto de partida ficou mais completo e organizado, com tudo à mão para começar o dia.',
+        points: [
+          'Gráfico de rosca com a proporção de tarefas a fazer, em progresso e concluídas',
+          'Conclua tarefas direto na lista de próximos prazos — as atrasadas ficam em destaque',
+          'Agenda de hoje com o que está marcado para o dia',
+          'Atalhos com “+” para anotar uma nota rápida ou criar uma tarefa sem sair do painel',
+          '“Criar Tarefa” e “Recarregar dados” agora ficam no topo da página',
+        ],
+        cta: { label: 'Ver o painel', path: '/painel' },
       },
       {
         kind: 'Novo',
@@ -84,19 +98,6 @@ export const RELEASES = [
         text: 'Pule para qualquer dia ou mês pelo mini-calendário e ligue ou desligue status, responsáveis e etiquetas com caixas de marcar — com a contagem de tarefas de cada um.',
         points: [],
         cta: { label: 'Abrir o Calendário', path: '/calendario' },
-      },
-      {
-        kind: 'Melhoria',
-        icon: 'IconDashboard',
-        title: 'Painel principal renovado',
-        text: 'O painel ficou mais útil e mais equilibrado, com tudo à mão para começar o dia.',
-        points: [
-          'Gráfico de rosca com a proporção de tarefas a fazer, em progresso e concluídas',
-          'Marque tarefas como concluídas direto na lista de próximos prazos; as atrasadas ficam em destaque',
-          'Nova agenda de hoje e criação rápida de nota e de tarefa nos atalhos',
-          '“Criar Tarefa” e “Recarregar dados” agora ficam no topo da página',
-        ],
-        cta: { label: 'Ver o painel', path: '/painel' },
       },
       {
         kind: 'Melhoria',
