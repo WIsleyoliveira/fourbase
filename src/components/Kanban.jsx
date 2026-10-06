@@ -6,6 +6,7 @@ import {
   IconCheckPlain,
   IconClose,
   IconCalendar,
+  IconChevronDown,
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
@@ -157,6 +158,8 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const [assignedTo, setAssignedTo] = useState(currentUser?.id || '')
   const [clientId, setClientId] = useState('')
   const [newTaskTags, setNewTaskTags] = useState([])
+  // "Mais opções" do formulário de criação (prioridade, prazo, cliente, descrição, etiquetas)
+  const [showMore, setShowMore] = useState(false)
   const [dragId, setDragId] = useState(null)
   const [overColumn, setOverColumn] = useState(null)
   // Armazena apenas o ID para que o modal sempre leia os dados mais recentes de `tasks`
@@ -193,62 +196,98 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   return (
     <div className="panel">
       {/* ── Formulário de criação de tarefa ── */}
+      {/* Barra de criação rápida: só o título à vista; o resto abre em "Mais opções" */}
       <form className="task-form" onSubmit={submit}>
-        <input
-          type="text"
-          placeholder="O que precisa ser feito?"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-          <option value="Baixa">Prioridade: Baixa</option>
-          <option value="Média">Prioridade: Média</option>
-          <option value="Alta">Prioridade: Alta</option>
-          <option value="Urgente">Prioridade: Urgente</option>
-        </select>
-        <input
-          type="date"
-          title="Prazo de entrega"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-        />
-        {isGestor && (
-          <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        )}
-        <select
-          value={clientId}
-          title="Vincular a um cliente (opcional)"
-          onChange={(e) => setClientId(e.target.value)}
-        >
-          <option value="">Sem cliente</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
-          ))}
-        </select>
-        <textarea
-          className="task-form-description"
-          placeholder="Descrição (opcional)"
-          rows={1}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <div className="task-form-tags">
-          <TagPicker
-            value={newTaskTags}
-            availableTags={tags}
-            onCreateTag={onCreateTag}
-            onChange={setNewTaskTags}
-            placeholder="Etiquetas (opcional)..."
+        <div className="task-form-main">
+          <input
+            type="text"
+            className="task-form-title"
+            placeholder="O que precisa ser feito?"
+            aria-label="Título da nova tarefa"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
           />
+          <button
+            type="button"
+            className={`task-form-more${showMore ? ' open' : ''}`}
+            aria-expanded={showMore}
+            aria-controls="task-form-extra"
+            onClick={() => setShowMore((v) => !v)}
+          >
+            <span>Mais opções</span>
+            <IconChevronDown size={14} />
+          </button>
+          <button type="submit" className="task-form-submit">
+            <IconPlus size={16} />
+            <span>Adicionar</span>
+          </button>
         </div>
-        <button type="submit">
-          <IconPlus size={16} />
-          <span>Adicionar</span>
-        </button>
+
+        {showMore && (
+          <div className="task-form-extra" id="task-form-extra">
+            <label className="task-form-field">
+              <span>Prioridade</span>
+              <select value={priority} onChange={(e) => setPriority(e.target.value)}>
+                <option value="Baixa">Baixa</option>
+                <option value="Média">Média</option>
+                <option value="Alta">Alta</option>
+                <option value="Urgente">Urgente</option>
+              </select>
+            </label>
+            <label className="task-form-field">
+              <span>Prazo</span>
+              <input
+                type="date"
+                title="Prazo de entrega"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </label>
+            {isGestor && (
+              <label className="task-form-field">
+                <span>Responsável</span>
+                <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="task-form-field">
+              <span>Cliente</span>
+              <select
+                value={clientId}
+                title="Vincular a um cliente (opcional)"
+                onChange={(e) => setClientId(e.target.value)}
+              >
+                <option value="">Sem cliente</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
+                ))}
+              </select>
+            </label>
+            <label className="task-form-field task-form-field-wide">
+              <span>Descrição</span>
+              <textarea
+                className="task-form-description"
+                placeholder="Descrição (opcional)"
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </label>
+            <div className="task-form-field task-form-field-wide task-form-tags">
+              <span>Etiquetas</span>
+              <TagPicker
+                value={newTaskTags}
+                availableTags={tags}
+                onCreateTag={onCreateTag}
+                onChange={setNewTaskTags}
+                placeholder="Etiquetas (opcional)..."
+              />
+            </div>
+          </div>
+        )}
       </form>
 
       {/* ── Board de colunas dinâmicas ── */}
@@ -280,20 +319,24 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
                   return (
                     <div
                       className={`card ${PRIORITY_CLASS[task.priority] || 'p-media'}${dragId === task.id ? ' dragging' : ''}`}
-                      style={{ borderLeft: `3px solid ${ownerColor}` }}
+                      style={{ '--owner': ownerColor }}
                       key={task.id}
                       draggable
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${task.title}. Prioridade ${task.priority || 'Média'}. Abrir detalhes`}
                       onDragStart={() => setDragId(task.id)}
                       onDragEnd={() => setDragId(null)}
                       onClick={() => setDetailTaskId(task.id)}
+                      onKeyDown={(e) => {
+                        // Só quando o foco está no próprio cartão (não nos botões internos)
+                        if (e.target !== e.currentTarget) return
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setDetailTaskId(task.id)
+                        }
+                      }}
                     >
-                      {/* ── Badge de prioridade ── */}
-                      <div className="card-top">
-                        <small className={`priority-tag ${PRIORITY_CLASS[task.priority] || 'p-media'}`}>
-                          {task.priority}
-                        </small>
-                      </div>
-
                       {/* ── Círculo de conclusão + título ── */}
                       <div className="card-title-row">
                         <button
@@ -326,23 +369,28 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
                         </div>
                       )}
 
-                      {/* ── Rodapé: prazo | setas (hover) + avatar ── */}
+                      {/* ── Rodapé: prioridade + prazo | setas (hover/foco) + pessoas ── */}
                       <div className="card-footer">
-                        {task.due_date ? (
-                          <span className={`due-tag due-${due}`}>
-                            <IconCalendar size={10} />
-                            {task.due_date_end
-                              ? `${formatDate(task.due_date)} — ${formatDate(task.due_date_end)}`
-                              : formatDate(task.due_date)}
-                            {task.due_time && (
-                              <>
-                                {' · '}
-                                {formatTime(task.due_time)}
-                                {task.due_time_end && `–${formatTime(task.due_time_end)}`}
-                              </>
-                            )}
-                          </span>
-                        ) : <span />}
+                        <div className="card-footer-meta">
+                          <small className={`priority-tag ${PRIORITY_CLASS[task.priority] || 'p-media'}`}>
+                            {task.priority || 'Média'}
+                          </small>
+                          {task.due_date && (
+                            <span className={`due-tag due-${due}`}>
+                              <IconCalendar size={11} />
+                              {task.due_date_end
+                                ? `${formatDate(task.due_date)} — ${formatDate(task.due_date_end)}`
+                                : formatDate(task.due_date)}
+                              {task.due_time && (
+                                <>
+                                  {' · '}
+                                  {formatTime(task.due_time)}
+                                  {task.due_time_end && `–${formatTime(task.due_time_end)}`}
+                                </>
+                              )}
+                            </span>
+                          )}
+                        </div>
 
                         <div className="card-footer-end">
                           <div className="card-nav-arrows">

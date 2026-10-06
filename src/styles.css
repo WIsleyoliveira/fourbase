@@ -22,6 +22,10 @@
   --shadow-lg: 0 20px 45px rgba(14, 143, 153, 0.16);
   --radius: 20px;
   --radius-sm: 12px;
+  /* Texto pequeno em cima de fundo claro: --muted (#5f7f88) fica em ~4,3:1; este passa de 5:1 */
+  --muted-strong: #4a6a73;
+  --focus-ring: 0 0 0 3px rgba(20, 184, 196, 0.4);
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 * {
   box-sizing: border-box;
@@ -626,52 +630,102 @@ textarea:focus {
 /* ---------- Kanban ---------- */
 .task-form {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 14px;
-  padding: 10px 12px;
-  background: var(--primary-light);
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px;
+  background: linear-gradient(180deg, var(--white), var(--primary-light));
   border: 1px solid var(--primary-soft);
   border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
 }
-.task-form input[type='text'] {
-  flex: 2 1 200px;
+.task-form-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.task-form select,
-.task-form input[type='date'] {
-  flex: 1 1 130px;
+.task-form-main .task-form-title {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 10px 14px;
+  font-size: 14px;
 }
-.task-form button[type='submit'] {
-  flex: 0 1 auto;
-  padding: 7px 14px;
+.task-form button.task-form-submit {
+  padding: 10px 18px;
+  font-size: 14px;
+}
+.task-form button.task-form-submit:active {
+  transform: translateY(0) scale(0.98);
+}
+.task-form button.task-form-more {
+  background: transparent;
+  color: var(--primary-deep);
+  box-shadow: none;
+  padding: 9px 12px;
   font-size: 13px;
+  font-weight: 600;
+  gap: 6px;
 }
-/* Inputs do formulário mais compactos */
-.task-form input[type='text'],
-.task-form input[type='date'],
-.task-form select {
-  padding: 7px 10px;
+.task-form button.task-form-more:hover {
+  background: var(--primary-soft);
+  transform: none;
+}
+.task-form-more svg {
+  transition: transform 0.2s var(--ease);
+}
+.task-form-more.open svg {
+  transform: rotate(180deg);
+}
+.task-form button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.task-form-extra {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--primary-soft);
+  animation: fadeUp 0.2s ease;
+}
+.task-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.task-form-field > span {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--muted-strong);
+  letter-spacing: 0.02em;
+}
+.task-form-field-wide {
+  grid-column: 1 / -1;
+}
+.task-form-field select,
+.task-form-field input[type='date'] {
+  width: 100%;
+  padding: 8px 10px;
   font-size: 13px;
 }
 .task-form-description {
-  flex-basis: 100%;
-  min-height: 32px;
-  padding: 7px 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 10px;
   font-size: 13px;
-  resize: none;
-}
-.task-form-tags {
-  flex-basis: 100%;
+  resize: vertical;
 }
 .task-form-tags .tag-picker-pills {
   background: var(--white);
   border-color: var(--primary-soft);
 }
 .card-description {
-  color: var(--muted);
+  color: var(--muted-strong);
   font-size: 12.5px;
-  line-height: 1.4;
-  margin-bottom: 10px;
+  line-height: 1.45;
+  margin-bottom: 8px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -681,7 +735,7 @@ textarea:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .card-tag-pill {
   display: inline-flex;
@@ -751,30 +805,42 @@ textarea:focus {
 }
 .kanban {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: flex-start;
   overflow-x: auto;
-  padding-bottom: 10px;
+  padding: 2px 2px 14px;
+  /* Em tela estreita cada coluna encaixa ao rolar */
+  scroll-snap-type: x proximity;
+  scroll-padding: 0 12px;
   /* Scroll suave em touch */
   -webkit-overflow-scrolling: touch;
 }
+/* Colunas crescem para ocupar a largura (telas largas) e param em 440px;
+   abaixo de 280px de largura o quadro rola na horizontal. */
 .column {
-  flex: 0 0 280px;
-  min-width: 260px;
-  background: #f7fdfe;
+  flex: 1 1 300px;
+  min-width: 280px;
+  max-width: 440px;
+  background: linear-gradient(180deg, #f7fdfe, #f1fafb);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 12px;
+  border-radius: 18px;
+  padding: 14px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  scroll-snap-align: start;
+}
+.kanban > .add-group-btn {
+  flex: 0 0 auto;
 }
 .column h4 {
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-size: 14px;
-  padding: 4px 4px 0;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  padding: 2px 4px 0;
 }
 .column-title {
   display: inline-flex;
@@ -782,18 +848,21 @@ textarea:focus {
   gap: 8px;
 }
 .column-dot {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9);
 }
 .dot-todo { background: var(--info); }
 .dot-doing { background: var(--warn); }
 .dot-done { background: var(--ok); }
 .count {
+  min-width: 26px;
+  text-align: center;
   background: var(--white);
   border: 1px solid var(--border);
-  color: var(--muted);
-  padding: 3px 10px;
+  color: var(--muted-strong);
+  padding: 2px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
@@ -802,15 +871,21 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 320px;
+  min-height: 200px;
   border-radius: 12px;
-  transition: background 0.15s ease, outline-color 0.15s ease;
+  transition: background 0.18s var(--ease), outline-color 0.18s var(--ease);
   outline: 2px dashed transparent;
   outline-offset: -2px;
 }
 .dropzone.drag-over {
   background: var(--primary-light);
   outline-color: var(--primary);
+}
+/* Dica de coluna vazia: contraste maior que o .empty-hint genérico */
+.dropzone .empty-hint {
+  color: var(--muted-strong);
+  background: rgba(255, 255, 255, 0.6);
+  border-color: var(--primary-soft);
 }
 .empty-hint {
   color: #9db8bf;
@@ -820,39 +895,47 @@ textarea:focus {
   border: 1.5px dashed var(--border);
   border-radius: 12px;
 }
+/* A faixa à esquerda é a cor do RESPONSÁVEL (--owner, vinda do JSX); a prioridade
+   é a escala de cinza do .priority-tag — as duas leituras não se misturam. */
 .card {
+  position: relative;
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 14px;
-  box-shadow: var(--shadow-sm);
+  padding: 14px 14px 12px 16px;
+  box-shadow: inset 3px 0 0 var(--owner, transparent), var(--shadow-sm);
   cursor: grab;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 .card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow);
+  border-color: var(--primary-soft);
+  box-shadow: inset 3px 0 0 var(--owner, transparent), var(--shadow);
+}
+.card:active {
+  transform: translateY(0);
+  cursor: grabbing;
+}
+.card:focus-visible {
+  border-color: var(--primary);
+  box-shadow: inset 3px 0 0 var(--owner, transparent), var(--focus-ring), var(--shadow-sm);
 }
 .card.dragging {
-  opacity: 0.55;
-}
-.card-top {
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
-  margin-bottom: 8px;
+  opacity: 0.5;
+  transform: rotate(1.2deg);
 }
 
 /* ── Círculo de conclusão + título ─────────────────────────────────── */
 .card-title-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 7px;
+  gap: 9px;
+  margin-bottom: 8px;
 }
 .card h5 {
-  font-size: 13.5px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.4;
   font-weight: 600;
   margin: 0;
   color: var(--text);
@@ -873,7 +956,14 @@ textarea:focus {
   padding: 0;
   margin-top: 2px;
   color: transparent;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+}
+.card-complete-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.card-complete-btn:active:not(:disabled) {
+  transform: scale(0.88);
 }
 .card-complete-btn:hover:not(:disabled):not(.is-done) {
   border-color: var(--ok);
@@ -894,9 +984,9 @@ textarea:focus {
   font-size: 11px;
 }
 /* Prioridade em escala de cinza — do cinza claro (Baixa) ao preto (Urgente) */
-.priority-tag.p-baixa   { background: #f1f2f4; color: #8a9099; }
-.priority-tag.p-media   { background: #e2e5e9; color: #5c636b; }
-.priority-tag.p-alta    { background: #c7ccd2; color: #333940; }
+.priority-tag.p-baixa   { background: #eef0f2; color: #55606a; }
+.priority-tag.p-media   { background: #e1e5e9; color: #3f474f; }
+.priority-tag.p-alta    { background: #c9cfd6; color: #262b31; }
 .priority-tag.p-urgente { background: #2b2f36; color: #ffffff; font-weight: 800; }
 .icon-btn.success:hover:not(:disabled) {
   color: var(--ok);
@@ -928,24 +1018,37 @@ textarea:focus {
 .card .due-tag {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background: transparent;
   padding: 0;
   border-radius: 0;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted-strong);
 }
-.card .due-tag.due-overdue { color: var(--danger); }
-.card .due-tag.due-today   { color: var(--warn); }
-.card .due-tag.due-upcoming { color: var(--muted); }
+.card .due-tag.due-overdue { color: #c8344f; }
+.card .due-tag.due-today   { color: #a96a0c; }
+.card .due-tag.due-upcoming { color: var(--muted-strong); }
+.card .priority-tag {
+  padding: 2px 8px;
+  font-size: 10.5px;
+}
 
 /* ── Rodapé do card ──────────────────────────────────────────────── */
 .card-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 6px;
   margin-top: 10px;
+}
+.card-footer-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
 }
 .card-footer-end {
   display: flex;
@@ -961,8 +1064,19 @@ textarea:focus {
   opacity: 0;
   transition: opacity 0.15s ease;
 }
-.card:hover .card-nav-arrows {
+.card:hover .card-nav-arrows,
+.card:focus-within .card-nav-arrows {
   opacity: 1;
+}
+/* Sem hover (toque): as setas ficam sempre visíveis e maiores */
+@media (hover: none) {
+  .card-nav-arrows {
+    opacity: 1;
+  }
+  .card-nav-arrows .icon-btn {
+    width: 30px;
+    height: 30px;
+  }
 }
 .card-nav-arrows .icon-btn {
   width: 22px;
@@ -973,6 +1087,10 @@ textarea:focus {
 .card-nav-arrows .icon-btn:hover {
   background: var(--primary-light);
   border-color: var(--primary-soft);
+}
+.card-nav-arrows .icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* ── Avatar circular do responsável ─────────────────────────────── */
@@ -1036,6 +1154,35 @@ textarea:focus {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+/* ── Kanban: celular, tablet e movimento reduzido ───────────────── */
+@media (max-width: 640px) {
+  .column {
+    flex: 0 0 min(86vw, 320px);
+    min-width: 0;
+  }
+  .task-form-main .task-form-title {
+    flex-basis: 100%;
+  }
+  .task-form-main .task-form-more {
+    margin-right: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .dropzone,
+  .task-form-more svg,
+  .card-complete-btn {
+    transition: none;
+  }
+  .card:hover,
+  .card.dragging {
+    transform: none;
+  }
+  .task-form-extra {
+    animation: none;
+  }
 }
 
 /* ---------- Modal de detalhes da tarefa ---------- */
@@ -3185,6 +3332,10 @@ textarea:focus {
 .main.main-full {
   max-width: none;
 }
+/* Kanban: usa mais largura em telas grandes (as colunas crescem até 440px cada) */
+.main.main-wide {
+  max-width: 1840px;
+}
 .calview {
   display: flex;
   align-items: stretch;
@@ -3951,14 +4102,6 @@ textarea:focus {
   .team-grid {
     grid-template-columns: 1fr;
   }
-  .kanban {
-    /* já é flex — apenas ajusta o min-width das colunas em telas menores */
-    padding-bottom: 6px;
-  }
-  .column {
-    flex: 0 0 250px;
-    min-width: 240px;
-  }
   .dropzone {
     min-height: 200px;
   }
@@ -4297,15 +4440,6 @@ textarea:focus {
   }
   .brand p {
     display: block;
-  }
-
-  /* Kanban: scroll horizontal com snap por coluna, comum em telas de toque */
-  .kanban {
-    scroll-snap-type: x proximity;
-  }
-  .column {
-    scroll-snap-align: start;
-    min-width: 280px;
   }
 
   /* Barras de filtro/cabeçalho: empilha em vez de espremer horizontalmente */

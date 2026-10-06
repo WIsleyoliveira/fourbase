@@ -459,7 +459,7 @@ export default function App() {
         </button>
         <div className="footer-note">fourbase workspace</div>
       </aside>
-      <main className={`main${view === 'calendario' ? ' main-full' : ''}`}>
+      <main className={`main${view === 'calendario' ? ' main-full' : view === 'kanban' ? ' main-wide' : ''}`}>
         <section className="topbar">
           <div>
             <h2>{current.title}</h2>
