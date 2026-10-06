@@ -18,6 +18,7 @@ import {
 } from '../icons.jsx'
 import Avatar from './Avatar.jsx'
 import { memberColor, tagColor } from '../colors.js'
+import { layoutWeek, taskTooltip, MAX_LANES } from '../calendarLayout.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -42,6 +43,11 @@ const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
 // due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
 const formatTime = (time) => (time ? time.slice(0, 5) : '')
+
+const formatDay = (key) => {
+  const [y, m, d] = key.split('-')
+  return `${d}/${m}/${y}`
+}
 
 // Duração da transição de largura do popover (ver .daydetail-popover em styles.css) —
 // o desmonte do painel de detalhes é adiado até o fim da transição para não interrompê-la.
@@ -80,6 +86,8 @@ function CalendarView({ currentUser }) {
   const [tagFilter, setTagFilter] = useState(() => new Set())
   const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
+  // Arrastando uma tarefa: as faixas deixam de captar o mouse para o dia embaixo receber o drop
+  const [dragging, setDragging] = useState(false)
 
   const viewMenuRef = useRef(null)
   const assigneeMenuRef = useRef(null)
@@ -220,6 +228,16 @@ function CalendarView({ currentUser }) {
     return cells
   }, [cursor])
 
+  // Semanas da grade com as faixas já posicionadas (vários dias = uma barra só)
+  const weeks = useMemo(() => {
+    const rows = []
+    for (let i = 0; i < grid.length; i += 7) {
+      const cells = grid.slice(i, i + 7)
+      rows.push({ cells, ...layoutWeek(cells.map((c) => toKey(c.date)), filteredTasks) })
+    }
+    return rows
+  }, [grid, filteredTasks])
+
   const changeMonth = (delta) => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1))
   const goToday = () => {
     setCursor(new Date(today.getFullYear(), today.getMonth(), 1))
@@ -267,11 +285,15 @@ function CalendarView({ currentUser }) {
   }
 
   const dragTask = (e, taskId) => {
+    e.stopPropagation()
     e.dataTransfer.setData('text/plain', taskId)
+    // adiado: mudar o alvo no mesmo instante do dragstart cancelaria o arraste no Chrome
+    setTimeout(() => setDragging(true), 0)
   }
 
   const dropOnDay = (e, date) => {
     e.preventDefault()
+    setDragging(false)
     const id = e.dataTransfer.getData('text/plain')
     if (!id || !onUpdate) return
     const newStart = toKey(date)
@@ -440,40 +462,60 @@ function CalendarView({ currentUser }) {
           ))}
         </div>
 
-        <div className="calview-grid">
-          {grid.map(({ date, inMonth }, i) => {
-            const dayTasks = tasksByDay[toKey(date)] || []
-            const isToday = isSameDay(date, today)
-            const isSelected = selectedDate && isSameDay(date, selectedDate)
-            return (
-              <div
-                key={i}
-                className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                onClick={() => openNewTask(date)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => dropOnDay(e, date)}
-              >
-                <div className="calview-cell-top">
-                  <button
-                    className="calview-cell-add"
-                    title="Ver tarefas do dia"
-                    onClick={(e) => { e.stopPropagation(); openDayDetail(date) }}
-                  >
-                    <IconStack size={12} />
-                  </button>
-                  <span className="calview-day-number">{date.getDate()}</span>
-                </div>
-                <div className="calview-cell-tasks">
-                  {dayTasks.slice(0, 3).map((t) => (
+        <div className={`calview-grid${dragging ? ' is-dragging' : ''}`}>
+          {weeks.map(({ cells, segments, hidden }, w) => (
+            <div className="calview-week" key={w}>
+              <div className="calview-week-cells">
+                {cells.map(({ date, inMonth }) => {
+                  const isToday = isSameDay(date, today)
+                  const isSelected = selectedDate && isSameDay(date, selectedDate)
+                  return (
+                    <div
+                      key={toKey(date)}
+                      className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
+                      onClick={() => openNewTask(date)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => dropOnDay(e, date)}
+                    >
+                      <div className="calview-cell-top">
+                        <button
+                          className="calview-cell-add"
+                          title="Ver tarefas do dia"
+                          onClick={(e) => { e.stopPropagation(); openDayDetail(date) }}
+                        >
+                          <IconStack size={12} />
+                        </button>
+                        <span className="calview-day-number">{date.getDate()}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="calview-week-events">
+                {segments.map(({ task: t, col, span, lane, startsHere, endsHere }) => {
+                  const color = memberColor(t.assigned_to, members)
+                  const timed = Boolean(t.due_time) && span === 1
+                  const done = t.column_key === 'done'
+                  const assignee = members.find((m) => m.id === t.assigned_to)
+                  return (
                     <button
                       key={t.id}
-                      className="calview-task-badge"
-                      style={{ background: `${memberColor(t.assigned_to, members)}22` }}
+                      className={`calview-task-badge${timed ? ' timed' : ''}${done ? ' done' : ''}${startsHere ? '' : ' cont-left'}${endsHere ? '' : ' cont-right'}`}
+                      style={{
+                        gridColumn: `${col + 1} / span ${span}`,
+                        gridRow: lane + 1,
+                        '--owner': color,
+                      }}
+                      title={taskTooltip(t, assignee?.name, formatDay)}
                       onClick={(e) => openDetail(e, t)}
                       draggable
-                      onDragStart={(e) => { e.stopPropagation(); dragTask(e, t.id) }}
+                      onDragStart={(e) => dragTask(e, t.id)}
+                      onDragEnd={() => setDragging(false)}
                     >
-                      <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
+                      {timed && <span className="calview-task-dot" />}
+                      {t.due_time && startsHere && (
+                        <span className="calview-task-time">{formatTime(t.due_time)}</span>
+                      )}
                       <span className="calview-task-title">{t.title}</span>
                       {t.tags?.length > 0 && (
                         <span className="calview-task-tags">
@@ -483,14 +525,22 @@ function CalendarView({ currentUser }) {
                         </span>
                       )}
                     </button>
-                  ))}
-                  {dayTasks.length > 3 && (
-                    <span className="calview-more">+{dayTasks.length - 3} mais</span>
-                  )}
-                </div>
+                  )
+                })}
+                {hidden.map((count, col) => count > 0 && (
+                  <button
+                    key={`more-${col}`}
+                    className="calview-more"
+                    style={{ gridColumn: col + 1, gridRow: MAX_LANES + 1 }}
+                    title="Ver todas as tarefas do dia"
+                    onClick={(e) => { e.stopPropagation(); openDayDetail(cells[col].date) }}
+                  >
+                    +{count} mais
+                  </button>
+                ))}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
 

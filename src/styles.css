@@ -3972,19 +3972,33 @@ img.kb-avatar {
 }
 
 /* --- Grade --- */
+/* Cada semana é uma linha: uma camada com as células dos dias e, por cima, a camada
+   de tarefas (grade de 7 colunas; faixas de vários dias ocupam várias colunas). */
+.calview {
+  --cal-head: 34px;
+  --cal-lane: 22px;
+  --cal-gap: 2px;
+}
 .calview-grid {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.calview-week {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  min-height: calc(var(--cal-head) + (var(--cal-lane) + var(--cal-gap)) * 4 + 6px);
+}
+.calview-week-cells {
+  flex: 1;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(120px, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 .calview-cell {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  padding: 6px 8px 0;
   cursor: pointer;
   transition: background 0.15s ease;
   min-width: 0;
@@ -4043,33 +4057,97 @@ img.kb-avatar {
   font-weight: 700;
   color: var(--text);
 }
-.calview-cell-tasks {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow: hidden;
+/* Camada de tarefas: não capta o mouse (o clique cai na célula); só as faixas captam */
+.calview-week-events {
+  position: absolute;
+  inset: var(--cal-head) 0 0 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: var(--cal-lane);
+  gap: var(--cal-gap) 0;
+  padding: 0 4px;
+  pointer-events: none;
+}
+.calview-week-events > * {
+  pointer-events: auto;
+}
+.calview-grid.is-dragging .calview-week-events > * {
+  pointer-events: none;
 }
 .calview-task-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  min-width: 0;
+  margin: 0 2px;
   border: none;
-  border-radius: 7px;
-  padding: 4px 7px;
+  border-left: 3px solid var(--owner);
+  border-radius: 6px;
+  padding: 0 7px;
+  background: color-mix(in srgb, var(--owner) 18%, var(--white));
+  color: var(--text);
   font-size: 12px;
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
+  cursor: pointer;
+  transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+.calview-task-badge:hover {
+  filter: brightness(0.96);
+  box-shadow: var(--shadow-sm);
+}
+.calview-task-badge:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* Tarefa com horário, de um dia: sem preenchimento, só ponto + hora (como compromisso) */
+.calview-task-badge.timed {
+  background: transparent;
+  border-left: none;
+  padding: 0 5px;
+}
+.calview-task-badge.timed:hover {
+  background: color-mix(in srgb, var(--owner) 14%, transparent);
+  filter: none;
+}
+.calview-task-badge.timed .calview-task-dot {
+  background: var(--owner);
+}
+/* Faixa que continua de/para outra semana: ponta reta */
+.calview-task-badge.cont-left {
+  border-left-width: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -4px;
+}
+.calview-task-badge.cont-right {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -4px;
+}
+.calview-task-badge.done {
+  opacity: 0.6;
+}
+.calview-task-badge.done .calview-task-title {
+  text-decoration: line-through;
+}
+.calview-task-time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--muted-strong);
 }
 .calview-task-badge .calview-task-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .calview-task-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
   flex-shrink: 0;
   background: currentColor;
@@ -4086,15 +4164,27 @@ img.kb-avatar {
   border-radius: 999px;
   flex-shrink: 0;
 }
-.calview-task-badge.p-baixa   { background: #f1f2f4; color: #8a9099; }
-.calview-task-badge.p-media   { background: #e2e5e9; color: #5c636b; }
-.calview-task-badge.p-alta    { background: #c7ccd2; color: #333940; }
-.calview-task-badge.p-urgente { background: #2b2f36; color: #ffffff; }
 .calview-more {
+  align-self: center;
+  justify-self: start;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-strong);
   font-size: 11.5px;
-  color: var(--muted);
-  font-weight: 600;
-  padding: 0 4px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.calview-more:hover {
+  background: var(--primary-soft);
+  color: var(--primary-deep);
+}
+.calview-more:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* --- Popover de tarefas do dia (Day Detail) --- */
@@ -4560,9 +4650,6 @@ img.kb-avatar {
   .calview {
     min-height: 0;
   }
-  .calview-grid {
-    grid-auto-rows: minmax(96px, 1fr);
-  }
   .calview-day-number {
     font-size: 12.5px;
   }
@@ -4684,18 +4771,24 @@ img.kb-avatar {
   .calview-side-panel {
     width: 100%;
   }
-  .calview-grid {
-    grid-auto-rows: minmax(76px, 1fr);
-  }
   .calview-day-number {
     font-size: 12px;
   }
+  .calview {
+    --cal-head: 28px;
+    --cal-lane: 20px;
+  }
   .calview-cell {
-    padding: 5px;
+    padding: 4px 3px 0;
   }
   .calview-task-badge {
-    font-size: 11px;
-    padding: 3px 5px;
+    font-size: 10.5px;
+    padding: 0 4px;
+    gap: 3px;
+  }
+  .calview-task-time,
+  .calview-task-tags {
+    display: none;
   }
   .daydetail-popover {
     width: 100%;
