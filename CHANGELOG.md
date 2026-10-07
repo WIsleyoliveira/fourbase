@@ -4,11 +4,11 @@ Histórico de versões do fourbase. O texto que os usuários veem ao entrar na
 plataforma ("O que há de novo") fica em `src/releaseNotes.js` — ao publicar uma
 versão, atualize os dois e a `version` do `package.json`.
 
-## 1.1.0 — 2026-10-05 (ainda não publicada em produção)
+## 1.1.0 — 2026-10-07
 
 ### Novo
 - **Tema dia/noite**: botão no topo (e no cabeçalho do celular); a escolha fica salva no navegador e, sem escolha, segue o tema do sistema.
-- **Sino de notificações**: avisos de menção e atribuição e de prazos chegando/vencidos, no app. O envio por e-mail está implementado (menção e atribuição, com preferência em Meu Perfil) mas só é ativado quando `RESEND_API_KEY`/`EMAIL_FROM` estiverem configurados com domínio verificado; no lançamento da 1.1.0 o texto do aviso aos usuários anuncia o e-mail como "em breve".
+- **Sino de notificações**: avisos de menção e atribuição e de prazos chegando/vencidos, no app. O envio por e-mail está implementado (menção e atribuição, com preferência em Meu Perfil) mas só é ativado quando `RESEND_API_KEY`/`EMAIL_FROM` estiverem configurados com domínio verificado; na 1.1.0 o texto do aviso aos usuários anuncia o e-mail como "em breve" (hoje o Resend só entrega ao dono da conta, até haver domínio verificado).
 - **Kanban — opções avançadas ao criar tarefa**: status, responsável, cliente, prioridade, prazo, data final, horário de início/fim, mencionados, descrição, etiquetas e imagens.
 - **Kanban — busca e filtros**: busca por título/descrição/etiqueta; filtros de responsável, mencionados, etiquetas, prioridade, prazo e cliente; ordenação; resumo do quadro; visual renovado.
 - **Calendário — criação rápida** clicando num dia (data já preenchida).
