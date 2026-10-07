@@ -28,12 +28,11 @@ export const RELEASES = [
         kind: 'Novo',
         icon: 'IconBell',
         title: 'Sino de notificações',
-        text: 'Receba um aviso quando alguém mencionar você ou atribuir uma tarefa a você — no sino e por e-mail. Também avisamos quando um prazo está chegando ou já passou.',
+        text: 'Receba um aviso no sino quando alguém mencionar você ou atribuir uma tarefa a você. Também avisamos quando um prazo está chegando ou já passou.',
         points: [
           'Clique no aviso para abrir a tarefa na hora',
-          'Prefere sem e-mail? Desligue em Meu Perfil',
+          'Em breve: o mesmo aviso também por e-mail (você poderá desligar em Meu Perfil)',
         ],
-        cta: { label: 'Ver meu perfil', path: '/perfil' },
       },
       {
         kind: 'Novo',
