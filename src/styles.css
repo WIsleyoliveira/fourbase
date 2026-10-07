@@ -1913,6 +1913,11 @@ img.kb-avatar {
   padding: 24px;
   width: 100%;
   max-width: 420px;
+  /* Formulário mais alto que a tela (ex.: Cadastrar cliente) precisa rolar
+     dentro do próprio modal — o backdrop é fixed, então sem isso o botão
+     de salvar fica fora da tela e inalcançável. */
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
 }
 .modal-header {
   display: flex;
