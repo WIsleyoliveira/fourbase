@@ -15,7 +15,10 @@ import { fileURLToPath } from 'url'
 import { randomUUID } from 'crypto'
 import bcrypt from 'bcryptjs'
 
-const DB_PATH = fileURLToPath(new URL('../data/db.json', import.meta.url))
+// FOURBASE_DB_PATH permite apontar para outro arquivo — usado pelos testes
+// (tests/) para não tocar no data/db.json de desenvolvimento.
+const DB_PATH = process.env.FOURBASE_DB_PATH
+  || fileURLToPath(new URL('../data/db.json', import.meta.url))
 
 // Entidades que pertencem a uma empresa (workspace) e por isso carregam
 // workspace_id. weflow_workspaces é a própria lista de tenants e weflow_invitations
@@ -32,6 +35,7 @@ const WORKSPACE_SCOPED = [
   'fourbase_clients',
   'fourbase_report_activities',
   'fourbase_tags',
+  'fourbase_notifications',
 ]
 
 const TABLES = ['weflow_workspaces', 'weflow_invitations', ...WORKSPACE_SCOPED]
@@ -49,6 +53,8 @@ const UNIQUE_COLUMNS = {
   fourbase_users: ['email'],
   fourbase_columns: [['workspace_id', 'key']],
   fourbase_tags: [['workspace_id', 'name']],
+  // Avisos de prazo: um por (usuário, tarefa, data); dedupe_key nulo não conflita
+  fourbase_notifications: [['user_id', 'dedupe_key']],
   weflow_invitations: ['token_hash'],
 }
 
@@ -56,7 +62,7 @@ const UNIQUE_COLUMNS = {
 const TIMESTAMPED = new Set([
   'fourbase_notes', 'fourbase_media', 'fourbase_folders', 'fourbase_folder_media',
   'fourbase_columns', 'fourbase_clients', 'fourbase_report_activities', 'fourbase_tasks',
-  'fourbase_tags', 'weflow_workspaces', 'weflow_invitations',
+  'fourbase_tags', 'fourbase_notifications', 'weflow_workspaces', 'weflow_invitations',
 ])
 
 // Etiquetas padrão enviadas pela Amanda — pré-cadastradas na primeira execução.
@@ -123,6 +129,7 @@ function seedDb() {
     ],
     fourbase_report_activities: [],
     fourbase_tags: DEFAULT_TAGS.map((t) => ({ id: randomUUID(), workspace_id: workspaceId, ...t, created_at: now })),
+    fourbase_notifications: [],
   }
 }
 
@@ -264,6 +271,7 @@ class LocalQuery {
     this.selectCols = null
     this.wantsReturn = false
     this.orderSpec = null
+    this.limitN = null
     this._single = false
     this._maybeSingle = false
   }
@@ -284,6 +292,10 @@ class LocalQuery {
   neq(col, val) { this.filters.push({ col, op: 'neq', val }); return this }
   in(col, vals) { this.filters.push({ col, op: 'in', val: vals }); return this }
   // Só cobre o uso real deste projeto: .not(col, 'is', null) → IS NOT NULL
+  // .is(col, null) → IS NULL (como no PostgREST; coluna ausente conta como null)
+  is(col, val) { this.filters.push({ col, op: 'is', val }); return this }
+  // .limit(n): só vale em select, aplicado depois do order (como no PostgREST)
+  limit(n) { this.limitN = n; return this }
   not(col, op, val) { this.filters.push({ col, op: `not_${op}`, val }); return this }
 
   order(col, opts = {}) { this.orderSpec = { col, ascending: opts.ascending !== false }; return this }
@@ -295,6 +307,9 @@ class LocalQuery {
       if (f.op === 'eq') return row[f.col] === f.val
       if (f.op === 'neq') return row[f.col] !== f.val
       if (f.op === 'in') return f.val.includes(row[f.col])
+      if (f.op === 'is') return f.val === null || f.val === undefined
+        ? row[f.col] === null || row[f.col] === undefined
+        : row[f.col] === f.val
       if (f.op === 'not_is') return f.val === null
         ? row[f.col] !== null && row[f.col] !== undefined
         : row[f.col] !== f.val
@@ -332,6 +347,7 @@ class LocalQuery {
         const { col, ascending } = this.orderSpec
         result = [...result].sort((a, b) => (ascending ? compare(a[col], b[col]) : -compare(a[col], b[col])))
       }
+      if (typeof this.limitN === 'number') result = result.slice(0, Math.max(0, this.limitN))
       return this._finalize(result.map((r) => project(r, this.selectCols)))
     }
 

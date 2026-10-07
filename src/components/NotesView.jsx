@@ -8,7 +8,10 @@ import {
   IconHeading, IconParagraph,
   IconFolderFilled, IconClose, IconPaperclip, IconBuilding, IconFilePdf,
 } from '../icons.jsx'
-import { api } from '../api.js'
+import { useToast } from '../toast.jsx'
+import { useNoteActions, useNotes } from '../hooks/useNotes.js'
+import { useFolders } from '../hooks/useFolders.js'
+import { useClients } from '../hooks/useWorkspaceData.js'
 import { getPreview } from '../textPreview.js'
 import { supabase, NOTE_FILES_BUCKET, storagePathFromUrl } from '../supabase.js'
 import NoteAttachments, { extOf, isImageAttachment } from './NoteAttachments.jsx'
@@ -46,7 +49,11 @@ function ToolDivider() {
 // ─── Componente principal ─────────────────────────────────────────────────────
 const formatPrintDate = (d) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
 
-export default function NotesView({
+const EMPTY = []
+
+// Editor de notas. Recebe a lista pronta e os callbacks; quem busca os dados e os
+// liga ao cache é o NotesView (invólucro no fim do arquivo).
+function NotesWorkspace({
   notes, currentUser, onCreate, onSave, onDelete, onSendToKanban, onLinkFolder, onUpdateAttachments, onNavigateToFolder,
   targetNoteId, onConsumeNoteTarget,
 }) {
@@ -67,8 +74,9 @@ export default function NotesView({
   const [sortBy, setSortBy]       = useState('recent')
 
   // Pastas de Documentações (carregadas à parte, só para o seletor "Relacionar")
-  const [folders, setFolders]         = useState([])
-  const [clients, setClients]         = useState([])
+  // Pastas de Documentações — usadas no badge e no seletor "Relacionar"
+  const folders = useFolders().data ?? EMPTY
+  const clients = useClients().data ?? EMPTY
   const [relateOpen, setRelateOpen]   = useState(false)
   const [relateSearch, setRelateSearch] = useState('')
   const relateRef = useRef(null)
@@ -128,16 +136,6 @@ export default function NotesView({
     }
   }, [notes]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Carrega as pastas de Documentações uma vez — usadas no badge e no seletor "Relacionar"
-  useEffect(() => {
-    api.getFolders().then(setFolders).catch(() => {})
-  }, [])
-
-  // Carrega os clientes — só para mostrar de quem é a pasta no seletor "Relacionar"
-  useEffect(() => {
-    api.getClients().then(setClients).catch(() => {})
-  }, [])
-
   // Consome o alvo de navegação vindo de Documentações (só precisa disparar uma vez, ao montar)
   useEffect(() => {
     if (targetNoteId) onConsumeNoteTarget?.()
@@ -175,8 +173,9 @@ export default function NotesView({
     if (!active || saving) return
     setSaving(true)
     try {
-      await onSave(active.id, title.trim() || 'Sem título', editorRef.current?.innerHTML || '')
-      setDirty(false)
+      const saved = await onSave(active.id, title.trim() || 'Sem título', editorRef.current?.innerHTML || '')
+      // Falha ao salvar mantém "alterações não salvas" em vez de dar a edição por salva
+      if (saved !== false) setDirty(false)
     } finally {
       setSaving(false)
     }
@@ -692,5 +691,41 @@ export default function NotesView({
         document.body,
       )}
     </div>
+  )
+}
+
+// Busca as notas no cache (spinner só na primeira carga) e liga o editor às ações.
+export default function NotesView({ currentUser, onSendToKanban, onNavigateToFolder, targetNoteId, onConsumeNoteTarget }) {
+  const notesQuery = useNotes()
+  const actions = useNoteActions()
+  const { handleError } = useToast()
+
+  useEffect(() => { if (notesQuery.error) handleError(notesQuery.error) }, [notesQuery.error]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // O editor decide a nota aberta ao montar (inclusive vinda de Documentações),
+  // então só monta com a lista carregada.
+  if (notesQuery.isLoading) {
+    return (
+      <div className="loading-wrap">
+        <div className="spinner" />
+        <p>Carregando notas...</p>
+      </div>
+    )
+  }
+
+  return (
+    <NotesWorkspace
+      notes={notesQuery.data ?? EMPTY}
+      currentUser={currentUser}
+      onCreate={actions.createNote}
+      onSave={actions.saveNote}
+      onDelete={actions.deleteNote}
+      onSendToKanban={onSendToKanban}
+      onLinkFolder={actions.linkNoteFolder}
+      onUpdateAttachments={actions.updateNoteAttachments}
+      onNavigateToFolder={onNavigateToFolder}
+      targetNoteId={targetNoteId}
+      onConsumeNoteTarget={onConsumeNoteTarget}
+    />
   )
 }

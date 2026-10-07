@@ -1,19 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import TaskDetailModal from './TaskDetailModal.jsx'
+import { mergeCalendarTasks } from '../taskCache.js'
+import { useClientLinkedTasks, useMyTasks, useTaskActions } from '../hooks/useTasks.js'
+import { useClients, useColumns, useMembers, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
+import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
 import {
   IconArrowLeft,
   IconArrowRight,
   IconPlus,
   IconChevronDown,
   IconFilter,
-  IconUser,
   IconSearch,
   IconClose,
   IconCheckPlain,
   IconStack,
+  IconList,
 } from '../icons.jsx'
 import Avatar from './Avatar.jsx'
 import { memberColor, tagColor } from '../colors.js'
+import { layoutWeek, taskTooltip, MAX_LANES } from '../calendarLayout.js'
+import { emptyDraft, buildTaskFields } from '../newTaskForm.js'
+import MiniCalendar from './MiniCalendar.jsx'
+import {
+  EMPTY_CAL_FILTERS, toggleCalFilter, countCalFilters, filterCalendarTasks, countOptions,
+} from '../calendarFilters.js'
 
 const WEEKDAYS_FULL = [
   'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado',
@@ -39,11 +50,31 @@ const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 // due_time vem do Postgres como "HH:MM:SS" — só interessa "HH:MM" na UI.
 const formatTime = (time) => (time ? time.slice(0, 5) : '')
 
+const formatDay = (key) => {
+  const [y, m, d] = key.split('-')
+  return `${d}/${m}/${y}`
+}
+
 // Duração da transição de largura do popover (ver .daydetail-popover em styles.css) —
 // o desmonte do painel de detalhes é adiado até o fim da transição para não interrompê-la.
 const COLLAPSE_MS = 280
 
-export default function Calendar({ tasks, members, clients = [], currentUser, columns, tags = [], onCreate, onUpdate, onMove, onDelete, onCreateTag }) {
+const EMPTY = []
+
+function CalendarView({ currentUser }) {
+  const members = useMembers().data ?? EMPTY
+  const clients = useClients().data ?? EMPTY
+  const columns = useColumns().data
+  const tags = useTags().data ?? EMPTY
+  const { createTag: onCreateTag } = useTagActions()
+  // Tarefas pessoais + tarefas de cliente de toda a equipe (sem duplicar a que está
+  // nas duas). Lê direto do cache; a lista de clientes revalida a cada 15 s e ao
+  // voltar o foco da aba, para mostrar o que a equipe agenda sem F5.
+  const myTasks = useMyTasks(currentUser.id).data ?? EMPTY
+  const linkedTasks = useClientLinkedTasks(true).data ?? EMPTY
+  const tasks = useMemo(() => mergeCalendarTasks(myTasks, linkedTasks), [myTasks, linkedTasks])
+  const { createTask: onCreate, updateTask: onUpdate, moveTask: onMove, deleteTask: onDelete } =
+    useTaskActions({ userId: currentUser.id })
   const today = useMemo(() => new Date(), [])
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDate, setSelectedDate] = useState(today)
@@ -54,17 +85,47 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   // Rascunho de nova tarefa: abre o mesmo modal de especificações, já com a data
   const [draftTask, setDraftTask] = useState(null)
   const [sideOpen, setSideOpen] = useState(false)
+  const [drawerTab, setDrawerTab] = useState('overdue')
+  // Criação rápida ao clicar num dia: popover com só o título (a data já vem do dia)
+  const [quick, setQuick] = useState(null) // { date, left, top }
+  const [quickTitle, setQuickTitle] = useState('')
+  const [quickSaving, setQuickSaving] = useState(false)
+  const quickRef = useRef(null)
+  const drawerRef = useRef(null)
+  const leftRef = useRef(null)
+
+  // Em telas estreitas (≤900px) os painéis ficam empilhados acima/abaixo da grade:
+  // ao abrir um, a página rola até ele para a pessoa não achar que nada aconteceu.
+  const scrollTarget = useRef(null)
+  const scrollToPanel = (ref) => {
+    if (window.innerWidth <= 900) scrollTarget.current = ref
+  }
   const [viewMenuOpen, setViewMenuOpen] = useState(false)
-  const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false)
-  const [assigneeFilter, setAssigneeFilter] = useState('all')
-  const [tagMenuOpen, setTagMenuOpen] = useState(false)
-  const [tagFilter, setTagFilter] = useState(() => new Set())
+  // Painel lateral esquerdo (mini-calendário + filtros): lembrado entre visitas
+  const [leftOpen, setLeftOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fb_cal_left')
+      if (saved !== null) return saved === '1'
+    } catch { /* armazenamento indisponível */ }
+    return typeof window !== 'undefined' && window.innerWidth >= 1100
+  })
+  const toggleLeft = () => setLeftOpen((v) => {
+    try { localStorage.setItem('fb_cal_left', v ? '0' : '1') } catch { /* ignora */ }
+    return !v
+  })
+  const [filters, setFilters] = useState(EMPTY_CAL_FILTERS)
+  // depois de o painel entrar na tela (o efeito roda com o DOM já atualizado)
+  useEffect(() => {
+    const ref = scrollTarget.current
+    scrollTarget.current = null
+    ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [sideOpen, leftOpen])
   const [searchOpen, setSearchOpen] = useState(false)
   const [search, setSearch] = useState('')
+  // Arrastando uma tarefa: as faixas deixam de captar o mouse para o dia embaixo receber o drop
+  const [dragging, setDragging] = useState(false)
 
   const viewMenuRef = useRef(null)
-  const assigneeMenuRef = useRef(null)
-  const tagMenuRef = useRef(null)
   const collapseTimerRef = useRef(null)
 
   // Recolhe o painel de detalhes com animação: a largura do popover começa a encolher
@@ -81,24 +142,18 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   // Limpa qualquer timer de colapso pendente ao desmontar o componente
   useEffect(() => () => clearTimeout(collapseTimerRef.current), [])
 
-  // Fecha os menus (visualização / responsável) ao clicar fora ou pressionar ESC
+  // Fecha os menus e popovers ao clicar fora ou pressionar ESC
   useEffect(() => {
     const handleClick = (e) => {
       if (viewMenuOpen && viewMenuRef.current && !viewMenuRef.current.contains(e.target)) {
         setViewMenuOpen(false)
       }
-      if (assigneeMenuOpen && assigneeMenuRef.current && !assigneeMenuRef.current.contains(e.target)) {
-        setAssigneeMenuOpen(false)
-      }
-      if (tagMenuOpen && tagMenuRef.current && !tagMenuRef.current.contains(e.target)) {
-        setTagMenuOpen(false)
-      }
+      if (quick && quickRef.current && !quickRef.current.contains(e.target)) setQuick(null)
     }
     const handleKey = (e) => {
       if (e.key === 'Escape') {
         setViewMenuOpen(false)
-        setAssigneeMenuOpen(false)
-        setTagMenuOpen(false)
+        if (quick) { setQuick(null); return }
         // Primeiro ESC recolhe o painel de detalhes; segundo ESC fecha o popover do dia
         if (selectedTaskId) {
           collapseDetailPanel()
@@ -113,25 +168,15 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
       document.removeEventListener('mousedown', handleClick)
       document.removeEventListener('keydown', handleKey)
     }
-  }, [viewMenuOpen, assigneeMenuOpen, tagMenuOpen, selectedTaskId, collapsing])
-
-  const toggleTagFilter = (name) => {
-    setTagFilter((prev) => {
-      const next = new Set(prev)
-      next.has(name) ? next.delete(name) : next.add(name)
-      return next
-    })
-  }
+  }, [viewMenuOpen, selectedTaskId, collapsing, quick])
 
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return tasks.filter((t) => {
-      if (assigneeFilter !== 'all' && t.assigned_to !== assigneeFilter) return false
-      if (tagFilter.size > 0 && !(t.tags || []).some((name) => tagFilter.has(name))) return false
-      if (q && !t.title.toLowerCase().includes(q)) return false
-      return true
-    })
-  }, [tasks, search, assigneeFilter, tagFilter])
+    const byFilters = filterCalendarTasks(tasks, filters)
+    return q ? byFilters.filter((t) => t.title.toLowerCase().includes(q)) : byFilters
+  }, [tasks, search, filters])
+  const optionCounts = useMemo(() => countOptions(tasks), [tasks])
+  const activeFilterCount = countCalFilters(filters)
 
   // Tarefas de vários dias aparecem em toda data do intervalo [due_date,
   // due_date_end] — não só no dia de início. Iterar por string 'YYYY-MM-DD'
@@ -160,6 +205,14 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
     })
     return map
   }, [filteredTasks])
+
+  const busyDays = useMemo(() => new Set(Object.keys(tasksByDay)), [tasksByDay])
+
+  // Salta o calendário para um dia escolhido no mini-calendário
+  const jumpToDate = (date) => {
+    setCursor(new Date(date.getFullYear(), date.getMonth(), 1))
+    setSelectedDate(date)
+  }
 
   // Tarefas do dia selecionado no popover — memoizado, reage a mudanças de data ou da lista de tarefas
   const tasksForSelectedDate = useMemo(() => {
@@ -201,6 +254,16 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
     return cells
   }, [cursor])
 
+  // Semanas da grade com as faixas já posicionadas (vários dias = uma barra só)
+  const weeks = useMemo(() => {
+    const rows = []
+    for (let i = 0; i < grid.length; i += 7) {
+      const cells = grid.slice(i, i + 7)
+      rows.push({ cells, ...layoutWeek(cells.map((c) => toKey(c.date)), filteredTasks) })
+    }
+    return rows
+  }, [grid, filteredTasks])
+
   const changeMonth = (delta) => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1))
   const goToday = () => {
     setCursor(new Date(today.getFullYear(), today.getMonth(), 1))
@@ -222,11 +285,11 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   }
 
   // Abre o modal completo de especificações já com a data pré-preenchida
-  const openNewTask = (date) => {
+  const openNewTask = (date, title = '') => {
     const target = date || selectedDate || today
     setSelectedDate(target)
     setDraftTask({
-      title: '',
+      title,
       description: '',
       priority: 'Média',
       due_date: toKey(target),
@@ -236,6 +299,32 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
       tags: [],
       attachments: [],
     })
+  }
+
+  // Clique num dia: abre o popover de criação rápida ao lado da célula clicada
+  const openQuick = (e, date) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const width = 288
+    setSelectedDate(date)
+    setQuickTitle('')
+    setQuick({
+      date,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      top: Math.max(8, Math.min(rect.top + 34, window.innerHeight - 170)),
+    })
+  }
+  const submitQuick = async (e) => {
+    e.preventDefault()
+    const title = quickTitle.trim()
+    if (!title || quickSaving) return
+    setQuickSaving(true)
+    try {
+      const draft = { ...emptyDraft({ assignedTo: currentUser?.id || '', columnKey: columns?.[0]?.key || 'todo' }), title, dueDate: toKey(quick.date) }
+      const task = await onCreate(buildTaskFields(draft, { isGestor: currentUser?.role === 'gestor' }))
+      if (task) setQuick(null)
+    } finally {
+      setQuickSaving(false)
+    }
   }
 
   const toggleComplete = (task) => {
@@ -248,27 +337,34 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
   }
 
   const dragTask = (e, taskId) => {
+    e.stopPropagation()
     e.dataTransfer.setData('text/plain', taskId)
+    // adiado: mudar o alvo no mesmo instante do dragstart cancelaria o arraste no Chrome
+    setTimeout(() => setDragging(true), 0)
   }
 
-  const dropOnDay = (e, date) => {
-    e.preventDefault()
-    const id = e.dataTransfer.getData('text/plain')
-    if (!id || !onUpdate) return
+  // Muda o início da tarefa para `date`. Tarefa de vários dias preserva a duração —
+  // desloca o intervalo inteiro, em vez de deixar due_date_end órfã (e antes de
+  // due_date, o que o backend rejeitaria).
+  const reschedule = (task, date) => {
+    if (!task || !onUpdate) return
     const newStart = toKey(date)
-    const task = tasks.find((t) => t.id === id)
-    // Arrastar uma tarefa de vários dias preserva a duração — só desloca o
-    // intervalo inteiro pro novo dia, em vez de deixar due_date_end órfã
-    // (e antes de due_date, o que o backend rejeitaria).
-    if (task?.due_date_end && task.due_date) {
+    if (task.due_date_end && task.due_date) {
       const spanDays = Math.round(
         (new Date(`${task.due_date_end}T00:00:00`) - new Date(`${task.due_date}T00:00:00`)) / 86400000,
       )
       const newEnd = toKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() + spanDays))
-      onUpdate(id, { due_date: newStart, due_date_end: newEnd })
+      onUpdate(task.id, { due_date: newStart, due_date_end: newEnd })
     } else {
-      onUpdate(id, { due_date: newStart })
+      onUpdate(task.id, { due_date: newStart })
     }
+  }
+
+  const dropOnDay = (e, date) => {
+    e.preventDefault()
+    setDragging(false)
+    const id = e.dataTransfer.getData('text/plain')
+    if (id) reschedule(tasks.find((t) => t.id === id), date)
   }
 
   const dayDetailLabel = selectedDate
@@ -281,6 +377,74 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
 
   return (
     <div className="calview">
+      {leftOpen && (
+        <aside className="calview-left" ref={leftRef} aria-label="Mini-calendário e filtros">
+          <MiniCalendar
+            month={cursor}
+            selectedDate={selectedDate}
+            today={today}
+            busyDays={busyDays}
+            onPick={jumpToDate}
+          />
+          <div className="calfilters">
+            <div className="calfilters-head">
+              <h4>Filtros</h4>
+              {activeFilterCount > 0 && (
+                <button type="button" className="calfilters-clear" onClick={() => setFilters(EMPTY_CAL_FILTERS)}>
+                  Limpar
+                </button>
+              )}
+            </div>
+            <fieldset className="calfilters-group">
+              <legend>Status</legend>
+              {columns.map((c) => (
+                <label key={c.key} className="calfilters-option">
+                  <input
+                    type="checkbox"
+                    checked={filters.statuses.includes(c.key)}
+                    onChange={() => setFilters((f) => toggleCalFilter(f, 'statuses', c.key))}
+                  />
+                  <span className="calfilters-dot" style={{ background: c.color }} />
+                  <span className="calfilters-label">{c.label}</span>
+                  <span className="calfilters-count">{optionCounts.statuses[c.key] || 0}</span>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="calfilters-group">
+              <legend>Responsável</legend>
+              {members.map((m) => (
+                <label key={m.id} className="calfilters-option">
+                  <input
+                    type="checkbox"
+                    checked={filters.assignees.includes(m.id)}
+                    onChange={() => setFilters((f) => toggleCalFilter(f, 'assignees', m.id))}
+                  />
+                  <span className="calfilters-dot" style={{ background: memberColor(m.id, members) }} />
+                  <span className="calfilters-label">{m.name}</span>
+                  <span className="calfilters-count">{optionCounts.assignees[m.id] || 0}</span>
+                </label>
+              ))}
+            </fieldset>
+            {tags.length > 0 && (
+              <fieldset className="calfilters-group">
+                <legend>Etiquetas</legend>
+                {tags.map((t) => (
+                  <label key={t.id} className="calfilters-option">
+                    <input
+                      type="checkbox"
+                      checked={filters.tags.includes(t.name)}
+                      onChange={() => setFilters((f) => toggleCalFilter(f, 'tags', t.name))}
+                    />
+                    <span className="calfilters-dot" style={{ background: t.color }} />
+                    <span className="calfilters-label">{t.name}</span>
+                    <span className="calfilters-count">{optionCounts.tags[t.name] || 0}</span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+          </div>
+        </aside>
+      )}
       <div className="calview-main">
         <header className="calview-toolbar">
           <div className="calview-toolbar-left">
@@ -309,75 +473,27 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
             </h2>
           </div>
           <div className="calview-toolbar-right">
-            <div className="calview-view-select" ref={tagMenuRef}>
-              <button
-                className={`calview-ghost-btn${tagFilter.size > 0 ? ' active' : ''}`}
-                onClick={() => setTagMenuOpen((v) => !v)}
-              >
-                <IconFilter size={14} />
-                {tagFilter.size === 0 ? 'Etiquetas' : `Etiquetas (${tagFilter.size})`}
-                <IconChevronDown size={14} />
-              </button>
-              {tagMenuOpen && (
-                <div className="calview-view-menu calview-assignee-menu calview-tag-menu">
-                  {tags.length === 0 && (
-                    <p className="calview-tag-menu-empty">Nenhuma etiqueta cadastrada.</p>
-                  )}
-                  {tags.map((t) => {
-                    const active = tagFilter.has(t.name)
-                    return (
-                      <button
-                        key={t.id}
-                        className={active ? 'active' : ''}
-                        onClick={() => toggleTagFilter(t.name)}
-                      >
-                        <span className="calview-tag-menu-dot" style={{ background: t.color }} />
-                        {t.name}
-                        {active && <IconCheckPlain size={12} style={{ marginLeft: 'auto' }} />}
-                      </button>
-                    )
-                  })}
-                  {tagFilter.size > 0 && (
-                    <button className="calview-tag-menu-clear" onClick={() => setTagFilter(new Set())}>
-                      Limpar filtro
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <button className="calview-ghost-btn">Fechado</button>
-            <div className="calview-view-select" ref={assigneeMenuRef}>
-              <button
-                className={`calview-ghost-btn${assigneeFilter !== 'all' ? ' active' : ''}`}
-                onClick={() => setAssigneeMenuOpen((v) => !v)}
-              >
-                <IconUser size={14} />
-                {assigneeFilter === 'all'
-                  ? 'Responsável'
-                  : members.find((m) => m.id === assigneeFilter)?.name || 'Responsável'}
-                <IconChevronDown size={14} />
-              </button>
-              {assigneeMenuOpen && (
-                <div className="calview-view-menu calview-assignee-menu">
-                  <button
-                    className={assigneeFilter === 'all' ? 'active' : ''}
-                    onClick={() => { setAssigneeFilter('all'); setAssigneeMenuOpen(false) }}
-                  >
-                    Todos
-                  </button>
-                  {members.map((m) => (
-                    <button
-                      key={m.id}
-                      className={assigneeFilter === m.id ? 'active' : ''}
-                      onClick={() => { setAssigneeFilter(m.id); setAssigneeMenuOpen(false) }}
-                    >
-                      <Avatar id={m.id} name={m.name} list={members} className="member-avatar sm" />
-                      {m.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              className={`calview-ghost-btn calview-filters-btn${leftOpen ? ' active' : ''}`}
+              aria-expanded={leftOpen}
+              onClick={() => { if (!leftOpen) scrollToPanel(leftRef); toggleLeft() }}
+              title="Mini-calendário e filtros"
+            >
+              <IconFilter size={14} />
+              Filtros
+              {activeFilterCount > 0 && <span className="calview-side-count">{activeFilterCount}</span>}
+            </button>
+            <button
+              className={`calview-ghost-btn calview-pending-btn${sideOpen ? ' active' : ''}`}
+              aria-expanded={sideOpen}
+              onClick={() => { if (!sideOpen) scrollToPanel(drawerRef); setSideOpen((v) => !v) }}
+              title="Tarefas em atraso e sem data"
+            >
+              <IconList size={14} />
+              Pendências
+              {overdue.length > 0 && <span className="calview-side-count over">{overdue.length}</span>}
+              {unscheduled.length > 0 && <span className="calview-side-count">{unscheduled.length}</span>}
+            </button>
             <Avatar
               id={currentUser?.id}
               name={currentUser?.name}
@@ -421,40 +537,60 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
           ))}
         </div>
 
-        <div className="calview-grid">
-          {grid.map(({ date, inMonth }, i) => {
-            const dayTasks = tasksByDay[toKey(date)] || []
-            const isToday = isSameDay(date, today)
-            const isSelected = selectedDate && isSameDay(date, selectedDate)
-            return (
-              <div
-                key={i}
-                className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                onClick={() => openNewTask(date)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => dropOnDay(e, date)}
-              >
-                <div className="calview-cell-top">
-                  <button
-                    className="calview-cell-add"
-                    title="Ver tarefas do dia"
-                    onClick={(e) => { e.stopPropagation(); openDayDetail(date) }}
-                  >
-                    <IconStack size={12} />
-                  </button>
-                  <span className="calview-day-number">{date.getDate()}</span>
-                </div>
-                <div className="calview-cell-tasks">
-                  {dayTasks.slice(0, 3).map((t) => (
+        <div className={`calview-grid${dragging ? ' is-dragging' : ''}`}>
+          {weeks.map(({ cells, segments, hidden }, w) => (
+            <div className="calview-week" key={w}>
+              <div className="calview-week-cells">
+                {cells.map(({ date, inMonth }) => {
+                  const isToday = isSameDay(date, today)
+                  const isSelected = selectedDate && isSameDay(date, selectedDate)
+                  return (
+                    <div
+                      key={toKey(date)}
+                      className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
+                      onClick={(e) => openQuick(e, date)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => dropOnDay(e, date)}
+                    >
+                      <div className="calview-cell-top">
+                        <button
+                          className="calview-cell-add"
+                          title="Ver tarefas do dia"
+                          onClick={(e) => { e.stopPropagation(); openDayDetail(date) }}
+                        >
+                          <IconStack size={12} />
+                        </button>
+                        <span className="calview-day-number">{date.getDate()}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="calview-week-events">
+                {segments.map(({ task: t, col, span, lane, startsHere, endsHere }) => {
+                  const color = memberColor(t.assigned_to, members)
+                  const timed = Boolean(t.due_time) && span === 1
+                  const done = t.column_key === 'done'
+                  const assignee = members.find((m) => m.id === t.assigned_to)
+                  return (
                     <button
                       key={t.id}
-                      className="calview-task-badge"
-                      style={{ background: `${memberColor(t.assigned_to, members)}22` }}
+                      className={`calview-task-badge${timed ? ' timed' : ''}${done ? ' done' : ''}${startsHere ? '' : ' cont-left'}${endsHere ? '' : ' cont-right'}`}
+                      style={{
+                        gridColumn: `${col + 1} / span ${span}`,
+                        gridRow: lane + 1,
+                        '--owner': color,
+                      }}
+                      title={taskTooltip(t, assignee?.name, formatDay)}
                       onClick={(e) => openDetail(e, t)}
                       draggable
-                      onDragStart={(e) => { e.stopPropagation(); dragTask(e, t.id) }}
+                      onDragStart={(e) => dragTask(e, t.id)}
+                      onDragEnd={() => setDragging(false)}
                     >
-                      <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
+                      {timed && <span className="calview-task-dot" />}
+                      {t.due_time && startsHere && (
+                        <span className="calview-task-time">{formatTime(t.due_time)}</span>
+                      )}
                       <span className="calview-task-title">{t.title}</span>
                       {t.tags?.length > 0 && (
                         <span className="calview-task-tags">
@@ -464,70 +600,121 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
                         </span>
                       )}
                     </button>
-                  ))}
-                  {dayTasks.length > 3 && (
-                    <span className="calview-more">+{dayTasks.length - 3} mais</span>
-                  )}
-                </div>
+                  )
+                })}
+                {hidden.map((count, col) => count > 0 && (
+                  <button
+                    key={`more-${col}`}
+                    className="calview-more"
+                    style={{ gridColumn: col + 1, gridRow: MAX_LANES + 1 }}
+                    title="Ver todas as tarefas do dia"
+                    onClick={(e) => { e.stopPropagation(); openDayDetail(cells[col].date) }}
+                  >
+                    +{count} mais
+                  </button>
+                ))}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
 
-      <aside className={`calview-side${sideOpen ? ' open' : ''}`}>
-        <button className="calview-side-tab" onClick={() => setSideOpen((v) => !v)}>
-          <span className="calview-side-tab-label">
-            <span className="calview-side-count">{unscheduled.length}</span> Não agendado
-          </span>
-          <span className="calview-side-tab-label">
-            <span className="calview-side-count over">{overdue.length}</span> Em atraso
-          </span>
-        </button>
-        {sideOpen && (
-          <div className="calview-side-panel">
-            <div className="calview-side-panel-header">
-              <h4>Tarefas do calendário</h4>
-              <button className="icon-btn" onClick={() => setSideOpen(false)}>
-                <IconClose size={14} />
-              </button>
-            </div>
-            <div className="calview-side-group">
-              <h5>Não agendado ({unscheduled.length})</h5>
-              {unscheduled.length === 0 && <p className="calview-side-empty">Nenhuma tarefa sem prazo.</p>}
-              {unscheduled.map((t) => (
-                <div
-                  key={t.id}
-                  className="calview-side-task"
-                  draggable
-                  onDragStart={(e) => dragTask(e, t.id)}
-                  onClick={() => setDetailTask(t)}
-                >
-                  <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
-                  <span>{t.title}</span>
-                </div>
-              ))}
-            </div>
-            <div className="calview-side-group">
-              <h5>Em atraso ({overdue.length})</h5>
-              {overdue.length === 0 && <p className="calview-side-empty">Nenhuma tarefa atrasada.</p>}
-              {overdue.map((t) => (
-                <div
-                  key={t.id}
-                  className="calview-side-task overdue"
-                  draggable
-                  onDragStart={(e) => dragTask(e, t.id)}
-                  onClick={() => setDetailTask(t)}
-                >
-                  <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
-                  <span>{t.title}</span>
-                </div>
-              ))}
-            </div>
-            <p className="calview-side-hint">Arraste uma tarefa para um dia do calendário para definir o prazo.</p>
+      {sideOpen && (
+        <aside className="calview-drawer" ref={drawerRef} aria-label="Tarefas em atraso e sem data">
+          <div className="calview-drawer-header">
+            <h4>Pendências</h4>
+            <button className="icon-btn" onClick={() => setSideOpen(false)} title="Fechar">
+              <IconClose size={14} />
+            </button>
           </div>
-        )}
-      </aside>
+          <div className="calview-drawer-tabs" role="tablist">
+            <button
+              role="tab"
+              aria-selected={drawerTab === 'overdue'}
+              className={drawerTab === 'overdue' ? 'active' : ''}
+              onClick={() => setDrawerTab('overdue')}
+            >
+              Em atraso <span className="calview-side-count over">{overdue.length}</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={drawerTab === 'unscheduled'}
+              className={drawerTab === 'unscheduled' ? 'active' : ''}
+              onClick={() => setDrawerTab('unscheduled')}
+            >
+              Sem data <span className="calview-side-count">{unscheduled.length}</span>
+            </button>
+          </div>
+          <div className="calview-drawer-list">
+            {(drawerTab === 'overdue' ? overdue : unscheduled).length === 0 && (
+              <p className="calview-side-empty">
+                {drawerTab === 'overdue' ? 'Nenhuma tarefa atrasada.' : 'Nenhuma tarefa sem prazo.'}
+              </p>
+            )}
+            {(drawerTab === 'overdue' ? overdue : unscheduled).map((t) => (
+              <div
+                key={t.id}
+                className={`calview-side-task${drawerTab === 'overdue' ? ' overdue' : ''}`}
+                draggable
+                onDragStart={(e) => dragTask(e, t.id)}
+                onDragEnd={() => setDragging(false)}
+                onClick={() => setDetailTask(t)}
+                title={taskTooltip(t, members.find((m) => m.id === t.assigned_to)?.name, formatDay)}
+              >
+                <span className="calview-task-dot" style={{ background: memberColor(t.assigned_to, members) }} />
+                <span className="calview-side-task-main">
+                  <span className="calview-side-task-title">{t.title}</span>
+                  {t.due_date && (
+                    <span className="calview-side-task-meta">Venceu em {formatDay(t.due_date_end || t.due_date).slice(0, 5)}</span>
+                  )}
+                </span>
+                <button
+                  className="calview-side-task-today"
+                  title={drawerTab === 'overdue' ? 'Reagendar para hoje' : 'Agendar para hoje'}
+                  onClick={(e) => { e.stopPropagation(); reschedule(t, today) }}
+                >
+                  Hoje
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="calview-side-hint">Arraste uma tarefa para um dia do calendário para definir o prazo.</p>
+        </aside>
+      )}
+
+      {quick && createPortal(
+        <form
+          className="calquick"
+          ref={quickRef}
+          style={{ left: quick.left, top: quick.top }}
+          onSubmit={submitQuick}
+        >
+          <div className="calquick-date">
+            {capitalize(quick.date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }))}
+          </div>
+          <input
+            className="calquick-input"
+            autoFocus
+            placeholder="Título da tarefa"
+            aria-label="Título da nova tarefa"
+            value={quickTitle}
+            onChange={(e) => setQuickTitle(e.target.value)}
+          />
+          <div className="calquick-actions">
+            <button
+              type="button"
+              className="calquick-more"
+              onClick={() => { const d = quick.date; const t = quickTitle.trim(); setQuick(null); openNewTask(d, t) }}
+            >
+              Mais opções
+            </button>
+            <button type="submit" className="calquick-save" disabled={!quickTitle.trim() || quickSaving}>
+              {quickSaving ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
+        </form>,
+        document.body,
+      )}
 
       {isDayDetailOpen && selectedDate && (
         <div className="modal-backdrop daydetail-backdrop" onClick={closeDayDetail}>
@@ -675,4 +862,10 @@ export default function Calendar({ tasks, members, clients = [], currentUser, co
       )}
     </div>
   )
+}
+
+// Spinner só na primeira carga de tarefas e membros; depois a tela fica de pé.
+export default function Calendar({ currentUser }) {
+  if (anyLoading(useMyTasks(currentUser.id), useMembers())) return <LoadingBlock text="Carregando calendário..." />
+  return <CalendarView currentUser={currentUser} />
 }

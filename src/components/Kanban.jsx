@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   IconPlus,
   IconArrowLeft,
@@ -6,14 +6,30 @@ import {
   IconCheckPlain,
   IconClose,
   IconCalendar,
+  IconChevronDown,
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
+import MemberPicker from './MemberPicker.jsx'
+import TaskAttachments from './TaskAttachments.jsx'
 import Avatar from './Avatar.jsx'
+import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
+import KanbanFilterBar from './KanbanFilterBar.jsx'
+import { EMPTY_FILTERS, filterTasks, hasActiveFilters, sortTasks } from '../kanbanFilters.js'
+import { localToday } from '../notificationText.js'
+import {
+  buildTaskFields, countAdvanced, emptyDraft, setDraftField, validateDraft,
+} from '../newTaskForm.js'
+import { useToast } from '../toast.jsx'
+import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
+import {
+  useClients, useColumnActions, useColumns, useMembers, useTagActions, useTags,
+} from '../hooks/useWorkspaceData.js'
+
+const EMPTY = []
 import { memberColor, tagColor } from '../colors.js'
 
 const PRIORITY_CLASS = { Urgente: 'p-urgente', Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
-const PRIORITY_RANK  = { Urgente: 0, Alta: 1, Média: 2, Baixa: 3 }
 
 const formatDate = (iso) => {
   if (!iso) return ''
@@ -37,15 +53,15 @@ const dueState = (due_date, due_date_end) => {
   return 'upcoming'
 }
 
-const sortTasks = (list) =>
-  list.slice().sort((a, b) => {
-    const rankDiff = (PRIORITY_RANK[a.priority] ?? 2) - (PRIORITY_RANK[b.priority] ?? 2)
-    if (rankDiff !== 0) return rankDiff
-    if (a.due_date && b.due_date) return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
-    if (a.due_date) return -1
-    if (b.due_date) return 1
-    return 0
-  })
+// Ordem dos cartões escolhida pela pessoa — lembrada entre visitas (só a ordem; os
+// filtros recomeçam limpos para ninguém achar que "sumiram" tarefas).
+const SORT_KEY = 'fb_kanban_sort'
+const loadSort = () => {
+  try {
+    const saved = localStorage.getItem(SORT_KEY)
+    return ['priority', 'due', 'recent', 'title'].includes(saved) ? saved : 'priority'
+  } catch { return 'priority' }
+}
 
 // ─── Botão "+ Adicionar grupo" ─────────────────────────────────────────────────
 function AddGroupButton({ onAdd }) {
@@ -130,14 +146,41 @@ function AddGroupButton({ onAdd }) {
 }
 
 // ─── Componente principal ──────────────────────────────────────────────────────
-export default function Kanban({ tasks, members, clients = [], currentUser, columns, tags = [], onAdd, onMove, onUpdate, onDelete, onAddColumn, onCreateTag }) {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState('Média')
-  const [dueDate, setDueDate] = useState('')
-  const [assignedTo, setAssignedTo] = useState(currentUser?.id || '')
-  const [clientId, setClientId] = useState('')
-  const [newTaskTags, setNewTaskTags] = useState([])
+// Quadro de tarefas. Recebe só o que muda de um uso para outro — a lista de
+// tarefas, os clientes disponíveis e como criar (`onAdd`) — porque é usado no
+// Kanban pessoal (MyKanban, abaixo) e no quadro de um cliente (ClientWorkspace,
+// que passa `clients={[client]}` e vincula as novas tarefas a ele). Membros,
+// colunas, etiquetas e as ações de mover/editar/excluir vêm direto do cache.
+export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
+  const members = useMembers().data ?? EMPTY
+  const columns = useColumns().data
+  const tags = useTags().data ?? EMPTY
+  const { createTag: onCreateTag } = useTagActions()
+  const { addColumn: onAddColumn } = useColumnActions()
+  const { moveTask: onMove, updateTask: onUpdate, deleteTask: onDelete } =
+    useTaskActions({ userId: currentUser?.id })
+  const { showToast } = useToast()
+  // Rascunho da nova tarefa: todos os campos que uma tarefa aceita. "Opções avançadas"
+  // só mostra/esconde os campos além do título.
+  const formDefaults = { assignedTo: currentUser?.id || '', columnKey: columns[0]?.key || 'todo' }
+  const [draft, setDraft] = useState(() => emptyDraft(formDefaults))
+  const [showMore, setShowMore] = useState(false)
+  const [saving, setSaving] = useState(false)
+  // Id provisório: as imagens anexadas antes de a tarefa existir vão para tasks/<id>
+  const newId = () => (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const [draftId, setDraftId] = useState(newId)
+  const setField = (field, value) => setDraft((d) => setDraftField(d, field, value))
+  const advancedCount = countAdvanced(draft, formDefaults)
+  // Busca, filtros e ordem: tudo no navegador, sobre as tarefas já carregadas
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [sort, setSort] = useState(loadSort)
+  const changeSort = (next) => {
+    setSort(next)
+    try { localStorage.setItem(SORT_KEY, next) } catch { /* armazenamento indisponível */ }
+  }
+  const today = localToday()
+  const shownTasks = useMemo(() => filterTasks(tasks, filters, today), [tasks, filters, today])
+  const filtering = hasActiveFilters(filters)
   const [dragId, setDragId] = useState(null)
   const [overColumn, setOverColumn] = useState(null)
   // Armazena apenas o ID para que o modal sempre leia os dados mais recentes de `tasks`
@@ -149,15 +192,22 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
   const isGestor = currentUser?.role === 'gestor'
   const memberName = (id) => members.find((m) => m.id === id)?.name || 'Sem responsável'
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
-    if (!title.trim()) return
-    onAdd(title.trim(), priority, dueDate || null, isGestor ? assignedTo : undefined, description.trim(), clientId || null, newTaskTags)
-    setTitle('')
-    setDueDate('')
-    setDescription('')
-    setClientId('')
-    setNewTaskTags([])
+    if (saving) return
+    const problem = validateDraft(draft)
+    if (problem) { showToast(problem); return }
+    setSaving(true)
+    try {
+      const task = await onAdd(buildTaskFields(draft, { isGestor }))
+      // Só limpa quando a tarefa foi criada; se falhou, o rascunho fica para tentar de novo
+      if (task) {
+        setDraft(emptyDraft(formDefaults))
+        setDraftId(newId())
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
   const step = (task, direction) => {
@@ -174,68 +224,182 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
   return (
     <div className="panel">
       {/* ── Formulário de criação de tarefa ── */}
+      {/* Barra de criação rápida: só o título à vista; o resto abre em "Opções avançadas" */}
       <form className="task-form" onSubmit={submit}>
-        <input
-          type="text"
-          placeholder="O que precisa ser feito?"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-          <option value="Baixa">Prioridade: Baixa</option>
-          <option value="Média">Prioridade: Média</option>
-          <option value="Alta">Prioridade: Alta</option>
-          <option value="Urgente">Prioridade: Urgente</option>
-        </select>
-        <input
-          type="date"
-          title="Prazo de entrega"
-          value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
-        />
-        {isGestor && (
-          <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        )}
-        <select
-          value={clientId}
-          title="Vincular a um cliente (opcional)"
-          onChange={(e) => setClientId(e.target.value)}
-        >
-          <option value="">Sem cliente</option>
-          {clients.map((c) => (
-            <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
-          ))}
-        </select>
-        <textarea
-          className="task-form-description"
-          placeholder="Descrição (opcional)"
-          rows={1}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <div className="task-form-tags">
-          <TagPicker
-            value={newTaskTags}
-            availableTags={tags}
-            onCreateTag={onCreateTag}
-            onChange={setNewTaskTags}
-            placeholder="Etiquetas (opcional)..."
+        <div className="task-form-main">
+          <input
+            type="text"
+            className="task-form-title"
+            placeholder="O que precisa ser feito?"
+            aria-label="Título da nova tarefa"
+            value={draft.title}
+            onChange={(e) => setField('title', e.target.value)}
           />
+          <button
+            type="button"
+            className={`task-form-more${showMore ? ' open' : ''}`}
+            aria-expanded={showMore}
+            aria-controls="task-form-extra"
+            onClick={() => setShowMore((v) => !v)}
+          >
+            <span>Opções avançadas</span>
+            {advancedCount > 0 && <span className="task-form-badge">{advancedCount}</span>}
+            <IconChevronDown size={14} />
+          </button>
+          <button type="submit" className="task-form-submit" disabled={saving}>
+            <IconPlus size={16} />
+            <span>{saving ? 'Adicionando…' : 'Adicionar'}</span>
+          </button>
         </div>
-        <button type="submit">
-          <IconPlus size={16} />
-          <span>Adicionar</span>
-        </button>
+
+        {showMore && (
+          <div className="task-form-extra" id="task-form-extra">
+            <label className="task-form-field">
+              <span>Prioridade</span>
+              <select value={draft.priority} onChange={(e) => setField('priority', e.target.value)}>
+                <option value="Baixa">Baixa</option>
+                <option value="Média">Média</option>
+                <option value="Alta">Alta</option>
+                <option value="Urgente">Urgente</option>
+              </select>
+            </label>
+            <label className="task-form-field">
+              <span>Status</span>
+              <select value={draft.columnKey} onChange={(e) => setField('columnKey', e.target.value)}>
+                {columns.map((c) => (
+                  <option key={c.key} value={c.key}>{c.label}</option>
+                ))}
+              </select>
+            </label>
+            {isGestor && (
+              <label className="task-form-field">
+                <span>Responsável</span>
+                <select
+                  value={draft.assignedTo}
+                  onChange={(e) => {
+                    setField('assignedTo', e.target.value)
+                    // quem é o responsável não precisa ser "mencionado"
+                    setDraft((d) => ({ ...d, mentioned: d.mentioned.filter((id) => id !== e.target.value) }))
+                  }}
+                >
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="task-form-field">
+              <span>Cliente</span>
+              <select
+                value={draft.clientId}
+                title="Vincular a um cliente (opcional)"
+                onChange={(e) => setField('clientId', e.target.value)}
+              >
+                <option value="">Sem cliente</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name || 'Cliente sem nome'}</option>
+                ))}
+              </select>
+            </label>
+            <label className="task-form-field">
+              <span>Prazo (início)</span>
+              <input
+                type="date"
+                title="Prazo de entrega"
+                value={draft.dueDate}
+                onChange={(e) => setField('dueDate', e.target.value)}
+              />
+            </label>
+            <label className="task-form-field">
+              <span>Data final</span>
+              <input
+                type="date"
+                title="Data final (para tarefas de vários dias)"
+                value={draft.dueDateEnd}
+                min={draft.dueDate || undefined}
+                disabled={!draft.dueDate}
+                onChange={(e) => setField('dueDateEnd', e.target.value)}
+              />
+            </label>
+            <label className="task-form-field">
+              <span>Horário de início</span>
+              <input
+                type="time"
+                value={draft.dueTime}
+                disabled={!draft.dueDate}
+                onChange={(e) => setField('dueTime', e.target.value)}
+              />
+            </label>
+            <label className="task-form-field">
+              <span>Horário final</span>
+              <input
+                type="time"
+                value={draft.dueTimeEnd}
+                disabled={!draft.dueTime}
+                onChange={(e) => setField('dueTimeEnd', e.target.value)}
+              />
+            </label>
+            <div className="task-form-field task-form-field-wide">
+              <span>Pessoas mencionadas</span>
+              <MemberPicker
+                value={draft.mentioned}
+                members={members}
+                excludeId={draft.assignedTo}
+                onChange={(next) => setField('mentioned', next)}
+              />
+            </div>
+            <label className="task-form-field task-form-field-wide">
+              <span>Descrição</span>
+              <textarea
+                className="task-form-description"
+                placeholder="Descrição (opcional)"
+                rows={2}
+                value={draft.description}
+                onChange={(e) => setField('description', e.target.value)}
+              />
+            </label>
+            <div className="task-form-field task-form-field-wide task-form-tags">
+              <span>Etiquetas</span>
+              <TagPicker
+                value={draft.tags}
+                availableTags={tags}
+                onCreateTag={onCreateTag}
+                onChange={(next) => setField('tags', next)}
+                placeholder="Etiquetas (opcional)..."
+              />
+            </div>
+            <div className="task-form-field task-form-field-wide task-form-attachments">
+              <span>Anexos e imagens</span>
+              <TaskAttachments
+                taskId={draftId}
+                attachments={draft.attachments}
+                onChange={(next) => setField('attachments', next)}
+              />
+            </div>
+          </div>
+        )}
       </form>
+
+      {/* ── Busca, filtros, ordenação e resumo ── */}
+      <KanbanFilterBar
+        tasks={tasks}
+        shownTasks={shownTasks}
+        members={members}
+        clients={clients}
+        tags={tags}
+        currentUser={currentUser}
+        today={today}
+        filters={filters}
+        onFiltersChange={setFilters}
+        sort={sort}
+        onSortChange={changeSort}
+      />
 
       {/* ── Board de colunas dinâmicas ── */}
       <div className="kanban">
         {columns.map((col) => {
-          const colTasks = sortTasks(tasks.filter((t) => t.column_key === col.key))
+          const colTasks = sortTasks(shownTasks.filter((t) => t.column_key === col.key), sort)
+          const colTotal = tasks.filter((t) => t.column_key === col.key).length
           return (
             <div className={`column column-${col.key}`} key={col.key}>
               <h4>
@@ -244,7 +408,9 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                   <span className="column-dot" style={{ background: col.color }} />
                   {col.label}
                 </span>
-                <span className="count">{colTasks.length}</span>
+                <span className="count" title={filtering ? `${colTasks.length} de ${colTotal} nesta coluna` : undefined}>
+                  {filtering ? `${colTasks.length}/${colTotal}` : colTasks.length}
+                </span>
               </h4>
               <div
                 className={`dropzone${overColumn === col.key ? ' drag-over' : ''}`}
@@ -252,7 +418,11 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                 onDragLeave={() => setOverColumn(null)}
                 onDrop={() => drop(col.key)}
               >
-                {colTasks.length === 0 && <div className="empty-hint">Solte cartões aqui</div>}
+                {colTasks.length === 0 && (
+                  <div className="empty-hint">
+                    {filtering && colTotal > 0 ? 'Nenhuma tarefa com esses filtros' : 'Solte cartões aqui'}
+                  </div>
+                )}
                 {colTasks.map((task) => {
                   const due = dueState(task.due_date, task.due_date_end)
                   const isDone = task.column_key === 'done'
@@ -261,20 +431,24 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                   return (
                     <div
                       className={`card ${PRIORITY_CLASS[task.priority] || 'p-media'}${dragId === task.id ? ' dragging' : ''}`}
-                      style={{ borderLeft: `3px solid ${ownerColor}` }}
+                      style={{ '--owner': ownerColor }}
                       key={task.id}
                       draggable
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`${task.title}. Prioridade ${task.priority || 'Média'}. Abrir detalhes`}
                       onDragStart={() => setDragId(task.id)}
                       onDragEnd={() => setDragId(null)}
                       onClick={() => setDetailTaskId(task.id)}
+                      onKeyDown={(e) => {
+                        // Só quando o foco está no próprio cartão (não nos botões internos)
+                        if (e.target !== e.currentTarget) return
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setDetailTaskId(task.id)
+                        }
+                      }}
                     >
-                      {/* ── Badge de prioridade ── */}
-                      <div className="card-top">
-                        <small className={`priority-tag ${PRIORITY_CLASS[task.priority] || 'p-media'}`}>
-                          {task.priority}
-                        </small>
-                      </div>
-
                       {/* ── Círculo de conclusão + título ── */}
                       <div className="card-title-row">
                         <button
@@ -307,23 +481,28 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
                         </div>
                       )}
 
-                      {/* ── Rodapé: prazo | setas (hover) + avatar ── */}
+                      {/* ── Rodapé: prioridade + prazo | setas (hover/foco) + pessoas ── */}
                       <div className="card-footer">
-                        {task.due_date ? (
-                          <span className={`due-tag due-${due}`}>
-                            <IconCalendar size={10} />
-                            {task.due_date_end
-                              ? `${formatDate(task.due_date)} — ${formatDate(task.due_date_end)}`
-                              : formatDate(task.due_date)}
-                            {task.due_time && (
-                              <>
-                                {' · '}
-                                {formatTime(task.due_time)}
-                                {task.due_time_end && `–${formatTime(task.due_time_end)}`}
-                              </>
-                            )}
-                          </span>
-                        ) : <span />}
+                        <div className="card-footer-meta">
+                          <small className={`priority-tag ${PRIORITY_CLASS[task.priority] || 'p-media'}`}>
+                            {task.priority || 'Média'}
+                          </small>
+                          {task.due_date && (
+                            <span className={`due-tag due-${due}`}>
+                              <IconCalendar size={11} />
+                              {task.due_date_end
+                                ? `${formatDate(task.due_date)} — ${formatDate(task.due_date_end)}`
+                                : formatDate(task.due_date)}
+                              {task.due_time && (
+                                <>
+                                  {' · '}
+                                  {formatTime(task.due_time)}
+                                  {task.due_time_end && `–${formatTime(task.due_time_end)}`}
+                                </>
+                              )}
+                            </span>
+                          )}
+                        </div>
 
                         <div className="card-footer-end">
                           <div className="card-nav-arrows">
@@ -400,4 +579,15 @@ export default function Kanban({ tasks, members, clients = [], currentUser, colu
       })()}
     </div>
   )
+}
+
+// Kanban pessoal: as tarefas atribuídas a quem está logado.
+export function MyKanban({ currentUser }) {
+  const tasksQuery = useMyTasks(currentUser.id)
+  const clients = useClients().data ?? EMPTY
+  const membersQuery = useMembers()
+  const { createTask } = useTaskActions({ userId: currentUser.id })
+
+  if (anyLoading(tasksQuery, membersQuery)) return <LoadingBlock text="Carregando tarefas..." />
+  return <Kanban tasks={tasksQuery.data ?? EMPTY} clients={clients} currentUser={currentUser} onAdd={createTask} />
 }
