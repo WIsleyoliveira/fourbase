@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { IconTrash, IconClose } from '../icons.jsx'
 import Avatar from './Avatar.jsx'
+import { useColumns } from '../hooks/useWorkspaceData.js'
+import { columnBuckets } from '../columnBuckets.js'
 
 const COLUMN_LABEL = { todo: 'A Fazer', doing: 'Em Progresso', done: 'Concluído' }
 const PRIORITY_CLASS = { Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -88,6 +90,8 @@ function RemoveConfirmModal({ member, onCancel, onConfirm, removing }) {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function TeamView({ onError }) {
+  // Rótulos dos contadores seguem as colunas do quadro (nome/posição editados pelo gestor)
+  const buckets = columnBuckets(useColumns().data)
   const [overview, setOverview] = useState([])
   const [tasks, setTasks] = useState([])
   const [filter, setFilter] = useState('all')
@@ -203,12 +207,14 @@ export default function TeamView({ onError }) {
               <div className="member-stats">
                 <div className="member-stat">
                   <strong>{member.tasks.todo}</strong>
-                  <small>A fazer</small>
+                  <small>{buckets.todo.label}</small>
                 </div>
-                <div className="member-stat">
-                  <strong>{member.tasks.doing}</strong>
-                  <small>Fazendo</small>
-                </div>
+                {buckets.doing && (
+                  <div className="member-stat">
+                    <strong>{member.tasks.doing}</strong>
+                    <small>{buckets.doing.label}</small>
+                  </div>
+                )}
                 <div className="member-stat">
                   <strong>{member.tasks.done}</strong>
                   <small>Feitas</small>

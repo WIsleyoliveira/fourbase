@@ -4,6 +4,17 @@ Histórico de versões do fourbase. O texto que os usuários veem ao entrar na
 plataforma ("O que há de novo") fica em `src/releaseNotes.js` — ao publicar uma
 versão, atualize os dois e a `version` do `package.json`.
 
+## 1.2.0 — 2026-10-26
+
+- **Anexos de tarefa aceitam qualquer tipo de arquivo** (PDF, planilhas, documentos, zip, áudio…), além de imagens: imagens aparecem como miniaturas e os demais arquivos numa lista com ícone, nome, baixar e excluir. Limite de 25 MB por arquivo; executáveis, scripts e páginas (.exe, .js, .html, .svg…) são recusados por segurança.
+- **Editar colunas do Kanban** (gestor): lápis no cabeçalho de cada coluna para renomear, trocar a cor, mover para a esquerda/direita e excluir. Ao excluir, as tarefas vão para a coluna escolhida; sempre sobra ao menos uma coluna além de "Concluído", que é fixa (não edita, não move, não exclui).
+- Contadores do Painel, da Equipe e dos clientes acompanham as colunas editadas (nome, cor e posição); a primeira coluna aberta é "a fazer" e as demais viram "em andamento".
+- Coluna nova criada por "Adicionar grupo" entra antes de "Concluído", que fica sempre por último.
+- Ao falhar uma ação por causa de um quadro desatualizado (coluna excluída por outra pessoa), a tela recarrega as colunas.
+- Segurança: anexos de tarefa só aceitam endereços http(s) (o servidor descarta "javascript:", "data:" etc.; no máximo 50 por tarefa) e a tela só mostra como link o que é http(s). Evita que alguém plante um link que executa código quando outra pessoa clica em "abrir".
+- Tarefas nunca ficam numa coluna que não existe mais (aba antiga ou quadro ainda carregando): vão para a primeira coluna do quadro.
+- Tirado o "ou escreva com IA" do campo de descrição da tarefa.
+
 ## 1.1.0 — 2026-10-07
 
 ### Novo

@@ -146,7 +146,13 @@ export const api = {
   getColumns: () => request('/api/columns'),
   createColumn: (label, key, position, color) =>
     request('/api/columns', { method: 'POST', body: JSON.stringify({ label, key, position, color }) }),
-  deleteColumn: (key) => request(`/api/columns/${key}`, { method: 'DELETE' }),
+  updateColumn: (key, changes) =>
+    request(`/api/columns/${key}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+  // As tarefas da coluna excluída vão para `moveTo` (obrigatório se houver alguma).
+  deleteColumn: (key, moveTo) =>
+    request(`/api/columns/${key}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`, { method: 'DELETE' }),
+  // `keys`: todas as colunas, exceto Concluído, na nova ordem.
+  reorderColumns: (keys) => request('/api/columns/order', { method: 'PUT', body: JSON.stringify({ keys }) }),
 
   // equipe (gestor)
   getTeamOverview: () => request('/api/team/overview'),

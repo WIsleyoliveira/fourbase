@@ -38,3 +38,14 @@ export const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 export const normalizeColor = (value) => (typeof value === 'string' && HEX_COLOR.test(value) ? value : null)
 
+// Anexos de tarefa: só endereços http(s) (o bucket do Storage é público). Um "javascript:" ou "data:"
+// gravado aqui viraria um link que roda código quando outra pessoa clicasse em "abrir"/"baixar".
+export const MAX_ATTACHMENTS = 50
+const MAX_ATTACHMENT_URL = 2048
+const isHttpUrl = (u) => typeof u === 'string' && u.length <= MAX_ATTACHMENT_URL && /^https?:\/\//i.test(u)
+export function sanitizeAttachments(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((a) => isHttpUrl(typeof a === 'string' ? a : (a?.url || a?.file_url)))
+    .slice(0, MAX_ATTACHMENTS)
+}

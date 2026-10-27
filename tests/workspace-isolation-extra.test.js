@@ -185,7 +185,7 @@ test('media: GET/PUT/DELETE são do próprio usuário e workspace; B não vê ne
 
 // ── Colunas do Kanban ───────────────────────────────────────────────────────
 
-test('columns DELETE: B não remove a coluna de A, nem a de mesma chave; colunas padrão são protegidas', async () => {
+test('columns DELETE: B não remove a coluna de A, nem a de mesma chave; só "Concluído" é intocável', async () => {
   const onlyA = await call('gestorA', 'POST', '/api/columns', { label: 'Só A', key: 'so-a', position: 3 })
   assert.equal(onlyA.status, 201)
   const sharedA = await call('gestorA', 'POST', '/api/columns', { label: 'Revisão A', key: 'revisao', position: 4 })
@@ -200,19 +200,20 @@ test('columns DELETE: B não remove a coluna de A, nem a de mesma chave; colunas
   assert.ok((await keysOf('gestorA')).includes('so-a'), 'coluna de A foi excluída por B')
 
   // mesma chave nos dois: B remove só a dele
-  assert.equal((await call('gestorB', 'DELETE', '/api/columns/revisao')).status, 204)
+  assert.equal((await call('gestorB', 'DELETE', '/api/columns/revisao')).status, 200)
   assert.ok(!(await keysOf('gestorB')).includes('revisao'))
   const aCols = (await call('gestorA', 'GET', '/api/columns')).body
   assert.equal(aCols.find((c) => c.key === 'revisao')?.label, 'Revisão A', 'coluna de mesma chave em A foi afetada')
 
-  // colunas padrão não saem, em nenhum workspace
-  for (const key of ['todo', 'doing', 'done']) {
-    assert.equal((await call('gestorB', 'DELETE', `/api/columns/${key}`)).status, 400)
-  }
+  // "Concluído" não sai; as outras colunas padrão saem, mas sempre sobra uma além dela
+  assert.equal((await call('gestorB', 'DELETE', '/api/columns/done')).status, 400)
+  assert.equal((await call('gestorB', 'DELETE', '/api/columns/todo')).status, 200)
+  assert.equal((await call('gestorB', 'DELETE', '/api/columns/doing')).status, 400, 'a última coluna além de Concluído não pode sair')
+  // nada disso alcança o workspace de A
   assert.deepEqual((await keysOf('gestorA')).filter((k) => ['todo', 'doing', 'done'].includes(k)).sort(), ['doing', 'done', 'todo'])
 
   // controle positivo
-  assert.equal((await call('gestorA', 'DELETE', '/api/columns/so-a')).status, 204)
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/so-a')).status, 200)
   assert.ok(!(await keysOf('gestorA')).includes('so-a'))
 })
 

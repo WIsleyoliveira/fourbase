@@ -4,7 +4,7 @@ import { tagColor } from '../colors.js'
 import { useToast } from '../toast.jsx'
 import { TASK_KEYS, patchAllTaskLists, restoreTaskLists, snapshotTaskLists } from '../taskCache.js'
 import {
-  COLUMN_KEYS, buildColumn, readCachedColumns, writeCachedColumns,
+  COLUMN_KEYS, applyColumnEdit, buildColumn, moveColumn, readCachedColumns, removeColumn, renumberColumns, writeCachedColumns,
 } from '../columnCache.js'
 
 // Clientes, etiquetas e colunas do workspace. Mesmo padrão de tasks e notas:
@@ -200,17 +200,85 @@ export const useColumns = () => {
 
 export function useColumnActions() {
   const queryClient = useQueryClient()
-  const { handleError } = useToast()
+  const { handleError, showToast } = useToast()
   const userId = sessionUserId()
   const key = COLUMN_KEYS.mine(userId)
 
   return {
+    // Move a coluna uma casa (delta -1 esquerda, +1 direita); volta ao que era se a API recusar.
+    moveColumn: async (columnKey, delta) => {
+      const before = queryClient.getQueryData(key) ?? readCachedColumns(localStorage, userId)
+      const next = moveColumn(before, columnKey, delta)
+      if (next === before) return false
+      queryClient.setQueryData(key, next)
+      writeCachedColumns(localStorage, userId, next)
+      try {
+        await api.reorderColumns(next.filter((c) => c.key !== 'done').map((c) => c.key))
+        return true
+      } catch (err) {
+        queryClient.setQueryData(key, before)
+        writeCachedColumns(localStorage, userId, before)
+        handleError(err)
+        return false
+      }
+    },
+
+    // Exclui a coluna e manda as tarefas dela para `moveTo`. A coluna some e os cartões
+    // aparecem na outra na hora; se a API recusar, tudo volta. Devolve true/false.
+    deleteColumn: async (columnKey, moveTo) => {
+      await queryClient.cancelQueries({ queryKey: TASK_KEYS.all })
+      const before = queryClient.getQueryData(key) ?? readCachedColumns(localStorage, userId)
+      const tasksBefore = snapshotTaskLists(queryClient)
+      const next = removeColumn(before, columnKey)
+      queryClient.setQueryData(key, next)
+      writeCachedColumns(localStorage, userId, next)
+      patchAllTaskLists(queryClient, (list) => list.map((t) => (t.column_key === columnKey ? { ...t, column_key: moveTo } : t)))
+      try {
+        const result = await api.deleteColumn(columnKey, moveTo)
+        const moved = result?.moved ?? 0
+        const label = before.find((c) => c.key === columnKey)?.label ?? ''
+        const dest = before.find((c) => c.key === moveTo)?.label ?? ''
+        showToast(moved > 0
+          ? `Coluna “${label}” excluída. ${moved} tarefa${moved === 1 ? '' : 's'} movida${moved === 1 ? '' : 's'} para “${dest}”.`
+          : `Coluna “${label}” excluída.`)
+        // tarefas de outras pessoas também mudaram de coluna: confere no servidor
+        queryClient.invalidateQueries({ queryKey: TASK_KEYS.all })
+        return true
+      } catch (err) {
+        queryClient.setQueryData(key, before)
+        writeCachedColumns(localStorage, userId, before)
+        restoreTaskLists(queryClient, tasksBefore)
+        handleError(err)
+        return false
+      }
+    },
+
+    // Troca nome/cor de uma coluna: muda na hora e volta ao que era se a API recusar.
+    // Devolve true/false para quem chamou saber se pode fechar o editor.
+    updateColumn: async (columnKey, changes) => {
+      const before = queryClient.getQueryData(key) ?? readCachedColumns(localStorage, userId)
+      const next = applyColumnEdit(before, columnKey, changes)
+      queryClient.setQueryData(key, next)
+      writeCachedColumns(localStorage, userId, next)
+      try {
+        await api.updateColumn(columnKey, changes)
+        showToast('Coluna atualizada.')
+        return true
+      } catch (err) {
+        queryClient.setQueryData(key, before)
+        writeCachedColumns(localStorage, userId, before)
+        handleError(err)
+        return false
+      }
+    },
+
     // A coluna aparece na hora; se a API recusar, volta ao que era e avisa
     // (antes ficava uma coluna "fantasma" que nunca foi salva).
     addColumn: async (label) => {
       const before = queryClient.getQueryData(key) ?? readCachedColumns(localStorage, userId)
       const column = buildColumn(label, before)
-      const next = [...before, column]
+      // entra antes de "Concluído" (as posições são renumeradas)
+      const next = renumberColumns([...before.filter((c) => c.key !== 'done'), column, ...before.filter((c) => c.key === 'done')])
       queryClient.setQueryData(key, next)
       writeCachedColumns(localStorage, userId, next)
       try {

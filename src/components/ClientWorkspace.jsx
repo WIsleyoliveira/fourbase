@@ -6,6 +6,8 @@ import LoadingBlock from './LoadingBlock.jsx'
 import { assigneeColor } from '../colors.js'
 import { useToast } from '../toast.jsx'
 import { useClientTasks, useTaskActions } from '../hooks/useTasks.js'
+import { useColumns } from '../hooks/useWorkspaceData.js'
+import { bucketOf, columnBuckets } from '../columnBuckets.js'
 
 const EMPTY = []
 
@@ -36,16 +38,14 @@ export default function ClientWorkspace({
   const tab = controlledTab ?? internalTab
   const setTab = onTabChange ?? setInternalTab
   // Métricas rápidas do quadro — memoizadas junto com as tarefas do cliente
+  const columns = useColumns().data
+  const buckets = useMemo(() => columnBuckets(columns), [columns])
   const metrics = useMemo(() => {
     const m = { todo: 0, doing: 0, done: 0, total: tasks.length }
-    for (const t of tasks) {
-      if (t.column_key === 'done') m.done += 1
-      else if (t.column_key === 'todo') m.todo += 1
-      else m.doing += 1
-    }
+    for (const t of tasks) m[bucketOf(t.column_key, buckets)] += 1
     m.progress = m.total ? Math.round((m.done / m.total) * 100) : 0
     return m
-  }, [tasks])
+  }, [tasks, buckets])
 
   const color = assigneeColor(client.id, client.color)
 
@@ -85,12 +85,14 @@ export default function ClientWorkspace({
         <div className="client-ws-metrics">
           <div className="client-ws-metric">
             <strong>{metrics.todo}</strong>
-            <small>A fazer</small>
+            <small>{buckets.todo.label}</small>
           </div>
-          <div className="client-ws-metric">
-            <strong>{metrics.doing}</strong>
-            <small>Em progresso</small>
-          </div>
+          {buckets.doing && (
+            <div className="client-ws-metric">
+              <strong>{metrics.doing}</strong>
+              <small>{buckets.doing.label}</small>
+            </div>
+          )}
           <div className="client-ws-metric">
             <strong>{metrics.done}</strong>
             <small>Concluídas</small>

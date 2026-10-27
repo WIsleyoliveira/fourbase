@@ -483,7 +483,7 @@ textarea:focus {
 }
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
 }
 .stat-card {
@@ -503,6 +503,7 @@ textarea:focus {
   position: absolute;
   inset: 0 auto 0 0;
   width: 5px;
+  background: var(--stat, var(--primary));
 }
 .stat-card.tone-info::before { background: var(--info); }
 .stat-card.tone-warn::before { background: var(--warn); }
@@ -6267,6 +6268,79 @@ img.kb-avatar {
   background: var(--primary-soft);
 }
 
+.tdv2-attachments-hint {
+  font-size: 11.5px;
+  color: var(--muted-strong);
+}
+
+/* Arquivos que não são imagem: lista com ícone, nome, baixar e excluir */
+.tdv2-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tdv2-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.tdv2-file-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+.tdv2-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+.tdv2-file-name:hover {
+  color: var(--primary-text);
+  text-decoration: underline;
+}
+.tdv2-file-action {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+}
+.tdv2-file-action:hover,
+.tdv2-file-action:focus-visible {
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  outline: none;
+}
+.tdv2-file-action.danger:hover,
+.tdv2-file-action.danger:focus-visible {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .tdv2-attachments-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -9205,4 +9279,238 @@ img.kb-avatar {
 }
 .sidebar.collapsed button.action {
   padding: 12px 0;
+}
+
+/* ---------- Editar colunas do Kanban ---------- */
+.column-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.column-edit-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.column:hover .column-edit-btn,
+.column:focus-within .column-edit-btn {
+  opacity: 1;
+}
+.column-edit-btn:hover,
+.column-edit-btn:focus-visible {
+  background: var(--primary-soft);
+  color: var(--primary-text);
+  outline: none;
+}
+@media (hover: none) {
+  .column-edit-btn {
+    opacity: 1;
+  }
+}
+.column-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--primary-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.column-editor-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.column-editor-colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.column-color-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+.column-color-swatch.selected {
+  border-color: var(--text);
+}
+.column-color-swatch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.column-color-custom {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.column-editor-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+.column-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.column-editor-cancel,
+.column-editor-save {
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.column-editor-cancel {
+  background: transparent;
+  color: var(--muted-strong);
+}
+.column-editor-cancel:hover {
+  background: var(--primary-soft);
+}
+.column-editor-save {
+  background: var(--primary);
+  color: var(--white);
+}
+.column-editor-save:hover {
+  background: var(--primary-dark);
+}
+.column-editor button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.column-editor-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.column-editor-move {
+  display: inline-flex;
+  gap: 4px;
+}
+.column-editor-move button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  cursor: pointer;
+}
+.column-editor-move button:hover:not(:disabled) {
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+.column-editor-move button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.column-editor-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.column-editor-delete:hover {
+  background: var(--danger-soft);
+}
+.column-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+}
+.column-delete-confirm p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.column-delete-confirm select {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+.column-editor-danger {
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.column-editor-danger:hover {
+  filter: brightness(0.92);
+}
+
+/* Telas de toque: alvos maiores nos controles de coluna e de anexos */
+@media (hover: none) and (pointer: coarse) {
+  .column-edit-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .column-editor-move button {
+    width: 40px;
+    height: 40px;
+  }
+  .column-editor-delete,
+  .column-editor-cancel,
+  .column-editor-save,
+  .column-editor-danger {
+    min-height: 40px;
+  }
+  .column-color-swatch {
+    width: 30px;
+    height: 30px;
+  }
+  .tdv2-file-action {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Foco visível (teclado) nos controles de coluna e de anexos */
+.column-edit-btn:focus-visible,
+.column-editor-move button:focus-visible,
+.tdv2-file-action:focus-visible {
+  box-shadow: var(--focus-ring);
 }

@@ -1,15 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase, CLIENT_MEDIA_BUCKET, storagePathFromUrl } from '../supabase.js'
-import { IconPaperclip, IconPlus, IconExpandSearch, IconTrash, IconClose } from '../icons.jsx'
+import {
+  IconPaperclip, IconPlus, IconExpandSearch, IconTrash, IconClose, IconDownload,
+  IconFilePdf, IconFileText, IconSheet, IconPresentation,
+} from '../icons.jsx'
+import { useToast } from '../toast.jsx'
+import { MAX_FILE_MB, fileKind, fileNameFromUrl, isHttpUrl, isImageName, storagePathFor, validateFile } from '../taskFiles.js'
 
-const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const FILE_ICONS = { pdf: IconFilePdf, sheet: IconSheet, slides: IconPresentation, doc: IconFileText }
 
-// Anexos e imagens de uma tarefa: envia direto ao Storage do Supabase (bucket de
-// mídia de clientes, pasta tasks/<id>) e devolve a lista de URLs públicas via
-// onChange. Usado pelo modal de tarefa (taskId real) e pelo formulário de nova
-// tarefa do Kanban (taskId provisório, enquanto a tarefa ainda não existe).
+// Anexos de uma tarefa — imagens ou qualquer outro tipo de arquivo (PDF, planilha,
+// documento, zip…; veja src/taskFiles.js para limites e formatos recusados). Envia direto
+// ao Storage do Supabase (bucket de mídia de clientes, pasta tasks/<id>/<único>/<nome>) e
+// devolve a lista de URLs públicas via onChange. Usado pelo modal de tarefa (taskId real) e
+// pelo formulário de nova tarefa do Kanban (taskId provisório, enquanto a tarefa não existe).
 export default function TaskAttachments({ taskId, attachments, onChange }) {
+  const { showToast } = useToast()
   const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [previewImage, setPreviewImage] = useState(null)
@@ -23,24 +30,33 @@ export default function TaskAttachments({ taskId, attachments, onChange }) {
   }, [previewImage])
 
   const uploadFiles = async (fileList) => {
-    const files = Array.from(fileList || []).filter((f) => ACCEPTED_IMAGE_TYPES.includes(f.type))
+    const all = Array.from(fileList || [])
+    if (!all.length) return
+    const problems = []
+    const files = all.filter((f) => {
+      const problem = validateFile(f)
+      if (problem) problems.push(problem)
+      return !problem
+    })
+    if (problems.length) showToast(problems.join(' '))
     if (!files.length) return
+
     setUploading(true)
     try {
       const uploaded = []
       for (const file of files) {
-        const ext = file.name.split('.').pop() || 'png'
-        const path = `tasks/${taskId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const path = storagePathFor(taskId, file.name, unique)
         const { error } = await supabase.storage
           .from(CLIENT_MEDIA_BUCKET)
-          .upload(path, file, { cacheControl: '3600', contentType: file.type })
+          .upload(path, file, { cacheControl: '3600', contentType: file.type || 'application/octet-stream' })
         if (error) throw error
         const { data } = supabase.storage.from(CLIENT_MEDIA_BUCKET).getPublicUrl(path)
         uploaded.push(data.publicUrl)
       }
       onChange([...(attachments || []), ...uploaded])
     } catch (err) {
-      alert(err.message || 'Falha ao enviar imagem')
+      showToast(err.message || 'Falha ao enviar o arquivo.')
     } finally {
       setUploading(false)
     }
@@ -58,11 +74,16 @@ export default function TaskAttachments({ taskId, attachments, onChange }) {
   }
 
   const removeAttachment = (url) => {
-    if (!confirm('Remover esta imagem?')) return
+    if (!confirm(`Remover o anexo “${fileNameFromUrl(url)}”?`)) return
     onChange((attachments || []).filter((a) => a !== url))
     const path = storagePathFromUrl(url, CLIENT_MEDIA_BUCKET)
     if (path) supabase.storage.from(CLIENT_MEDIA_BUCKET).remove([path]).catch(() => {})
   }
+
+  // só mostra o que é http(s): um "javascript:" gravado por outra pessoa não vira link clicável
+  const list = (attachments || []).filter(isHttpUrl)
+  const images = list.filter((url) => isImageName(fileNameFromUrl(url)))
+  const files = list.filter((url) => !isImageName(fileNameFromUrl(url)))
 
   return (
     <div className="tdv2-attachments">
@@ -77,26 +98,22 @@ export default function TaskAttachments({ taskId, attachments, onChange }) {
         onDragOver={(e) => { e.preventDefault(); setDragActive(true) }}
         onDragLeave={() => setDragActive(false)}
         onDrop={handleDrop}
+        title={`Qualquer tipo de arquivo, até ${MAX_FILE_MB} MB cada`}
       >
         <IconPlus size={14} />
-        <span>{uploading ? 'Enviando...' : 'Adicionar imagem'}</span>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          multiple
-          hidden
-          onChange={handleSelect}
-        />
+        <span>{uploading ? 'Enviando...' : 'Adicionar arquivo ou imagem'}</span>
+        <input ref={inputRef} type="file" multiple hidden onChange={handleSelect} />
       </div>
+      <small className="tdv2-attachments-hint">Qualquer tipo de arquivo, até {MAX_FILE_MB} MB cada. Arraste para cá ou clique.</small>
 
-      {attachments && attachments.length > 0 && (
+      {images.length > 0 && (
         <div className="tdv2-attachments-grid">
-          {attachments.map((url) => (
+          {images.map((url) => (
             <div className="tdv2-attachment-item" key={url}>
-              <img src={url} alt="Anexo" />
+              <img src={url} alt={fileNameFromUrl(url) || 'Anexo'} />
               <div className="tdv2-attachment-overlay">
                 <button
+                  type="button"
                   className="tdv2-attachment-btn"
                   title="Ver em tamanho cheio"
                   onClick={() => setPreviewImage(url)}
@@ -104,8 +121,9 @@ export default function TaskAttachments({ taskId, attachments, onChange }) {
                   <IconExpandSearch size={15} />
                 </button>
                 <button
+                  type="button"
                   className="tdv2-attachment-btn danger"
-                  title="Excluir imagem"
+                  title="Excluir anexo"
                   onClick={() => removeAttachment(url)}
                 >
                   <IconTrash size={14} />
@@ -114,6 +132,35 @@ export default function TaskAttachments({ taskId, attachments, onChange }) {
             </div>
           ))}
         </div>
+      )}
+
+      {files.length > 0 && (
+        <ul className="tdv2-file-list">
+          {files.map((url) => {
+            const name = fileNameFromUrl(url) || 'Arquivo'
+            const Icon = FILE_ICONS[fileKind(name)] || IconFileText
+            return (
+              <li className="tdv2-file-item" key={url}>
+                <span className="tdv2-file-icon"><Icon size={18} /></span>
+                <a className="tdv2-file-name" href={url} target="_blank" rel="noopener noreferrer" title={`Abrir ${name}`}>
+                  {name}
+                </a>
+                <a className="tdv2-file-action" href={url} download={name} target="_blank" rel="noopener noreferrer" title="Baixar" aria-label={`Baixar ${name}`}>
+                  <IconDownload size={14} />
+                </a>
+                <button
+                  type="button"
+                  className="tdv2-file-action danger"
+                  title="Excluir anexo"
+                  aria-label={`Excluir ${name}`}
+                  onClick={() => removeAttachment(url)}
+                >
+                  <IconTrash size={14} />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
       {previewImage && createPortal(

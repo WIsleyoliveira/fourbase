@@ -7,6 +7,8 @@ import {
   IconClose,
   IconCalendar,
   IconChevronDown,
+  IconPencil,
+  IconTrash,
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
@@ -21,6 +23,9 @@ import {
   buildTaskFields, countAdvanced, emptyDraft, setDraftField, validateDraft,
 } from '../newTaskForm.js'
 import { useToast } from '../toast.jsx'
+import {
+  COLUMN_COLORS, MAX_COLUMN_LABEL, canDeleteColumn, canMoveColumn, deletionTargets, isEditableColumn, validateColumnEdit,
+} from '../columnCache.js'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import {
   useClients, useColumnActions, useColumns, useMembers, useTagActions, useTags,
@@ -156,7 +161,9 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const columns = useColumns().data
   const tags = useTags().data ?? EMPTY
   const { createTag: onCreateTag } = useTagActions()
-  const { addColumn: onAddColumn } = useColumnActions()
+  const {
+    addColumn: onAddColumn, updateColumn: onUpdateColumn, moveColumn: onMoveColumn, deleteColumn: onDeleteColumn,
+  } = useColumnActions()
   const { moveTask: onMove, updateTask: onUpdate, deleteTask: onDelete } =
     useTaskActions({ userId: currentUser?.id })
   const { showToast } = useToast()
@@ -164,13 +171,39 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   // só mostra/esconde os campos além do título.
   const formDefaults = { assignedTo: currentUser?.id || '', columnKey: columns[0]?.key || 'todo' }
   const [draft, setDraft] = useState(() => emptyDraft(formDefaults))
+  // A coluna do rascunho pode ter deixado de existir (excluída por alguém, ou o quadro só chegou do
+  // servidor depois de o formulário nascer): nesse caso vale a primeira coluna, nunca uma que não existe.
+  const draftView = columns.some((c) => c.key === draft.columnKey) ? draft : { ...draft, columnKey: formDefaults.columnKey }
   const [showMore, setShowMore] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Edição de uma coluna (nome e cor): só uma por vez; "Concluído" não é editável
+  const [editingCol, setEditingCol] = useState(null) // { key, label, color }
+  const [colError, setColError] = useState('')
+  const [deletingCol, setDeletingCol] = useState(null) // { key, moveTo } — confirmação de exclusão
+  const startEditCol = (col) => { setColError(''); setDeletingCol(null); setEditingCol({ key: col.key, label: col.label, color: col.color }) }
+  const closeColEditor = () => { setEditingCol(null); setDeletingCol(null) }
+  const startDeleteCol = (col) => {
+    const targets = deletionTargets(columns, col.key)
+    // sugere a coluna vizinha (a anterior, ou a seguinte se for a primeira)
+    const idx = columns.findIndex((c) => c.key === col.key)
+    const neighbour = targets.find((c) => c.key === columns[idx - 1]?.key) || targets[0]
+    setDeletingCol({ key: col.key, moveTo: neighbour?.key || '' })
+  }
+  const confirmDeleteCol = async () => {
+    const ok = await onDeleteColumn(deletingCol.key, deletingCol.moveTo)
+    if (ok) closeColEditor()
+  }
+  const saveCol = async () => {
+    const problem = validateColumnEdit(editingCol)
+    if (problem) { setColError(problem); return }
+    const ok = await onUpdateColumn(editingCol.key, { label: editingCol.label.trim(), color: editingCol.color })
+    if (ok) closeColEditor()
+  }
   // Id provisório: as imagens anexadas antes de a tarefa existir vão para tasks/<id>
   const newId = () => (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
   const [draftId, setDraftId] = useState(newId)
   const setField = (field, value) => setDraft((d) => setDraftField(d, field, value))
-  const advancedCount = countAdvanced(draft, formDefaults)
+  const advancedCount = countAdvanced(draftView, formDefaults)
   // Busca, filtros e ordem: tudo no navegador, sobre as tarefas já carregadas
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [sort, setSort] = useState(loadSort)
@@ -195,11 +228,11 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const submit = async (e) => {
     e.preventDefault()
     if (saving) return
-    const problem = validateDraft(draft)
+    const problem = validateDraft(draftView)
     if (problem) { showToast(problem); return }
     setSaving(true)
     try {
-      const task = await onAdd(buildTaskFields(draft, { isGestor }))
+      const task = await onAdd(buildTaskFields(draftView, { isGestor }))
       // Só limpa quando a tarefa foi criada; se falhou, o rascunho fica para tentar de novo
       if (task) {
         setDraft(emptyDraft(formDefaults))
@@ -265,7 +298,7 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
             </label>
             <label className="task-form-field">
               <span>Status</span>
-              <select value={draft.columnKey} onChange={(e) => setField('columnKey', e.target.value)}>
+              <select value={draftView.columnKey} onChange={(e) => setField('columnKey', e.target.value)}>
                 {columns.map((c) => (
                   <option key={c.key} value={c.key}>{c.label}</option>
                 ))}
@@ -402,16 +435,123 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
           const colTotal = tasks.filter((t) => t.column_key === col.key).length
           return (
             <div className={`column column-${col.key}`} key={col.key}>
-              <h4>
-                <span className="column-title">
-                  {/* Dot colorido dinamicamente — compatível com colunas padrão e customizadas */}
-                  <span className="column-dot" style={{ background: col.color }} />
-                  {col.label}
-                </span>
-                <span className="count" title={filtering ? `${colTasks.length} de ${colTotal} nesta coluna` : undefined}>
-                  {filtering ? `${colTasks.length}/${colTotal}` : colTasks.length}
-                </span>
-              </h4>
+              {editingCol?.key === col.key ? (
+                <form
+                  className="column-editor"
+                  onSubmit={(e) => { e.preventDefault(); saveCol() }}
+                  onKeyDown={(e) => { if (e.key === 'Escape') closeColEditor() }}
+                >
+                  <input
+                    className="column-editor-input"
+                    autoFocus
+                    maxLength={MAX_COLUMN_LABEL}
+                    aria-label="Nome da coluna"
+                    value={editingCol.label}
+                    onChange={(e) => { setColError(''); setEditingCol({ ...editingCol, label: e.target.value }) }}
+                  />
+                  <div className="column-editor-colors" role="radiogroup" aria-label="Cor da coluna">
+                    {COLUMN_COLORS.map((color) => (
+                      <button
+                        type="button"
+                        key={color}
+                        role="radio"
+                        aria-checked={editingCol.color === color}
+                        className={`column-color-swatch${editingCol.color === color ? ' selected' : ''}`}
+                        style={{ background: color }}
+                        title={color}
+                        onClick={() => setEditingCol({ ...editingCol, color })}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      className="column-color-custom"
+                      title="Outra cor"
+                      aria-label="Outra cor"
+                      value={editingCol.color}
+                      onChange={(e) => setEditingCol({ ...editingCol, color: e.target.value })}
+                    />
+                  </div>
+                  {colError && <p className="column-editor-error" role="alert">{colError}</p>}
+                  <div className="column-editor-actions">
+                    <button type="button" className="column-editor-cancel" onClick={closeColEditor}>Cancelar</button>
+                    <button type="submit" className="column-editor-save">Salvar</button>
+                  </div>
+                  <div className="column-editor-extra">
+                    <span className="column-editor-move" role="group" aria-label="Mover a coluna">
+                      <button
+                        type="button"
+                        title="Mover para a esquerda"
+                        aria-label="Mover a coluna para a esquerda"
+                        disabled={!canMoveColumn(columns, col.key, -1)}
+                        onClick={() => onMoveColumn(col.key, -1)}
+                      >
+                        <IconArrowLeft size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Mover para a direita"
+                        aria-label="Mover a coluna para a direita"
+                        disabled={!canMoveColumn(columns, col.key, 1)}
+                        onClick={() => onMoveColumn(col.key, 1)}
+                      >
+                        <IconArrowRight size={13} />
+                      </button>
+                    </span>
+                    {canDeleteColumn(columns, col.key) && (
+                      <button type="button" className="column-editor-delete" onClick={() => startDeleteCol(col)}>
+                        <IconTrash size={13} /> Excluir coluna
+                      </button>
+                    )}
+                  </div>
+                  {deletingCol?.key === col.key && (
+                    <div className="column-delete-confirm" role="alertdialog" aria-label="Confirmar exclusão da coluna">
+                      <p>
+                        Excluir a coluna <strong>“{col.label}”</strong>?
+                        {colTotal > 0
+                          ? ` Suas ${colTotal} tarefa${colTotal === 1 ? '' : 's'} nela (e as da equipe, se houver) serão movidas para:`
+                          : ' As tarefas da equipe que estiverem nela (se houver) serão movidas para:'}
+                      </p>
+                      <select
+                        value={deletingCol.moveTo}
+                        aria-label="Mover as tarefas para"
+                        onChange={(e) => setDeletingCol({ ...deletingCol, moveTo: e.target.value })}
+                      >
+                        {deletionTargets(columns, col.key).map((c) => (
+                          <option key={c.key} value={c.key}>{c.label}</option>
+                        ))}
+                      </select>
+                      <div className="column-editor-actions">
+                        <button type="button" className="column-editor-cancel" onClick={() => setDeletingCol(null)}>Voltar</button>
+                        <button type="button" className="column-editor-danger" onClick={confirmDeleteCol}>Excluir de vez</button>
+                      </div>
+                    </div>
+                  )}
+                </form>
+              ) : (
+                <h4>
+                  <span className="column-title">
+                    {/* Dot colorido dinamicamente — compatível com colunas padrão e customizadas */}
+                    <span className="column-dot" style={{ background: col.color }} />
+                    {col.label}
+                  </span>
+                  <span className="column-head-right">
+                    {isGestor && isEditableColumn(col) && (
+                      <button
+                        type="button"
+                        className="column-edit-btn"
+                        title={`Editar a coluna “${col.label}”`}
+                        aria-label={`Editar a coluna ${col.label}`}
+                        onClick={() => startEditCol(col)}
+                      >
+                        <IconPencil size={13} />
+                      </button>
+                    )}
+                    <span className="count" title={filtering ? `${colTasks.length} de ${colTotal} nesta coluna` : undefined}>
+                      {filtering ? `${colTasks.length}/${colTotal}` : colTasks.length}
+                    </span>
+                  </span>
+                </h4>
+              )}
               <div
                 className={`dropzone${overColumn === col.key ? ' drag-over' : ''}`}
                 onDragOver={(e) => { e.preventDefault(); setOverColumn(col.key) }}

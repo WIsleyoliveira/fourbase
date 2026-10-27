@@ -500,7 +500,7 @@ export default function TaskDetailModal({
           <div className="tdv2-description">
             <textarea
               rows={5}
-              placeholder="Adicione uma descrição ou escreva com IA..."
+              placeholder="Adicione uma descrição..."
               value={descDraft}
               onChange={(e) => setDescDraft(e.target.value)}
               onBlur={saveDescription}

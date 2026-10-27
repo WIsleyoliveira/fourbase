@@ -22,6 +22,7 @@ import { memberColor, tagColor } from '../colors.js'
 import { layoutWeek, taskTooltip, MAX_LANES } from '../calendarLayout.js'
 import { emptyDraft, buildTaskFields } from '../newTaskForm.js'
 import MiniCalendar from './MiniCalendar.jsx'
+import { reopenColumnKey } from '../columnCache.js'
 import {
   EMPTY_CAL_FILTERS, toggleCalFilter, countCalFilters, filterCalendarTasks, countOptions,
 } from '../calendarFilters.js'
@@ -328,7 +329,7 @@ function CalendarView({ currentUser }) {
   }
 
   const toggleComplete = (task) => {
-    onMove(task.id, task.column_key === 'done' ? 'todo' : 'done')
+    onMove(task.id, task.column_key === 'done' ? reopenColumnKey(columns) : 'done')
   }
 
   const openDetail = (e, task) => {

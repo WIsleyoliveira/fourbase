@@ -7,7 +7,7 @@ const CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS
 // Fatias do gráfico de rosca: { key, count, length, offset } — `length` e `offset`
 // são medidas do traço do círculo (stroke-dasharray / -dashoffset). Sem tarefas,
 // devolve lista vazia (a tela desenha só o anel cinza).
-export function donutSegments(counts, order = ['done', 'doing', 'todo']) {
+export function donutSegments(counts, order = ['done', 'doing', 'todo'], colors = {}) {
   const total = order.reduce((sum, key) => sum + (counts[key] || 0), 0)
   if (!total) return []
   let used = 0
@@ -16,7 +16,7 @@ export function donutSegments(counts, order = ['done', 'doing', 'todo']) {
     const count = counts[key] || 0
     if (!count) continue
     const length = (count / total) * CIRCUMFERENCE
-    segments.push({ key, count, length, offset: -used, circumference: CIRCUMFERENCE })
+    segments.push({ key, count, length, offset: -used, circumference: CIRCUMFERENCE, color: colors[key] })
     used += length
   }
   return segments
