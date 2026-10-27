@@ -9,6 +9,46 @@
 
 export const RELEASES = [
   {
+    version: '1.2.0',
+    date: '2026-10-26',
+    title: 'Anexos de qualquer tipo e colunas do Kanban editáveis',
+    intro: 'Duas melhorias para o dia a dia do seu quadro:',
+    items: [
+      {
+        kind: 'Novo',
+        icon: 'IconPaperclip',
+        title: 'Anexe qualquer tipo de arquivo',
+        text: 'Além de imagens, agora você anexa PDF, planilhas, documentos, apresentações, arquivos compactados e muito mais às tarefas.',
+        points: [
+          'Arraste os arquivos ou clique em “Adicionar arquivo ou imagem”',
+          'Imagens aparecem como miniaturas; os outros arquivos numa lista, com opção de abrir, baixar e excluir',
+          'Até 25 MB por arquivo (executáveis e páginas da web não são aceitos, por segurança)',
+        ],
+        cta: { label: 'Abrir o Kanban', path: '/kanban' },
+      },
+      {
+        kind: 'Novo',
+        icon: 'IconKanban',
+        title: 'Edite as colunas do Kanban',
+        text: 'Quem é gestor agora personaliza o quadro: passe o mouse no título de uma coluna e clique no lápis.',
+        points: [
+          'Renomeie, troque a cor e mova a coluna para a esquerda ou para a direita',
+          'Exclua uma coluna escolhendo para onde as tarefas dela vão',
+          'A coluna “Concluído” continua fixa, sempre por último',
+        ],
+        cta: { label: 'Abrir o Kanban', path: '/kanban' },
+      },
+      {
+        kind: 'Melhoria',
+        icon: 'IconDashboard',
+        title: 'Painel e Equipe acompanham suas colunas',
+        text: 'Os contadores e o gráfico de progresso passam a usar o nome e a cor das colunas que você definiu.',
+        points: [],
+        cta: { label: 'Ver o painel', path: '/painel' },
+      },
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-10-05',
     title: 'Tema noite, notificações, novo Painel, Kanban e Calendário',
