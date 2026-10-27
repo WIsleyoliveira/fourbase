@@ -46,3 +46,12 @@ test('imagem x outros arquivos e ícone', () => {
   assert.equal(isImageName('contrato.pdf'), false)
   assert.deepEqual(['a.pdf', 'b.xlsx', 'c.pptx', 'd.docx', 'e.zip'].map(fileKind), ['pdf', 'sheet', 'slides', 'doc', 'doc'])
 })
+
+test('só http(s) vira link: javascript:, data: e vazios nunca', async () => {
+  const { isHttpUrl } = await import('../src/taskFiles.js')
+  assert.equal(isHttpUrl('https://x.supabase.co/a/b.pdf'), true)
+  assert.equal(isHttpUrl('HTTP://x/a'), true)
+  for (const bad of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'data:text/html;base64,AAAA', 'vbscript:x', '//x/a', '/relativo', '', null, undefined, 42]) {
+    assert.equal(isHttpUrl(bad), false, String(bad))
+  }
+})

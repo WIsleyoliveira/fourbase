@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, workspaceOf } from '../auth.js'
-import { inWorkspace, validMemberIds, isUuid } from '../validation.js'
+import { inWorkspace, validMemberIds, isUuid, sanitizeAttachments } from '../validation.js'
 import { emitTaskNotifications } from '../notifications.js'
 import { canViewTask } from '../notificationRules.js'
 
@@ -172,7 +172,7 @@ router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       assigned_to: owner,
       client_id: client_id || null,
       tags: Array.isArray(tags) ? tags : [],
-      attachments: Array.isArray(attachments) ? attachments : [],
+      attachments: sanitizeAttachments(attachments),
       mentioned_users: await validMemberIds(mentioned_users, workspaceId),
     })
     .select()
@@ -246,7 +246,7 @@ router.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
     updates.assigned_to = assigned_to
   }
   if (logged_time_seconds !== undefined) updates.logged_time_seconds = Math.max(0, Math.floor(Number(logged_time_seconds)) || 0)
-  if (attachments !== undefined) updates.attachments = Array.isArray(attachments) ? attachments : []
+  if (attachments !== undefined) updates.attachments = sanitizeAttachments(attachments)
   if (client_id !== undefined) {
     if (!(await inWorkspace('fourbase_clients', client_id, workspaceId))) {
       return res.status(400).json({ error: 'Cliente inválido' })

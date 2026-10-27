@@ -66,3 +66,6 @@ export function fileKind(name) {
   if (['ppt', 'pptx', 'odp', 'key'].includes(ext)) return 'slides'
   return 'doc'
 }
+
+// Só endereços http(s) viram link ou imagem na tela ("javascript:" e "data:" nunca).
+export const isHttpUrl = (url) => typeof url === 'string' && /^https?:\/\//i.test(url)

@@ -6,7 +6,7 @@ import {
   IconFilePdf, IconFileText, IconSheet, IconPresentation,
 } from '../icons.jsx'
 import { useToast } from '../toast.jsx'
-import { MAX_FILE_MB, fileKind, fileNameFromUrl, isImageName, storagePathFor, validateFile } from '../taskFiles.js'
+import { MAX_FILE_MB, fileKind, fileNameFromUrl, isHttpUrl, isImageName, storagePathFor, validateFile } from '../taskFiles.js'
 
 const FILE_ICONS = { pdf: IconFilePdf, sheet: IconSheet, slides: IconPresentation, doc: IconFileText }
 
@@ -80,7 +80,8 @@ export default function TaskAttachments({ taskId, attachments, onChange }) {
     if (path) supabase.storage.from(CLIENT_MEDIA_BUCKET).remove([path]).catch(() => {})
   }
 
-  const list = attachments || []
+  // só mostra o que é http(s): um "javascript:" gravado por outra pessoa não vira link clicável
+  const list = (attachments || []).filter(isHttpUrl)
   const images = list.filter((url) => isImageName(fileNameFromUrl(url)))
   const files = list.filter((url) => !isImageName(fileNameFromUrl(url)))
 
