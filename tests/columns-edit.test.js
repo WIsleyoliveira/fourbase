@@ -153,3 +153,21 @@ test('excluir coluna: tarefas vão para a coluna escolhida; sempre sobra uma al�
   // outro workspace intacto
   assert.deepEqual(await keysOf('gestorB'), ['todo', 'doing', 'done', 'extra'])
 })
+
+test('tarefa nunca fica em coluna inexistente: criar cai na primeira coluna; mover recusa', async () => {
+  const cols = await keysOf('gestorA')
+  const first = cols.find((k) => k !== 'done')
+  // aba antiga criando tarefa numa coluna que já foi excluída
+  const criada = await call('gestorA', 'POST', '/api/tasks', { title: 'Aba antiga', column_key: 'coluna-excluida', assigned_to: id.gestorA })
+  assert.equal(criada.status, 201)
+  assert.equal(criada.body.column_key, first)
+  // coluna que existe continua valendo
+  const valida = await call('gestorA', 'POST', '/api/tasks', { title: 'Na certa', column_key: 'done', assigned_to: id.gestorA })
+  assert.equal(valida.body.column_key, 'done')
+  // mover para coluna inexistente é recusado e a tarefa não muda
+  const mover = await call('gestorA', 'PATCH', `/api/tasks/${criada.body.id}`, { column_key: 'coluna-excluida' })
+  assert.equal(mover.status, 400)
+  const ok = await call('gestorA', 'PATCH', `/api/tasks/${criada.body.id}`, { column_key: 'done' })
+  assert.equal(ok.status, 200)
+  assert.equal(ok.body.column_key, 'done')
+})

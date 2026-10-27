@@ -103,15 +103,24 @@ router.get('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
-// Coluna em que nasce uma tarefa sem coluna informada: a primeira do quadro (com colunas
-// editáveis, "todo" pode ter sido renomeada, movida ou excluída), sem contar "Concluído".
-async function firstColumnKey(workspaceId) {
+// Colunas do quadro do workspace, na ordem. Com colunas editáveis, "todo" pode ter sido
+// renomeada, movida ou excluída: a tarefa nunca pode ficar numa coluna que não existe (sumiria do quadro).
+async function workspaceColumnKeys(workspaceId) {
   const { data } = await supabase
     .from('fourbase_columns')
     .select('key')
     .eq('workspace_id', workspaceId)
     .order('position', { ascending: true })
-  return data?.find((c) => c.key !== 'done')?.key || 'todo'
+  return (data || []).map((c) => c.key)
+}
+
+// Coluna válida para uma tarefa nova: a pedida, se existir; senão a primeira do quadro (sem contar
+// "Concluído"). Sem colunas cadastradas (ambiente novo), aceita o que veio ou usa "todo".
+async function resolveColumnKey(workspaceId, requested) {
+  const keys = await workspaceColumnKeys(workspaceId)
+  if (!keys.length) return requested || 'todo'
+  if (requested && keys.includes(requested)) return requested
+  return keys.find((k) => k !== 'done') || keys[0]
 }
 
 router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
@@ -158,7 +167,7 @@ router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       due_date_end: due_date ? (due_date_end || null) : null,
       due_time: due_date ? (due_time || null) : null,
       due_time_end: due_date && due_time ? (due_time_end || null) : null,
-      column_key: column_key || await firstColumnKey(workspaceId),
+      column_key: await resolveColumnKey(workspaceId, column_key),
       user_id: req.user.id,
       assigned_to: owner,
       client_id: client_id || null,
@@ -178,7 +187,12 @@ router.patch('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   const { column_key, title, priority, due_date, due_date_end, due_time, due_time_end, assigned_to, description, logged_time_seconds, attachments, client_id, tags, mentioned_users } = req.body
   const workspaceId = workspaceOf(req)
   const updates = {}
-  if (column_key) updates.column_key = column_key
+  if (column_key) {
+    // mover para uma coluna que não existe (ex.: aba antiga depois de uma exclusão) faria a tarefa sumir
+    const keys = await workspaceColumnKeys(workspaceOf(req))
+    if (keys.length && !keys.includes(column_key)) return res.status(400).json({ error: 'Essa coluna não existe mais' })
+    updates.column_key = column_key
+  }
   if (title) updates.title = title
   if (description !== undefined) updates.description = description
   if (priority) updates.priority = priority

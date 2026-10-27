@@ -171,6 +171,9 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   // só mostra/esconde os campos além do título.
   const formDefaults = { assignedTo: currentUser?.id || '', columnKey: columns[0]?.key || 'todo' }
   const [draft, setDraft] = useState(() => emptyDraft(formDefaults))
+  // A coluna do rascunho pode ter deixado de existir (excluída por alguém, ou o quadro só chegou do
+  // servidor depois de o formulário nascer): nesse caso vale a primeira coluna, nunca uma que não existe.
+  const draftView = columns.some((c) => c.key === draft.columnKey) ? draft : { ...draft, columnKey: formDefaults.columnKey }
   const [showMore, setShowMore] = useState(false)
   const [saving, setSaving] = useState(false)
   // Edição de uma coluna (nome e cor): só uma por vez; "Concluído" não é editável
@@ -200,7 +203,7 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const newId = () => (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
   const [draftId, setDraftId] = useState(newId)
   const setField = (field, value) => setDraft((d) => setDraftField(d, field, value))
-  const advancedCount = countAdvanced(draft, formDefaults)
+  const advancedCount = countAdvanced(draftView, formDefaults)
   // Busca, filtros e ordem: tudo no navegador, sobre as tarefas já carregadas
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [sort, setSort] = useState(loadSort)
@@ -225,11 +228,11 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const submit = async (e) => {
     e.preventDefault()
     if (saving) return
-    const problem = validateDraft(draft)
+    const problem = validateDraft(draftView)
     if (problem) { showToast(problem); return }
     setSaving(true)
     try {
-      const task = await onAdd(buildTaskFields(draft, { isGestor }))
+      const task = await onAdd(buildTaskFields(draftView, { isGestor }))
       // Só limpa quando a tarefa foi criada; se falhou, o rascunho fica para tentar de novo
       if (task) {
         setDraft(emptyDraft(formDefaults))
@@ -295,7 +298,7 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
             </label>
             <label className="task-form-field">
               <span>Status</span>
-              <select value={draft.columnKey} onChange={(e) => setField('columnKey', e.target.value)}>
+              <select value={draftView.columnKey} onChange={(e) => setField('columnKey', e.target.value)}>
                 {columns.map((c) => (
                   <option key={c.key} value={c.key}>{c.label}</option>
                 ))}

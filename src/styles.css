@@ -9480,3 +9480,29 @@ img.kb-avatar {
 .column-editor-danger:hover {
   filter: brightness(0.92);
 }
+
+/* Telas de toque: alvos maiores nos controles de coluna e de anexos */
+@media (hover: none) and (pointer: coarse) {
+  .column-edit-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .column-editor-move button {
+    width: 40px;
+    height: 40px;
+  }
+  .column-editor-delete,
+  .column-editor-cancel,
+  .column-editor-save,
+  .column-editor-danger {
+    min-height: 40px;
+  }
+  .column-color-swatch {
+    width: 30px;
+    height: 30px;
+  }
+  .tdv2-file-action {
+    width: 40px;
+    height: 40px;
+  }
+}
