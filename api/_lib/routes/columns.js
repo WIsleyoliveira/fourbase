@@ -31,7 +31,16 @@ router.post('/api/columns', auth, asyncRoute(async (req, res) => {
     if (error.code === '23505') return res.status(409).json({ error: 'Já existe uma coluna com essa chave' })
     throw error
   }
-  res.status(201).json(data)
+  // a coluna nova entra antes de "Concluído", que fica sempre por último (posições renumeradas)
+  const workspaceId = workspaceOf(req)
+  await savePositions(workspaceId, await loadColumns(workspaceId))
+  const { data: saved } = await supabase
+    .from('fourbase_columns')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('key', data.key)
+    .maybeSingle()
+  res.status(201).json(saved || data)
 }))
 
 // Edita o nome e/ou a cor de uma coluna (só gestor: a coluna é compartilhada por todo o

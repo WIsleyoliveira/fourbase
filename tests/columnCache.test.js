@@ -13,10 +13,10 @@ test('chave da coluna: sem acento, minúscula, com sufixo único', () => {
   assert.equal(toColKey('???', 1000), `col-${(1000).toString(36)}`)
 })
 
-test('coluna nova vai ao final e usa a próxima cor da paleta', () => {
+test('coluna nova entra antes de "Concluído" e usa a próxima cor da paleta', () => {
   const col = buildColumn('  Revisão ', DEFAULT_COLUMNS, 5)
   assert.equal(col.label, 'Revisão')
-  assert.equal(col.position, 3)
+  assert.equal(col.position, 2, 'duas colunas abertas (A Fazer, Em Progresso): a nova é a terceira')
   assert.equal(col.color, EXTRA_COLORS[3 % EXTRA_COLORS.length])
   assert.equal(col.id, `col-${col.key}`)
 })

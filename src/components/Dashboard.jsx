@@ -5,6 +5,7 @@ import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus, IconCheckP
 import Avatar from './Avatar.jsx'
 import QuickNoteModal from './QuickNoteModal.jsx'
 import { DONUT_RADIUS, donutSegments, todayAgenda } from '../dashboardData.js'
+import { columnBuckets, countByBucket } from '../columnBuckets.js'
 import { localToday } from '../notificationText.js'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
@@ -47,16 +48,10 @@ const dueLabel = (due_date, due_date_end, due_time) => {
 
 const EMPTY = []
 
-const DONUT_LEGEND = [
-  { key: 'todo', label: 'A fazer' },
-  { key: 'doing', label: 'Em progresso' },
-  { key: 'done', label: 'Concluídas' },
-]
-
 // Rosca de progresso: proporção entre A fazer / Em progresso / Concluídas, com o
 // percentual concluído no centro. Sem tarefas, só o anel vazio.
-function ProgressDonut({ counts, total, progress }) {
-  const segments = donutSegments(counts)
+function ProgressDonut({ counts, colors, total, progress }) {
+  const segments = donutSegments(counts, ['done', 'doing', 'todo'], colors)
   return (
     <div className="donut">
       <svg viewBox="0 0 120 120" className="donut-svg" role="img" aria-label={`${progress}% das tarefas concluídas`}>
@@ -64,7 +59,8 @@ function ProgressDonut({ counts, total, progress }) {
         {segments.map((seg) => (
           <circle
             key={seg.key}
-            className={`donut-seg donut-seg-${seg.key}`}
+            className="donut-seg"
+            style={{ stroke: seg.color }}
             cx="60"
             cy="60"
             r={DONUT_RADIUS}
@@ -101,18 +97,20 @@ function DashboardView({
   const folders = useFolders()
   const folderCount = folders.data ? folders.data.length : folders.isError ? 0 : null
 
-  const counts = {
-    todo: tasks.filter((t) => t.column_key === 'todo').length,
-    doing: tasks.filter((t) => t.column_key === 'doing').length,
-    done: tasks.filter((t) => t.column_key === 'done').length,
-  }
+  // Os grupos seguem as colunas do quadro (nome, cor e posição que o gestor definiu)
+  const buckets = columnBuckets(columns)
+  const counts = countByBucket(tasks, buckets)
   const taskProgress = tasks.length ? Math.round((counts.done / tasks.length) * 100) : 0
 
+  const donutColors = { todo: buckets.todo.color, doing: buckets.doing?.color, done: buckets.done.color }
+  const legend = [
+    { key: 'todo', ...buckets.todo },
+    ...(buckets.doing ? [{ key: 'doing', ...buckets.doing }] : []),
+    { key: 'done', ...buckets.done },
+  ]
   const stats = [
-    { label: 'A fazer', value: counts.todo, tone: 'info' },
-    { label: 'Em progresso', value: counts.doing, tone: 'warn' },
-    { label: 'Concluídas', value: counts.done, tone: 'ok' },
-    { label: 'Total', value: tasks.length, tone: 'brand' },
+    ...legend.map((item) => ({ label: item.label, value: counts[item.key], color: item.color })),
+    { label: 'Total', value: tasks.length, color: 'var(--primary)' },
   ]
 
   // Tarefas do usuário atual (a API já filtra por assigned_to), não concluídas, com prazo —
@@ -167,7 +165,7 @@ function DashboardView({
     <div className="dashboard">
       <div className="stats-grid">
         {stats.map((s) => (
-          <div className={`stat-card tone-${s.tone}`} key={s.label}>
+          <div className="stat-card" style={{ '--stat': s.color }} key={s.label}>
             <span className="stat-value">{s.value}</span>
             <span className="stat-label">{s.label}</span>
           </div>
@@ -274,11 +272,11 @@ function DashboardView({
               </div>
             </div>
             <div className="donut-body">
-              <ProgressDonut counts={counts} total={tasks.length} progress={taskProgress} />
+              <ProgressDonut counts={counts} colors={donutColors} total={tasks.length} progress={taskProgress} />
               <ul className="donut-legend">
-                {DONUT_LEGEND.map((item) => (
+                {legend.map((item) => (
                   <li key={item.key}>
-                    <span className={`donut-dot donut-seg-${item.key}`} />
+                    <span className="donut-dot" style={{ background: item.color }} />
                     <span className="donut-legend-label">{item.label}</span>
                     <strong>{counts[item.key]}</strong>
                   </li>

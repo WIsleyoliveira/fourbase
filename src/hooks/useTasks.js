@@ -82,6 +82,8 @@ export function useTaskActions({ userId }) {
       restoreTaskLists(queryClient, snapshot)
       onError(err)
       queryClient.invalidateQueries({ queryKey: TASK_KEYS.all })
+      // o motivo pode ser um quadro desatualizado (coluna excluída/renomeada por outra pessoa)
+      queryClient.invalidateQueries({ queryKey: ['columns'] })
     }
   }
 

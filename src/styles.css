@@ -483,7 +483,7 @@ textarea:focus {
 }
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px;
 }
 .stat-card {
@@ -503,6 +503,7 @@ textarea:focus {
   position: absolute;
   inset: 0 auto 0 0;
   width: 5px;
+  background: var(--stat, var(--primary));
 }
 .stat-card.tone-info::before { background: var(--info); }
 .stat-card.tone-warn::before { background: var(--warn); }
@@ -9505,4 +9506,11 @@ img.kb-avatar {
     width: 40px;
     height: 40px;
   }
+}
+
+/* Foco visível (teclado) nos controles de coluna e de anexos */
+.column-edit-btn:focus-visible,
+.column-editor-move button:focus-visible,
+.tdv2-file-action:focus-visible {
+  box-shadow: var(--focus-ring);
 }

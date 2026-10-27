@@ -4,7 +4,7 @@ import { tagColor } from '../colors.js'
 import { useToast } from '../toast.jsx'
 import { TASK_KEYS, patchAllTaskLists, restoreTaskLists, snapshotTaskLists } from '../taskCache.js'
 import {
-  COLUMN_KEYS, applyColumnEdit, buildColumn, moveColumn, readCachedColumns, removeColumn, writeCachedColumns,
+  COLUMN_KEYS, applyColumnEdit, buildColumn, moveColumn, readCachedColumns, removeColumn, renumberColumns, writeCachedColumns,
 } from '../columnCache.js'
 
 // Clientes, etiquetas e colunas do workspace. Mesmo padrão de tasks e notas:
@@ -277,7 +277,8 @@ export function useColumnActions() {
     addColumn: async (label) => {
       const before = queryClient.getQueryData(key) ?? readCachedColumns(localStorage, userId)
       const column = buildColumn(label, before)
-      const next = [...before, column]
+      // entra antes de "Concluído" (as posições são renumeradas)
+      const next = renumberColumns([...before.filter((c) => c.key !== 'done'), column, ...before.filter((c) => c.key === 'done')])
       queryClient.setQueryData(key, next)
       writeCachedColumns(localStorage, userId, next)
       try {

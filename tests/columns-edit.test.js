@@ -171,3 +171,14 @@ test('tarefa nunca fica em coluna inexistente: criar cai na primeira coluna; mov
   assert.equal(ok.status, 200)
   assert.equal(ok.body.column_key, 'done')
 })
+
+test('criar coluna: entra antes de "Concluído", que continua por último com posições contíguas', async () => {
+  // o cliente pode mandar uma posição qualquer (até depois de "done"): o servidor corrige
+  const r = await call('gestorB', 'POST', '/api/columns', { label: 'Nova B', key: 'nova-b', position: 99 })
+  assert.equal(r.status, 201)
+  const cols = (await call('gestorB', 'GET', '/api/columns')).body
+  assert.equal(cols.at(-1).key, 'done')
+  assert.deepEqual(cols.map((c) => c.position), cols.map((_, i) => i))
+  assert.ok(cols.findIndex((c) => c.key === 'nova-b') < cols.findIndex((c) => c.key === 'done'))
+  assert.equal(r.body.position, cols.findIndex((c) => c.key === 'nova-b'))
+})

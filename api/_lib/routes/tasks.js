@@ -3,6 +3,7 @@ import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, workspaceOf } from '../auth.js'
 import { inWorkspace, validMemberIds, isUuid, sanitizeAttachments } from '../validation.js'
+import { loadBucketer } from '../columnBuckets.js'
 import { emitTaskNotifications } from '../notifications.js'
 import { canViewTask } from '../notificationRules.js'
 
@@ -64,15 +65,14 @@ router.get('/api/tasks/client-stats', auth, asyncRoute(async (req, res) => {
     .select('client_id, column_key, created_at, updated_at')
     .eq('workspace_id', workspaceOf(req))
   if (error) throw error
+  const bucket = await loadBucketer(workspaceOf(req))
 
   const map = {}
   for (const t of data) {
     if (!t.client_id) continue
     const s = map[t.client_id] || (map[t.client_id] = { total: 0, todo: 0, doing: 0, done: 0, lastActivity: null })
     s.total += 1
-    if (t.column_key === 'done') s.done += 1
-    else if (t.column_key === 'todo') s.todo += 1
-    else s.doing += 1
+    s[bucket(t.column_key)] += 1
     const stamp = t.updated_at || t.created_at
     if (stamp && (!s.lastActivity || stamp > s.lastActivity)) s.lastActivity = stamp
   }

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, gestorOnly, workspaceOf } from '../auth.js'
+import { loadBucketer } from '../columnBuckets.js'
 
 const router = Router()
 export default router
@@ -9,6 +10,7 @@ export default router
 // ---------- Equipe (somente gestor, somente o próprio workspace) ----------
 router.get('/api/team/overview', auth, gestorOnly, asyncRoute(async (req, res) => {
   const workspaceId = workspaceOf(req)
+  const bucket = await loadBucketer(workspaceId)
   const [users, tasks, todos, notes] = await Promise.all([
     supabase.from('fourbase_users').select('id, name, email, role, avatar_url, color').eq('workspace_id', workspaceId).order('created_at'),
     supabase.from('fourbase_tasks').select('user_id, column_key').eq('workspace_id', workspaceId),
@@ -24,9 +26,9 @@ router.get('/api/team/overview', auth, gestorOnly, asyncRoute(async (req, res) =
     return {
       ...u,
       tasks: {
-        todo: uTasks.filter((t) => t.column_key === 'todo').length,
-        doing: uTasks.filter((t) => t.column_key === 'doing').length,
-        done: uTasks.filter((t) => t.column_key === 'done').length,
+        todo: uTasks.filter((t) => bucket(t.column_key) === 'todo').length,
+        doing: uTasks.filter((t) => bucket(t.column_key) === 'doing').length,
+        done: uTasks.filter((t) => bucket(t.column_key) === 'done').length,
         total: uTasks.length,
       },
       todos: { done: uTodos.filter((t) => t.done).length, total: uTodos.length },

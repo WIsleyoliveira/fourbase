@@ -28,14 +28,15 @@ export const toColKey = (label, now = Date.now()) => {
   return `${slug}-${now.toString(36)}`
 }
 
-// Coluna nova ao final da lista, com a próxima cor da paleta.
+// Coluna nova no fim das colunas abertas (logo antes de "Concluído", que fica sempre por último),
+// com a próxima cor da paleta.
 export function buildColumn(label, columns, now = Date.now()) {
   const key = toColKey(label, now)
   return {
     id: `col-${key}`,
     key,
     label: label.trim(),
-    position: columns.length,
+    position: columns.filter((c) => !LOCKED_COLUMN_KEYS.includes(c.key)).length,
     color: EXTRA_COLORS[columns.length % EXTRA_COLORS.length],
   }
 }
