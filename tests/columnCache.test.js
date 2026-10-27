@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  DEFAULT_COLUMNS, EXTRA_COLORS, toColKey, buildColumn, readCachedColumns, writeCachedColumns, isEditableColumn, validateColumnEdit, applyColumnEdit } from '../src/columnCache.js'
+  DEFAULT_COLUMNS, EXTRA_COLORS, toColKey, buildColumn, readCachedColumns, writeCachedColumns, isEditableColumn, validateColumnEdit, applyColumnEdit, canDeleteColumn, deletionTargets, removeColumn, moveColumn, canMoveColumn, renumberColumns, reopenColumnKey } from '../src/columnCache.js'
 
 const fakeStorage = (initial = {}) => {
   const data = { ...initial }
@@ -60,4 +60,52 @@ test('aplicar edição troca só a coluna certa e não altera a lista original',
   assert.deepEqual(next[0], { key: 'todo', label: 'Novo', color: '#333333' })
   assert.deepEqual(next[1], list[1])
   assert.equal(list[0].label, 'A')
+})
+
+const board = () => [
+  { key: 'todo', label: 'A Fazer', position: 0 },
+  { key: 'doing', label: 'Em Progresso', position: 1 },
+  { key: 'rev', label: 'Revisão', position: 2 },
+  { key: 'done', label: 'Concluído', position: 3 },
+]
+
+test('excluir: nunca "Concluído" e sempre sobra uma coluna além dela', () => {
+  assert.equal(canDeleteColumn(board(), 'rev'), true)
+  assert.equal(canDeleteColumn(board(), 'todo'), true)
+  assert.equal(canDeleteColumn(board(), 'done'), false)
+  assert.equal(canDeleteColumn(board(), 'nao-existe'), false)
+  const sozinha = [{ key: 'todo', position: 0 }, { key: 'done', position: 1 }]
+  assert.equal(canDeleteColumn(sozinha, 'todo'), false)
+})
+
+test('destinos das tarefas: as outras colunas, sem "Concluído"', () => {
+  assert.deepEqual(deletionTargets(board(), 'doing').map((c) => c.key), ['todo', 'rev'])
+})
+
+test('remover coluna renumera as posições e mantém "Concluído" por último', () => {
+  const next = removeColumn(board(), 'doing')
+  assert.deepEqual(next.map((c) => [c.key, c.position]), [['todo', 0], ['rev', 1], ['done', 2]])
+})
+
+test('mover coluna: troca com a vizinha, respeita as pontas e não passa de "Concluído"', () => {
+  const right = moveColumn(board(), 'todo', 1)
+  assert.deepEqual(right.map((c) => c.key), ['doing', 'todo', 'rev', 'done'])
+  assert.deepEqual(right.map((c) => c.position), [0, 1, 2, 3])
+  const left = moveColumn(board(), 'rev', -1)
+  assert.deepEqual(left.map((c) => c.key), ['todo', 'rev', 'doing', 'done'])
+  // pontas: devolve a mesma lista
+  const b = board()
+  assert.equal(moveColumn(b, 'todo', -1), b)
+  assert.equal(moveColumn(b, 'rev', 1), b, 'não pode passar "Concluído"')
+  assert.equal(moveColumn(b, 'done', -1), b, '"Concluído" não se move')
+  assert.equal(canMoveColumn(b, 'rev', -1), true)
+  assert.equal(canMoveColumn(b, 'rev', 1), false)
+  assert.equal(b[0].key, 'todo', 'a lista original não muda')
+})
+
+test('reabrir tarefa concluída: vai para a primeira coluna do quadro', () => {
+  assert.equal(reopenColumnKey(board()), 'todo')
+  assert.equal(reopenColumnKey(moveColumn(board(), 'rev', -2)), 'rev')
+  assert.equal(reopenColumnKey([{ key: 'done' }]), 'todo')
+  assert.deepEqual(renumberColumns([{ key: 'done' }, { key: 'a' }]).map((c) => c.key), ['a', 'done'])
 })

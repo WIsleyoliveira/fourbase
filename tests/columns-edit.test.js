@@ -98,3 +98,58 @@ test('validações: nome vazio/longo, cor inválida e corpo vazio', async () => 
   assert.equal((await call('gestorA', 'PATCH', '/api/columns/doing', {})).status, 400)
   assert.equal((await colOf('gestorA', 'doing')).label, 'Em Progresso')
 })
+
+// ── Reordenar e excluir ─────────────────────────────────────────────────────
+const keysOf = async (who) => (await call(who, 'GET', '/api/columns')).body.map((c) => c.key)
+
+test('reordenar colunas: só gestor, lista completa sem "Concluído", que fica sempre por último', async () => {
+  assert.equal((await call('funcA', 'PUT', '/api/columns/order', { keys: ['extra', 'todo', 'doing'] })).status, 403)
+  assert.equal((await call('gestorA', 'PUT', '/api/columns/order', { keys: ['extra', 'todo'] })).status, 400, 'faltou uma coluna')
+  assert.equal((await call('gestorA', 'PUT', '/api/columns/order', { keys: ['extra', 'todo', 'doing', 'done'] })).status, 400, 'done não entra')
+  assert.equal((await call('gestorA', 'PUT', '/api/columns/order', { keys: ['extra', 'extra', 'doing'] })).status, 400, 'repetida')
+  assert.deepEqual(await keysOf('gestorA'), ['todo', 'doing', 'done', 'extra'].sort((a, b) => ['todo', 'doing', 'done', 'extra'].indexOf(a) - ['todo', 'doing', 'done', 'extra'].indexOf(b)))
+
+  const r = await call('gestorA', 'PUT', '/api/columns/order', { keys: ['extra', 'todo', 'doing'] })
+  assert.equal(r.status, 200)
+  assert.deepEqual(r.body.map((c) => c.key), ['extra', 'todo', 'doing', 'done'])
+  assert.deepEqual(r.body.map((c) => c.position), [0, 1, 2, 3])
+  assert.deepEqual(await keysOf('gestorA'), ['extra', 'todo', 'doing', 'done'])
+  assert.deepEqual(await keysOf('gestorB'), ['todo', 'doing', 'done', 'extra'], 'o workspace B não muda')
+})
+
+test('tarefa criada sem coluna nasce na primeira coluna do quadro (não em "todo" fixo)', async () => {
+  const r = await call('gestorA', 'POST', '/api/tasks', { title: 'Sem coluna' })
+  assert.equal(r.status, 201)
+  assert.equal(r.body.column_key, 'extra')
+})
+
+test('excluir coluna: tarefas vão para a coluna escolhida; sempre sobra uma além de "Concluído"', async () => {
+  assert.equal((await call('funcA', 'DELETE', '/api/columns/extra?moveTo=todo')).status, 403)
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/done')).status, 400)
+
+  // há uma tarefa em "extra": precisa dizer para onde ela vai
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/extra')).status, 400)
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/extra?moveTo=done')).status, 400, 'não vale mandar para Concluído')
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/extra?moveTo=nao-existe')).status, 400)
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/extra?moveTo=extra')).status, 400)
+  assert.ok((await keysOf('gestorA')).includes('extra'), 'nada foi excluído nas tentativas inválidas')
+
+  const ok = await call('gestorA', 'DELETE', '/api/columns/extra?moveTo=todo')
+  assert.equal(ok.status, 200)
+  assert.equal(ok.body.moved, 1)
+  const tasks = (await call('gestorA', 'GET', '/api/tasks')).body
+  assert.equal(tasks.find((t) => t.title === 'Sem coluna').column_key, 'todo')
+
+  // posições seguem contíguas e "Concluído" por último
+  const cols = (await call('gestorA', 'GET', '/api/columns')).body
+  assert.deepEqual(cols.map((c) => [c.key, c.position]), [['todo', 0], ['doing', 1], ['done', 2]])
+
+  // coluna vazia sai sem precisar de destino; a última além de Concluído não sai
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/doing')).status, 200)
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/todo?moveTo=doing')).status, 400)
+  assert.equal((await call('gestorA', 'DELETE', '/api/columns/todo')).status, 400)
+  assert.deepEqual(await keysOf('gestorA'), ['todo', 'done'])
+
+  // outro workspace intacto
+  assert.deepEqual(await keysOf('gestorB'), ['todo', 'doing', 'done', 'extra'])
+})

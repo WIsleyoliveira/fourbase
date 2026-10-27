@@ -103,11 +103,22 @@ router.get('/api/tasks/:id', auth, asyncRoute(async (req, res) => {
   res.json(data)
 }))
 
+// Coluna em que nasce uma tarefa sem coluna informada: a primeira do quadro (com colunas
+// editáveis, "todo" pode ter sido renomeada, movida ou excluída), sem contar "Concluído".
+async function firstColumnKey(workspaceId) {
+  const { data } = await supabase
+    .from('fourbase_columns')
+    .select('key')
+    .eq('workspace_id', workspaceId)
+    .order('position', { ascending: true })
+  return data?.find((c) => c.key !== 'done')?.key || 'todo'
+}
+
 router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
   const {
     title, priority = 'Média', due_date = null, due_date_end = null, due_time = null, due_time_end = null,
     assigned_to, description = '',
-    client_id = null, tags = [], column_key = 'todo', attachments = [], mentioned_users = [],
+    client_id = null, tags = [], column_key, attachments = [], mentioned_users = [],
   } = req.body
   if (!title || !title.trim()) return res.status(400).json({ error: 'Título obrigatório' })
   // due_date_end só faz sentido junto de due_date, e nunca antes dele —
@@ -147,7 +158,7 @@ router.post('/api/tasks', auth, asyncRoute(async (req, res) => {
       due_date_end: due_date ? (due_date_end || null) : null,
       due_time: due_date ? (due_time || null) : null,
       due_time_end: due_date && due_time ? (due_time_end || null) : null,
-      column_key: column_key || 'todo',
+      column_key: column_key || await firstColumnKey(workspaceId),
       user_id: req.user.id,
       assigned_to: owner,
       client_id: client_id || null,

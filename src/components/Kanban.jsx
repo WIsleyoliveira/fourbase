@@ -8,6 +8,7 @@ import {
   IconCalendar,
   IconChevronDown,
   IconPencil,
+  IconTrash,
 } from '../icons.jsx'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import TagPicker from './TagPicker.jsx'
@@ -22,7 +23,9 @@ import {
   buildTaskFields, countAdvanced, emptyDraft, setDraftField, validateDraft,
 } from '../newTaskForm.js'
 import { useToast } from '../toast.jsx'
-import { COLUMN_COLORS, MAX_COLUMN_LABEL, isEditableColumn, validateColumnEdit } from '../columnCache.js'
+import {
+  COLUMN_COLORS, MAX_COLUMN_LABEL, canDeleteColumn, canMoveColumn, deletionTargets, isEditableColumn, validateColumnEdit,
+} from '../columnCache.js'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import {
   useClients, useColumnActions, useColumns, useMembers, useTagActions, useTags,
@@ -158,7 +161,9 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   const columns = useColumns().data
   const tags = useTags().data ?? EMPTY
   const { createTag: onCreateTag } = useTagActions()
-  const { addColumn: onAddColumn, updateColumn: onUpdateColumn } = useColumnActions()
+  const {
+    addColumn: onAddColumn, updateColumn: onUpdateColumn, moveColumn: onMoveColumn, deleteColumn: onDeleteColumn,
+  } = useColumnActions()
   const { moveTask: onMove, updateTask: onUpdate, deleteTask: onDelete } =
     useTaskActions({ userId: currentUser?.id })
   const { showToast } = useToast()
@@ -171,12 +176,25 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
   // Edição de uma coluna (nome e cor): só uma por vez; "Concluído" não é editável
   const [editingCol, setEditingCol] = useState(null) // { key, label, color }
   const [colError, setColError] = useState('')
-  const startEditCol = (col) => { setColError(''); setEditingCol({ key: col.key, label: col.label, color: col.color }) }
+  const [deletingCol, setDeletingCol] = useState(null) // { key, moveTo } — confirmação de exclusão
+  const startEditCol = (col) => { setColError(''); setDeletingCol(null); setEditingCol({ key: col.key, label: col.label, color: col.color }) }
+  const closeColEditor = () => { setEditingCol(null); setDeletingCol(null) }
+  const startDeleteCol = (col) => {
+    const targets = deletionTargets(columns, col.key)
+    // sugere a coluna vizinha (a anterior, ou a seguinte se for a primeira)
+    const idx = columns.findIndex((c) => c.key === col.key)
+    const neighbour = targets.find((c) => c.key === columns[idx - 1]?.key) || targets[0]
+    setDeletingCol({ key: col.key, moveTo: neighbour?.key || '' })
+  }
+  const confirmDeleteCol = async () => {
+    const ok = await onDeleteColumn(deletingCol.key, deletingCol.moveTo)
+    if (ok) closeColEditor()
+  }
   const saveCol = async () => {
     const problem = validateColumnEdit(editingCol)
     if (problem) { setColError(problem); return }
     const ok = await onUpdateColumn(editingCol.key, { label: editingCol.label.trim(), color: editingCol.color })
-    if (ok) setEditingCol(null)
+    if (ok) closeColEditor()
   }
   // Id provisório: as imagens anexadas antes de a tarefa existir vão para tasks/<id>
   const newId = () => (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`)
@@ -418,7 +436,7 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
                 <form
                   className="column-editor"
                   onSubmit={(e) => { e.preventDefault(); saveCol() }}
-                  onKeyDown={(e) => { if (e.key === 'Escape') setEditingCol(null) }}
+                  onKeyDown={(e) => { if (e.key === 'Escape') closeColEditor() }}
                 >
                   <input
                     className="column-editor-input"
@@ -452,9 +470,59 @@ export default function Kanban({ tasks, clients = [], currentUser, onAdd }) {
                   </div>
                   {colError && <p className="column-editor-error" role="alert">{colError}</p>}
                   <div className="column-editor-actions">
-                    <button type="button" className="column-editor-cancel" onClick={() => setEditingCol(null)}>Cancelar</button>
+                    <button type="button" className="column-editor-cancel" onClick={closeColEditor}>Cancelar</button>
                     <button type="submit" className="column-editor-save">Salvar</button>
                   </div>
+                  <div className="column-editor-extra">
+                    <span className="column-editor-move" role="group" aria-label="Mover a coluna">
+                      <button
+                        type="button"
+                        title="Mover para a esquerda"
+                        aria-label="Mover a coluna para a esquerda"
+                        disabled={!canMoveColumn(columns, col.key, -1)}
+                        onClick={() => onMoveColumn(col.key, -1)}
+                      >
+                        <IconArrowLeft size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        title="Mover para a direita"
+                        aria-label="Mover a coluna para a direita"
+                        disabled={!canMoveColumn(columns, col.key, 1)}
+                        onClick={() => onMoveColumn(col.key, 1)}
+                      >
+                        <IconArrowRight size={13} />
+                      </button>
+                    </span>
+                    {canDeleteColumn(columns, col.key) && (
+                      <button type="button" className="column-editor-delete" onClick={() => startDeleteCol(col)}>
+                        <IconTrash size={13} /> Excluir coluna
+                      </button>
+                    )}
+                  </div>
+                  {deletingCol?.key === col.key && (
+                    <div className="column-delete-confirm" role="alertdialog" aria-label="Confirmar exclusão da coluna">
+                      <p>
+                        Excluir a coluna <strong>“{col.label}”</strong>?
+                        {colTotal > 0
+                          ? ` Suas ${colTotal} tarefa${colTotal === 1 ? '' : 's'} nela (e as da equipe, se houver) serão movidas para:`
+                          : ' As tarefas da equipe que estiverem nela (se houver) serão movidas para:'}
+                      </p>
+                      <select
+                        value={deletingCol.moveTo}
+                        aria-label="Mover as tarefas para"
+                        onChange={(e) => setDeletingCol({ ...deletingCol, moveTo: e.target.value })}
+                      >
+                        {deletionTargets(columns, col.key).map((c) => (
+                          <option key={c.key} value={c.key}>{c.label}</option>
+                        ))}
+                      </select>
+                      <div className="column-editor-actions">
+                        <button type="button" className="column-editor-cancel" onClick={() => setDeletingCol(null)}>Voltar</button>
+                        <button type="button" className="column-editor-danger" onClick={confirmDeleteCol}>Excluir de vez</button>
+                      </div>
+                    </div>
+                  )}
                 </form>
               ) : (
                 <h4>
