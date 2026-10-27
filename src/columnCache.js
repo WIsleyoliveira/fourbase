@@ -54,3 +54,27 @@ export function writeCachedColumns(storage, userId, columns) {
   if (!userId) return
   try { storage.setItem(lsKey(userId), JSON.stringify(columns)) } catch { /* storage cheio/bloqueado */ }
 }
+
+// ── Edição de colunas ──────────────────────────────────────────────────────
+// "Concluído" é fixa: dela depende o que o app entende por tarefa concluída.
+export const LOCKED_COLUMN_KEYS = ['done']
+export const isEditableColumn = (column) => !LOCKED_COLUMN_KEYS.includes(column.key)
+
+export const MAX_COLUMN_LABEL = 40
+
+// Cores oferecidas ao editar (a escolha livre fica a cargo do seletor nativo).
+export const COLUMN_COLORS = ['#9ca3af', '#14b8c4', ...EXTRA_COLORS]
+
+// Mensagem de erro (em português) ou null se a edição é válida.
+export function validateColumnEdit({ label, color }) {
+  if (!String(label ?? '').trim()) return 'Dê um nome à coluna.'
+  if (label.trim().length > MAX_COLUMN_LABEL) return `O nome deve ter até ${MAX_COLUMN_LABEL} caracteres.`
+  if (!/^#[0-9a-fA-F]{6}$/.test(color || '')) return 'Escolha uma cor válida.'
+  return null
+}
+
+// Nova lista com o nome/cor da coluna trocados (a original não é alterada).
+export const applyColumnEdit = (columns, key, { label, color }) =>
+  columns.map((c) => (c.key === key
+    ? { ...c, ...(label !== undefined ? { label: label.trim() } : {}), ...(color ? { color } : {}) }
+    : c))

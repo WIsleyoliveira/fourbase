@@ -4,7 +4,7 @@ import { tagColor } from '../colors.js'
 import { useToast } from '../toast.jsx'
 import { TASK_KEYS, patchAllTaskLists, restoreTaskLists, snapshotTaskLists } from '../taskCache.js'
 import {
-  COLUMN_KEYS, buildColumn, readCachedColumns, writeCachedColumns,
+  COLUMN_KEYS, applyColumnEdit, buildColumn, readCachedColumns, writeCachedColumns,
 } from '../columnCache.js'
 
 // Clientes, etiquetas e colunas do workspace. Mesmo padrão de tasks e notas:
@@ -200,11 +200,30 @@ export const useColumns = () => {
 
 export function useColumnActions() {
   const queryClient = useQueryClient()
-  const { handleError } = useToast()
+  const { handleError, showToast } = useToast()
   const userId = sessionUserId()
   const key = COLUMN_KEYS.mine(userId)
 
   return {
+    // Troca nome/cor de uma coluna: muda na hora e volta ao que era se a API recusar.
+    // Devolve true/false para quem chamou saber se pode fechar o editor.
+    updateColumn: async (columnKey, changes) => {
+      const before = queryClient.getQueryData(key) ?? readCachedColumns(localStorage, userId)
+      const next = applyColumnEdit(before, columnKey, changes)
+      queryClient.setQueryData(key, next)
+      writeCachedColumns(localStorage, userId, next)
+      try {
+        await api.updateColumn(columnKey, changes)
+        showToast('Coluna atualizada.')
+        return true
+      } catch (err) {
+        queryClient.setQueryData(key, before)
+        writeCachedColumns(localStorage, userId, before)
+        handleError(err)
+        return false
+      }
+    },
+
     // A coluna aparece na hora; se a API recusar, volta ao que era e avisa
     // (antes ficava uma coluna "fantasma" que nunca foi salva).
     addColumn: async (label) => {

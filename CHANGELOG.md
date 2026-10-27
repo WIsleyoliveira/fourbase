@@ -7,6 +7,7 @@ versão, atualize os dois e a `version` do `package.json`.
 ## Próxima versão (em desenvolvimento)
 
 - **Anexos de tarefa aceitam qualquer tipo de arquivo** (PDF, planilhas, documentos, zip, áudio…), além de imagens: imagens aparecem como miniaturas e os demais arquivos numa lista com ícone, nome, baixar e excluir. Limite de 25 MB por arquivo; executáveis, scripts e páginas (.exe, .js, .html, .svg…) são recusados por segurança.
+- **Editar colunas do Kanban** (gestor): lápis no cabeçalho de cada coluna para mudar o nome e a cor. A coluna "Concluído" é fixa e não pode ser editada.
 - Tirado o "ou escreva com IA" do campo de descrição da tarefa.
 
 ## 1.1.0 — 2026-10-07

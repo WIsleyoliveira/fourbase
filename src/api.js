@@ -146,6 +146,8 @@ export const api = {
   getColumns: () => request('/api/columns'),
   createColumn: (label, key, position, color) =>
     request('/api/columns', { method: 'POST', body: JSON.stringify({ label, key, position, color }) }),
+  updateColumn: (key, changes) =>
+    request(`/api/columns/${key}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   deleteColumn: (key) => request(`/api/columns/${key}`, { method: 'DELETE' }),
 
   // equipe (gestor)
