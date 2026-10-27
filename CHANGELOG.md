@@ -4,6 +4,11 @@ Histórico de versões do fourbase. O texto que os usuários veem ao entrar na
 plataforma ("O que há de novo") fica em `src/releaseNotes.js` — ao publicar uma
 versão, atualize os dois e a `version` do `package.json`.
 
+## Próxima versão (em desenvolvimento)
+
+- **Anexos de tarefa aceitam qualquer tipo de arquivo** (PDF, planilhas, documentos, zip, áudio…), além de imagens: imagens aparecem como miniaturas e os demais arquivos numa lista com ícone, nome, baixar e excluir. Limite de 25 MB por arquivo; executáveis, scripts e páginas (.exe, .js, .html, .svg…) são recusados por segurança.
+- Tirado o "ou escreva com IA" do campo de descrição da tarefa.
+
 ## 1.1.0 — 2026-10-07
 
 ### Novo
