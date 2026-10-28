@@ -4,6 +4,10 @@ Histórico de versões do fourbase. O texto que os usuários veem ao entrar na
 plataforma ("O que há de novo") fica em `src/releaseNotes.js` — ao publicar uma
 versão, atualize os dois e a `version` do `package.json`.
 
+## Próxima versão (em desenvolvimento)
+
+- **Assistente (ChatGPT), etapa 1** (gestor): token pessoal em Meu Perfil e rotas `/api/assistant/*` para o ChatGPT ver a agenda, listar clientes e criar tarefas em lote (prévia, idempotência, desfazer). Exige a migration `20261101000000_assistant_tokens.sql`. Ver `docs/assistente-chatgpt.md`.
+
 ## 1.2.0 — 2026-10-26
 
 - **Anexos de tarefa aceitam qualquer tipo de arquivo** (PDF, planilhas, documentos, zip, áudio…), além de imagens: imagens aparecem como miniaturas e os demais arquivos numa lista com ícone, nome, baixar e excluir. Limite de 25 MB por arquivo; executáveis, scripts e páginas (.exe, .js, .html, .svg…) são recusados por segurança.

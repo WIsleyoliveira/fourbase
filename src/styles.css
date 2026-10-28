@@ -9514,3 +9514,16 @@ img.kb-avatar {
 .tdv2-file-action:focus-visible {
   box-shadow: var(--focus-ring);
 }
+
+/* Meu Perfil → Assistente (ChatGPT) */
+.assistant-token-fresh { display: grid; gap: 8px; padding: 12px; margin: 12px 0; border: 1px solid var(--primary); border-radius: 10px; background: var(--surface-2); }
+.assistant-token-fresh input, .assistant-token-form input { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; font: inherit; }
+.assistant-token-fresh input { font-family: ui-monospace, monospace; font-size: 12px; }
+.assistant-token-actions, .assistant-token-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.assistant-token-form { margin: 12px 0; }
+.assistant-token-form input { flex: 1 1 200px; }
+.assistant-token-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.assistant-token-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.assistant-token-list li.is-revoked { opacity: .6; }
+.assistant-token-list small { display: block; color: var(--muted-strong); margin-top: 2px; }
+.assistant-token-list code { font-size: 12px; }

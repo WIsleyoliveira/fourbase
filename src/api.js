@@ -55,6 +55,9 @@ export const api = {
 
   // perfil do usuário logado
   getProfile: () => request('/api/auth/me'),
+  listAssistantTokens: () => request('/api/assistant/tokens'),
+  createAssistantToken: (name) => request('/api/assistant/tokens', { method: 'POST', body: JSON.stringify({ name }) }),
+  revokeAssistantToken: (id) => request('/api/assistant/tokens/' + id, { method: 'DELETE' }),
   updateProfile: (updates) =>
     request('/api/profile', { method: 'PATCH', body: JSON.stringify(updates) }),
   changePassword: (current_password, new_password) =>

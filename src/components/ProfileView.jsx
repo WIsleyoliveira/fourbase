@@ -7,6 +7,7 @@ import { api } from '../api.js'
 import { supabase, AVATARS_BUCKET, storagePathFromUrl } from '../supabase.js'
 import { assigneeColor } from '../colors.js'
 import ColorPickerField from './ColorPickerField.jsx'
+import AssistantTokensPanel from './AssistantTokensPanel.jsx'
 
 const AVATAR_EXTS = ['png', 'jpg', 'jpeg', 'webp']
 const AVATAR_LIMIT_MB = 5
@@ -468,6 +469,8 @@ export default function ProfileView({ currentUser, onProfileSaved, onToast, onEr
           </button>
         </div>
       </div>
+
+      {isGestor && <AssistantTokensPanel />}
 
       {/* ══ Card 4: Informações do sistema (somente leitura) ═══════════════ */}
       <div className="panel profile-card">

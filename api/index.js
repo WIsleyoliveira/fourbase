@@ -16,6 +16,7 @@ import teamRoutes from './_lib/routes/team.js'
 import clientsRoutes from './_lib/routes/clients.js'
 import reportsRoutes from './_lib/routes/reports.js'
 import notificationsRoutes from './_lib/routes/notifications.js'
+import assistantRoutes from './_lib/routes/assistant.js'
 
 // Ponto de entrada da API. A Vercel publica o default export deste arquivo como
 // Serverless Function (vercel.json reescreve /api/* para cá); localmente quem
@@ -60,6 +61,7 @@ app.use(teamRoutes)
 app.use(clientsRoutes)
 app.use(reportsRoutes)
 app.use(notificationsRoutes)
+app.use(assistantRoutes)
 
 export default app
 

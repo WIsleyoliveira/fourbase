@@ -62,6 +62,9 @@ One list per user under `NOTE_KEYS.mine(userId)` (`src/noteCache.js`, pure helpe
 ### Client-scoped workspace pattern
 Opening a client in `ClientsView` navigates to `/clientes/:id`; `App.jsx` then renders `ClientWorkspace` instead of the client list — a Kanban + Documentos tabs UI scoped to that one client, via the `client_id` foreign key present on both `fourbase_tasks` and `fourbase_folders`. Any new client-scoped feature should hang off `ClientWorkspace` rather than introducing a new top-level view (its URL is `/clientes/:id`, sub-tab in `?aba=`).
 
+### Assistente (ChatGPT)
+Token pessoal (`fbk_…`, só o hash SHA-256 em `fourbase_api_tokens`) gerado por gestor em Meu Perfil (`AssistantTokensPanel.jsx`); rotas `/api/assistant/*` em `routes/assistant.js`, lógica pura em `assistant.js`. O token só vale nessas rotas (middleware próprio `assistantAuth`, o `auth` JWT não muda) e o JWT não abre as de dados. Só as próprias tarefas do dono; criar em lote (≤30, `batch_id` idempotente via `fourbase_assistant_batches`, etiqueta ChatGPT, sem notificações), prévia, desfazer 48 h; não há editar/apagar. `resolveColumnKey` agora vive em `api/_lib/columnKeys.js`. Tabelas novas exigem a migration manual (RLS ligado, sem policies). Detalhes e passo a passo do GPT: `docs/assistente-chatgpt.md`. Testes: `tests/assistant-api.test.js`.
+
 ### Notifications (bell + e-mail)
 In-app bell and immediate e-mail for four kinds: `mention` and `assignment` (bell + e-mail), `due_soon` and `overdue` (bell only). Table `fourbase_notifications` (+ `users.notify_email boolean default true`) lives in `supabase/migrations/20261003000000_notifications.sql`: RLS on, no policies, unique partial index `(user_id, dedupe_key)`; the local shim registers it in `WORKSPACE_SCOPED`/`TIMESTAMPED`/`UNIQUE_COLUMNS` (and gained `.is()` and `.limit()`). A user without `notify_email` (pre-migration) counts as on.
 
