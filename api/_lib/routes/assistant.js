@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import rateLimit from 'express-rate-limit'
 import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, gestorOnly, workspaceOf } from '../auth.js'
@@ -7,7 +6,7 @@ import { isUuid } from '../validation.js'
 import { resolveColumnKey } from '../columnKeys.js'
 import {
   ASSISTANT_TAG, MAX_ACTIVE_TOKENS, MAX_AGENDA_DAYS, MAX_AGENDA_ITEMS, MAX_BATCH, SCOPES, UNDO_WINDOW_MS,
-  buildOpenApi, daysBetween, findConflicts, findDuplicates, generateToken, hashToken, isDate, isTokenShape,
+  buildOpenApi, daysBetween, findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate, isTokenShape,
   isValidBatchId, normalizeTaskInput, tokenPrefixOf,
 } from '../assistant.js'
 
@@ -73,11 +72,32 @@ router.delete('/api/assistant/tokens/:id', auth, gestorOnly, asyncRoute(async (r
 }))
 
 // ---------- Autenticação por token ----------
-const failLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, limit: 30, skipSuccessfulRequests: true,
-  standardHeaders: 'draft-8', legacyHeaders: false,
-  message: { error: 'Muitas tentativas. Aguarde alguns minutos.' },
-})
+// Contra força bruta de tokens: conta só tokens inválidos (401), por IP. Um IP que passou do limite
+// recebe 429 nas tentativas inválidas, mas um token VÁLIDO sempre passa — as chamadas do ChatGPT saem
+// de IPs da OpenAI compartilhados, e alguém chutando tokens por lá não pode bloquear o dono. Erros de
+// validação (400) também não contam: o ChatGPT erra e corrige várias vezes numa conversa.
+// (Em memória: aproximado na Vercel, onde cada instância tem o seu.)
+const FAIL_WINDOW_MS = 15 * 60 * 1000
+const FAIL_LIMIT = 30
+const failures = new Map() // ip -> { start, count }
+const failureCount = (ip) => {
+  const f = failures.get(ip)
+  return f && Date.now() - f.start < FAIL_WINDOW_MS ? f.count : 0
+}
+function recordFailure(ip) {
+  const now = Date.now()
+  if (failures.size > 10000) for (const [k, v] of failures) if (now - v.start >= FAIL_WINDOW_MS) failures.delete(k)
+  const f = failures.get(ip)
+  if (!f || now - f.start >= FAIL_WINDOW_MS) failures.set(ip, { start: now, count: 1 })
+  else f.count += 1
+}
+const deny = (req, res, status, error) => {
+  if (status === 401) {
+    if (failureCount(req.ip) >= FAIL_LIMIT) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos.' })
+    recordFailure(req.ip)
+  }
+  return res.status(status).json({ error })
+}
 
 const usage = new Map() // tokenId -> { windowStart, count } (em memória; aproximado na Vercel)
 const USAGE_LIMIT = 120
@@ -95,16 +115,16 @@ const assistantAuth = (scope) => (req, res, next) => authenticate(scope, req, re
 })
 const authenticate = async (scope, req, res, next) => {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  if (!isTokenShape(token)) return res.status(401).json({ error: 'Token inválido' })
+  if (!isTokenShape(token)) return deny(req, res, 401, 'Token inválido')
   const { data: row, error } = await supabase
     .from('fourbase_api_tokens').select('*').eq('token_hash', hashToken(token)).maybeSingle()
   if (error) throw error
   const expired = row?.expires_at && Date.parse(row.expires_at) <= Date.now()
-  if (!row || row.revoked_at || expired) return res.status(401).json({ error: 'Token inválido ou revogado' })
-  if (!Array.isArray(row.scopes) || !row.scopes.includes(scope)) return res.status(403).json({ error: 'Token sem permissão para isto' })
+  if (!row || row.revoked_at || expired) return deny(req, res, 401, 'Token inválido ou revogado')
+  if (!Array.isArray(row.scopes) || !row.scopes.includes(scope)) return deny(req, res, 403, 'Token sem permissão para isto')
   const { data: user } = await supabase
     .from('fourbase_users').select('*').eq('id', row.user_id).eq('workspace_id', row.workspace_id).maybeSingle()
-  if (!user || user.status === 'inactive') return res.status(401).json({ error: 'Token inválido ou revogado' })
+  if (!user || user.status === 'inactive') return deny(req, res, 401, 'Token inválido ou revogado')
   if (overUsage(row.id)) return res.status(429).json({ error: 'Muitas chamadas. Aguarde um minuto.' })
   req.user = { id: user.id, name: user.name, role: user.role, workspace_id: user.workspace_id }
   req.apiToken = row
@@ -112,8 +132,8 @@ const authenticate = async (scope, req, res, next) => {
   supabase.from('fourbase_api_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', row.id).then(() => {}, () => {})
   next()
 }
-const readAuth = [failLimiter, assistantAuth('agenda:read')]
-const writeAuth = [failLimiter, assistantAuth('agenda:write')]
+const readAuth = assistantAuth('agenda:read')
+const writeAuth = assistantAuth('agenda:write')
 
 // ---------- Contrato (público: não contém dado nenhum) ----------
 router.get('/api/assistant/openapi.json', (req, res) => {
@@ -124,7 +144,7 @@ router.get('/api/assistant/openapi.json', (req, res) => {
 // ---------- Leitura ----------
 const taskView = (t, labels = {}) => ({
   id: t.id, title: t.title, description: t.description || '', priority: t.priority,
-  due_date: t.due_date, due_date_end: t.due_date_end, due_time: t.due_time, due_time_end: t.due_time_end,
+  due_date: t.due_date, due_date_end: t.due_date_end, due_time: hhmm(t.due_time), due_time_end: hhmm(t.due_time_end),
   status: labels[t.column_key] || t.column_key, client_id: t.client_id, tags: t.tags || [],
 })
 
@@ -136,14 +156,14 @@ async function myTasks(req) {
   return data || []
 }
 
-router.get('/api/assistant/clients', ...readAuth, asyncRoute(async (req, res) => {
+router.get('/api/assistant/clients', readAuth, asyncRoute(async (req, res) => {
   const { data, error } = await supabase
     .from('fourbase_clients').select('id, name').eq('workspace_id', workspaceOf(req)).order('name', { ascending: true })
   if (error) throw error
   res.json(data || [])
 }))
 
-router.get('/api/assistant/agenda', ...readAuth, asyncRoute(async (req, res) => {
+router.get('/api/assistant/agenda', readAuth, asyncRoute(async (req, res) => {
   const { from, to } = req.query
   if (!isDate(from) || !isDate(to)) return res.status(400).json({ error: 'Informe from e to no formato AAAA-MM-DD' })
   if (to < from) return res.status(400).json({ error: 'to não pode ser antes de from' })
@@ -179,7 +199,7 @@ async function prepareBatch(req) {
   return { tasks: normalized, conflicts: findConflicts(normalized, existing), duplicates: findDuplicates(normalized, existing) }
 }
 
-router.post('/api/assistant/tasks/preview', ...writeAuth, asyncRoute(async (req, res) => {
+router.post('/api/assistant/tasks/preview', writeAuth, asyncRoute(async (req, res) => {
   const p = await prepareBatch(req)
   if (p.error) return res.status(p.status).json({ error: p.error, details: p.details })
   res.json({ ok: true, count: p.tasks.length, tasks: p.tasks, conflicts: p.conflicts, duplicates: p.duplicates })
@@ -197,7 +217,7 @@ async function loadBatch(userId, batchId) {
   return data
 }
 
-router.post('/api/assistant/tasks', ...writeAuth, asyncRoute(async (req, res) => {
+router.post('/api/assistant/tasks', writeAuth, asyncRoute(async (req, res) => {
   const batchId = req.body?.batch_id
   if (!isValidBatchId(batchId)) return res.status(400).json({ error: 'batch_id obrigatório (8 a 80 caracteres: letras, números, _ . : -)' })
   const workspaceId = workspaceOf(req)
@@ -248,22 +268,31 @@ router.post('/api/assistant/tasks', ...writeAuth, asyncRoute(async (req, res) =>
   }
 }))
 
-router.post('/api/assistant/batches/:batchId/undo', ...writeAuth, asyncRoute(async (req, res) => {
+router.post('/api/assistant/batches/:batchId/undo', writeAuth, asyncRoute(async (req, res) => {
   const batch = isValidBatchId(req.params.batchId) ? await loadBatch(req.user.id, req.params.batchId) : null
   if (!batch) return res.status(404).json({ error: 'Lote não encontrado' })
   if (batch.undone_at) return res.status(200).json({ undone: 0, already_undone: true })
   if (Date.now() - Date.parse(batch.created_at) > UNDO_WINDOW_MS) {
     return res.status(400).json({ error: 'Só dá para desfazer lotes das últimas 48 horas' })
   }
+  // Só apaga o que ainda é do dono: se o gestor reatribuiu uma tarefa do lote a outra pessoa, ela fica.
   const ids = batch.task_ids || []
+  let mine = []
   if (ids.length) {
+    const { data, error } = await supabase
+      .from('fourbase_tasks').select('id')
+      .in('id', ids).eq('workspace_id', workspaceOf(req)).eq('assigned_to', req.user.id)
+    if (error) throw error
+    mine = (data || []).map((t) => t.id)
+  }
+  if (mine.length) {
     const { error } = await supabase
       .from('fourbase_tasks').delete()
-      .in('id', ids).eq('workspace_id', workspaceOf(req)).eq('assigned_to', req.user.id)
+      .in('id', mine).eq('workspace_id', workspaceOf(req)).eq('assigned_to', req.user.id)
     if (error) throw error
   }
   const { error: e2 } = await supabase
     .from('fourbase_assistant_batches').update({ undone_at: new Date().toISOString() }).eq('id', batch.id)
   if (e2) throw e2
-  res.json({ undone: ids.length })
+  res.json({ undone: mine.length, kept: ids.length - mine.length })
 }))

@@ -59,7 +59,11 @@ export function normalizeTaskInput(item, { clients = [], today }) {
   if (!title) errors.push('título obrigatório')
   else if (title.length > 200) errors.push('título passa de 200 caracteres')
 
-  const description = item.description == null ? '' : String(item.description).trim()
+  let description = ''
+  if (item.description != null) {
+    if (typeof item.description !== 'string') errors.push('descrição deve ser texto')
+    else description = item.description.trim()
+  }
   if (description.length > 2000) errors.push('descrição passa de 2000 caracteres')
 
   let priority = 'Média'
@@ -130,7 +134,7 @@ export function findConflicts(newTasks, existing) {
     existing.forEach((e) => {
       const b = slotOf(e)
       if (b && b.date === a.date && a.start < b.end && b.start < a.end) {
-        out.push({ index: i, with: { id: e.id, title: e.title, due_date: e.due_date, due_time: e.due_time } })
+        out.push({ index: i, with: { id: e.id, title: e.title, due_date: e.due_date, due_time: hhmm(e.due_time) } })
       }
     })
     for (let j = 0; j < i; j++) {
@@ -143,11 +147,14 @@ export function findConflicts(newTasks, existing) {
   return out
 }
 
+// Postgres devolve colunas `time` como "10:00:00"; o contrato do assistente usa sempre "HH:MM".
+export const hhmm = (t) => (typeof t === 'string' && t.length >= 5 ? t.slice(0, 5) : t ?? null)
+
 // Já existe tarefa com o mesmo título, data e horário?
 export function findDuplicates(newTasks, existing) {
   const out = []
   newTasks.forEach((n, i) => {
-    const hit = existing.find((e) => norm(e.title) === norm(n.title) && e.due_date === n.due_date && (e.due_time || null) === (n.due_time || null))
+    const hit = existing.find((e) => norm(e.title) === norm(n.title) && e.due_date === n.due_date && hhmm(e.due_time) === hhmm(n.due_time))
     if (hit) out.push({ index: i, existing_id: hit.id })
   })
   return out
