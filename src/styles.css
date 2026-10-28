@@ -9527,3 +9527,9 @@ img.kb-avatar {
 .assistant-token-list li.is-revoked { opacity: .6; }
 .assistant-token-list small { display: block; color: var(--muted-strong); margin-top: 2px; }
 .assistant-token-list code { font-size: 12px; }
+.assistant-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; background: var(--primary); color: var(--white); padding: 9px 16px; border-radius: var(--radius-sm); font-weight: 700; font-size: 13.5px; transition: background .15s ease; }
+.assistant-btn:hover:not(:disabled) { background: var(--primary-dark); }
+.assistant-btn:disabled { opacity: .45; cursor: not-allowed; }
+.assistant-btn.ghost { background: transparent; color: var(--text); border-color: var(--border); }
+.assistant-btn.ghost:hover:not(:disabled) { background: var(--surface-2); }
+.assistant-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }

@@ -53,15 +53,15 @@ export default function AssistantTokensPanel() {
           <strong>Copie agora — este token não será mostrado de novo.</strong>
           <input readOnly value={fresh.token} onFocus={(e) => e.target.select()} aria-label="Token gerado" />
           <div className="assistant-token-actions">
-            <button type="button" className="btn btn-primary" onClick={copy}>Copiar token</button>
-            <button type="button" className="btn btn-ghost" onClick={() => setFresh(null)}>Já guardei</button>
+            <button type="button" className="assistant-btn" onClick={copy}>Copiar token</button>
+            <button type="button" className="assistant-btn ghost" onClick={() => setFresh(null)}>Já guardei</button>
           </div>
         </div>
       )}
 
       <div className="assistant-token-form">
         <input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} aria-label="Nome do token" placeholder="Nome (ex.: ChatGPT do Evandro)" />
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={create}>{busy ? 'Gerando…' : 'Gerar token'}</button>
+        <button type="button" className="assistant-btn" disabled={busy} onClick={create}>{busy ? 'Gerando…' : 'Gerar token'}</button>
       </div>
 
       {tokens && tokens.length > 0 && (
@@ -75,7 +75,7 @@ export default function AssistantTokensPanel() {
                 </small>
               </div>
               {!t.revoked_at && (
-                <button type="button" className="btn btn-ghost" onClick={() => revoke(t)} aria-label={`Revogar ${t.name}`}>
+                <button type="button" className="assistant-btn ghost" onClick={() => revoke(t)} aria-label={`Revogar ${t.name}`}>
                   <IconTrash size={14} /> Revogar
                 </button>
               )}
