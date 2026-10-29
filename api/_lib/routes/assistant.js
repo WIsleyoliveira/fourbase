@@ -8,7 +8,7 @@ import { runInBackground } from '../mailer.js'
 import {
   ASSISTANT_TAG, DEFAULT_TOKEN_DAYS, MAX_ACTIVE_TOKENS, MAX_AGENDA_DAYS, MAX_AGENDA_ITEMS, MAX_BATCH,
   NOTICE_VERSION, SCOPES, TIMEZONE, UNDO_WINDOW_MS,
-  batchItemOf, buildOpenApi, daysBetween, findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate,
+  assistantEnabledFor, batchItemOf, buildOpenApi, daysBetween, findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate,
   isTokenShape, isValidBatchId, normalizeTaskInput, planUndo, toBatchView, todayIn, tokenPrefixOf, undoDeadline,
 } from '../assistant.js'
 
@@ -28,6 +28,12 @@ router.use('/api/assistant', (req, res, next) =>
     ? res.status(503).json({ error: 'O Assistente está temporariamente desligado.' })
     : next())
 
+const NOT_ENABLED = 'O Assistente não está disponível para esta empresa.'
+// Porta da tela: login normal, só gestor, só empresa liberada.
+const enabledForWorkspace = (req, res, next) =>
+  assistantEnabledFor(workspaceOf(req)) ? next() : res.status(403).json({ error: NOT_ENABLED })
+const screen = [auth, gestorOnly, enabledForWorkspace]
+
 const appUrl = () => (process.env.APP_URL || '').replace(/\/$/, '')
 const isActiveGestor = (u) => !!u && u.role === 'gestor' && u.status !== 'inactive'
 const isLive = (t, now = Date.now()) => !t.revoked_at && Date.parse(t.expires_at) > now
@@ -38,7 +44,7 @@ async function recordConsent(row) {
 }
 
 // ---------- Porta da tela: chaves de conexão (JWT, só gestor) ----------
-router.get('/api/assistant/tokens', auth, gestorOnly, asyncRoute(async (req, res) => {
+router.get('/api/assistant/tokens', ...screen, asyncRoute(async (req, res) => {
   const workspaceId = workspaceOf(req)
   const { data, error } = await supabase
     .from('fourbase_api_tokens').select('*')
@@ -60,7 +66,7 @@ router.get('/api/assistant/tokens', auth, gestorOnly, asyncRoute(async (req, res
 
 // Um único gesto ("Autorizo e criar minha chave"): grava a autorização com a versão do aviso e cria a
 // chave na mesma requisição. Sem a versão atual do aviso, nada é criado.
-router.post('/api/assistant/tokens', auth, gestorOnly, asyncRoute(async (req, res) => {
+router.post('/api/assistant/tokens', ...screen, asyncRoute(async (req, res) => {
   const body = req.body || {}
   if (body.notice_version !== NOTICE_VERSION) {
     return res.status(400).json({ error: 'Leia e autorize o aviso atual antes de criar a chave.', notice_version: NOTICE_VERSION })
@@ -113,7 +119,7 @@ router.post('/api/assistant/tokens', auth, gestorOnly, asyncRoute(async (req, re
   res.status(201).json({ id: data.id, name: data.name, prefix: data.prefix, expires_at: data.expires_at, created_at: data.created_at, token })
 }))
 
-router.delete('/api/assistant/tokens/:id', auth, gestorOnly, asyncRoute(async (req, res) => {
+router.delete('/api/assistant/tokens/:id', ...screen, asyncRoute(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Registro não encontrado' })
   const workspaceId = workspaceOf(req)
   const { data, error } = await supabase
@@ -193,7 +199,7 @@ async function undoBatch(batch, userId, workspaceId, onlyIds = null) {
 }
 
 // ---------- Porta da tela: histórico e desfazer com prévia (JWT, só gestor) ----------
-router.get('/api/assistant/app/batches', auth, gestorOnly, asyncRoute(async (req, res) => {
+router.get('/api/assistant/app/batches', ...screen, asyncRoute(async (req, res) => {
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 50)
   const before = typeof req.query.before === 'string' && !Number.isNaN(Date.parse(req.query.before)) ? req.query.before : null
   const workspaceId = workspaceOf(req)
@@ -210,7 +216,7 @@ router.get('/api/assistant/app/batches', auth, gestorOnly, asyncRoute(async (req
   })
 }))
 
-router.get('/api/assistant/app/batches/:batchId/undo-plan', auth, gestorOnly, asyncRoute(async (req, res) => {
+router.get('/api/assistant/app/batches/:batchId/undo-plan', ...screen, asyncRoute(async (req, res) => {
   const workspaceId = workspaceOf(req)
   const batch = await loadBatch(req.user.id, workspaceId, req.params.batchId)
   if (!batch) return res.status(404).json({ error: 'Pedido não encontrado' })
@@ -220,7 +226,7 @@ router.get('/api/assistant/app/batches/:batchId/undo-plan', auth, gestorOnly, as
   res.json({ remove: plan.remove, keep: plan.keep, gone: plan.gone, undo_until: undoDeadline(batch) })
 }))
 
-router.post('/api/assistant/app/batches/:batchId/undo', auth, gestorOnly, asyncRoute(async (req, res) => {
+router.post('/api/assistant/app/batches/:batchId/undo', ...screen, asyncRoute(async (req, res) => {
   const onlyIds = req.body?.only_ids
   if (!Array.isArray(onlyIds) || !onlyIds.every(isUuid)) {
     return res.status(400).json({ error: 'Envie only_ids: a lista de tarefas que serão removidas' })
@@ -287,6 +293,7 @@ const authenticate = async (scope, req, res, next) => {
   const { data: user } = await supabase
     .from('fourbase_users').select('*').eq('id', row.user_id).eq('workspace_id', row.workspace_id).maybeSingle()
   if (!isActiveGestor(user)) return deny(req, res, 401, OFF)
+  if (!assistantEnabledFor(row.workspace_id)) return res.status(403).json({ error: NOT_ENABLED })
   if (overUsage(row.id)) return res.status(429).json({ error: 'Muitas chamadas. Aguarde um minuto.' })
   req.user = { id: user.id, name: user.name, role: user.role, workspace_id: user.workspace_id }
   req.apiToken = row

@@ -1,6 +1,6 @@
 {
- "phase": "planning",
- "complete": false,
+ "phase": "verification",
+ "complete": true,
  "idea": "Tornar a integração Assistente (ChatGPT) do fourbase didática para o gestor não técnico (Evandro): onboarding, explicação, configuração guiada e feedback",
  "themeName": "Council",
  "sessionId": "assistente-chatgpt-didatico-20261028-2123",

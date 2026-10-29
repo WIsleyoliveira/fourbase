@@ -72,6 +72,7 @@ before(async () => {
   process.env.FOURBASE_DB_PATH = dbPath
   process.env.APP_URL = 'https://fourbase.example'
   delete process.env.SUPABASE_URL
+  process.env.ASSISTANT_WORKSPACE_IDS = '*'
   delete process.env.ASSISTANT_ENABLED
   const { default: app } = await import('../api/index.js')
   ;({ supabase: sb } = await import('../api/_lib/supabase.js'))
@@ -345,4 +346,24 @@ test('nenhuma rota altera ou apaga registros de autorização', async () => {
   assert.ok(consents.length >= 5)
   assert.ok(consents.every((c) => ['authorized', 'disconnected'].includes(c.event)))
   assert.ok(consents.filter((c) => c.event === 'authorized').every((c) => c.notice_version === NOTICE_VERSION))
+})
+
+test('liberação por empresa: fechado por padrão; só as empresas da lista veem e usam o Assistente', async () => {
+  const saved = process.env.ASSISTANT_WORKSPACE_IDS
+  try {
+    process.env.ASSISTANT_WORKSPACE_IDS = wsB // só a empresa B
+    assert.equal((await raw('GET', '/api/assistant/me', { token: tokA.token })).status, 403)
+    assert.equal((await raw('GET', '/api/assistant/tokens', { token: jwt.gestorA })).status, 403)
+    assert.equal((await newToken('gestorA')).status, 403)
+    const meA = (await raw('GET', '/api/auth/me', { token: jwt.gestorA })).body
+    const meB = (await raw('GET', '/api/auth/me', { token: jwt.gestorB })).body
+    const meF = (await raw('GET', '/api/auth/me', { token: jwt.funcA })).body
+    assert.deepEqual([meA.assistant_enabled, meB.assistant_enabled, meF.assistant_enabled], [false, true, false])
+    delete process.env.ASSISTANT_WORKSPACE_IDS // sem configuração: ninguém
+    assert.equal((await raw('GET', '/api/assistant/tokens', { token: jwt.gestorB })).status, 403)
+    assert.equal((await raw('GET', '/api/auth/me', { token: jwt.gestorB })).body.assistant_enabled, false)
+  } finally {
+    process.env.ASSISTANT_WORKSPACE_IDS = saved
+  }
+  assert.equal((await raw('GET', '/api/assistant/me', { token: tokA.token })).status, 200)
 })

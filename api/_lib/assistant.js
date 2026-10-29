@@ -16,6 +16,15 @@ export const TIMEZONE = 'America/Sao_Paulo'
 // se o texto mudar, suba a versão aqui e em src/assistant/notice.js (um teste confere que são iguais).
 export const NOTICE_VERSION = '2026-11-01'
 
+// Liberação por empresa (ASSISTANT_WORKSPACE_IDS): vazio = ninguém; "*" = todas; senão, lista de ids
+// separados por vírgula. Fechado por padrão: abrir para outra empresa exige política de privacidade e
+// termos publicados (fase B — docs/assistente-chatgpt.md).
+export function assistantEnabledFor(workspaceId, setting = process.env.ASSISTANT_WORKSPACE_IDS) {
+  const list = String(setting || '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (list.includes('*')) return true
+  return !!workspaceId && list.includes(workspaceId)
+}
+
 export const generateToken = () => TOKEN_PREFIX + randomBytes(32).toString('base64url')
 export const hashToken = (token) => createHash('sha256').update(String(token)).digest('hex')
 export const tokenPrefixOf = (token) => token.slice(0, TOKEN_PREFIX.length + 6)
@@ -238,6 +247,10 @@ export function toBatchView(batch, currentTasks = [], now = Date.now()) {
     date_range: dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null,
     undone_at: batch.undone_at ?? null,
     undo_until: open ? undoDeadline(batch) : null,
+    // depois de desfeito: quantas saíram e quantas ficaram (porque alguém mexeu)
+    undo_result: batch.undone_at
+      ? { removed: items.filter((i) => i.result === 'removed').length, kept: items.filter((i) => String(i.result || '').startsWith('kept_')).length }
+      : null,
   }
 }
 

@@ -7,7 +7,7 @@ import { api } from '../api.js'
 import { supabase, AVATARS_BUCKET, storagePathFromUrl } from '../supabase.js'
 import { assigneeColor } from '../colors.js'
 import ColorPickerField from './ColorPickerField.jsx'
-import AssistantTokensPanel from './AssistantTokensPanel.jsx'
+import { Link } from 'react-router-dom'
 
 const AVATAR_EXTS = ['png', 'jpg', 'jpeg', 'webp']
 const AVATAR_LIMIT_MB = 5
@@ -470,7 +470,15 @@ export default function ProfileView({ currentUser, onProfileSaved, onToast, onEr
         </div>
       </div>
 
-      {isGestor && <AssistantTokensPanel />}
+      {isGestor && profile?.assistant_enabled && (
+        <div className="panel profile-card asst-profile-link">
+          <div>
+            <h3>Assistente (ChatGPT)</h3>
+            <p>Monte sua agenda conversando com o ChatGPT e acompanhe o que ele criou.</p>
+          </div>
+          <Link className="asst-btn ghost" to="/assistente">Gerenciar no Assistente</Link>
+        </div>
+      )}
 
       {/* ══ Card 4: Informações do sistema (somente leitura) ═══════════════ */}
       <div className="panel profile-card">

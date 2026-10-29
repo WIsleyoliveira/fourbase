@@ -18,6 +18,7 @@ import ClientsView from './components/ClientsView.jsx'
 import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
+import AssistantView from './components/AssistantView.jsx'
 import NewTaskModal from './components/NewTaskModal.jsx'
 import NotificationBell from './components/NotificationBell.jsx'
 import TaskPeekModal from './components/TaskPeekModal.jsx'
@@ -42,6 +43,7 @@ import {
   IconLogout,
   IconUserCog,
   IconChevronRight,
+  IconMessage,
 } from './icons.jsx'
 
 const VIEWS = [
@@ -51,6 +53,7 @@ const VIEWS = [
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
   { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
   { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente', gestorOnly: true },
+  { key: 'assistente', label: 'Assistente', icon: IconMessage, title: 'Assistente', subtitle: 'Monte sua agenda conversando com o ChatGPT', gestorOnly: true, requires: 'assistant_enabled' },
 ]
 
 // Fica fora de VIEWS de propósito: é renderizado no bloco inferior da sidebar,
@@ -229,7 +232,8 @@ export default function App() {
   // URL que não é uma tela, ou tela de gestor aberta por quem não é gestor,
   // cai no painel (replace: não deixa a URL ruim no histórico).
   const isGestorSession = session?.user?.role === 'gestor'
-  const blockedForRole = GESTOR_ONLY_VIEWS.includes(view) && !isGestorSession
+  const blockedForRole = (GESTOR_ONLY_VIEWS.includes(view) && !isGestorSession)
+    || (view === 'assistente' && !session?.user?.assistant_enabled)
   useEffect(() => {
     if (activationToken || !session) return
     if (!route.valid || blockedForRole) navigate(viewPath(DEFAULT_VIEW), { replace: true })
@@ -286,7 +290,7 @@ export default function App() {
 
   const user = session.user
   const isGestor = user.role === 'gestor'
-  const visibleViews = VIEWS.filter((v) => !v.gestorOnly || isGestor)
+  const visibleViews = VIEWS.filter((v) => (!v.gestorOnly || isGestor) && (!v.requires || user[v.requires]))
   const baseView = [...VIEWS, PROFILE_VIEW, CADASTRO_VIEW, EQUIPE_VIEW].find((v) => v.key === view) || VIEWS[0]
   // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
   const current = selectedClient
@@ -343,6 +347,8 @@ export default function App() {
             onError={handleError}
           />
         )
+      case 'assistente':
+        return isGestor && user.assistant_enabled ? <AssistantView onOpenKanban={() => changeView('kanban')} /> : null
       case 'relatorios':
         return isGestor ? (
           <ReportsView currentUser={user} onError={handleError} />

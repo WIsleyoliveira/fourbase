@@ -263,3 +263,19 @@ Session: assistente-chatgpt-didatico-20261028-2123 | PRD: prd.md | Status: locke
 | AC-038 | Roteiro de 16 casos executado com conta paga; 100 % nos crít | manual-check | pending | — |
 
 Progress: 0/38 verified
+
+## Verification sweep — 2026-10-28
+
+| Gate | Resultado |
+|---|---|
+| `npm test` | 252/252 |
+| `npm run build` | ok |
+| Bateria pesada (local) | 115/115 |
+| Bateria pesada (Postgres 17 real + PostgREST, migrations do repo) | 115/115 |
+| Banco: autorizações só de inserção, RLS nas 3 tabelas, cascata ao apagar empresa | verificado via psql |
+| Navegador (local): 4 passos + teste "Funcionou!", desfazer com prévia, 375 px, claro/escuro, foco | verificado |
+
+- US-001 a US-008: verificados (testes `tests/assistant-*.test.js` + navegador).
+- US-009: docs/CHANGELOG/CLAUDE.md/.env.example atualizados; **release note adiada de propósito** (o Assistente ficou liberado só por empresa — `ASSISTANT_WORKSPACE_IDS` —, e o "O que há de novo" aparece para todos).
+- US-010 (avaliação no ChatGPT real): **pendente** — exige conta paga e deploy.
+- Fora do PRD, acrescentado na verificação: liberação por empresa (fechado por padrão), "Cancelar e voltar" no onboarding, histórico com polling de 30 s, resumo "N removidas, M mantidas".

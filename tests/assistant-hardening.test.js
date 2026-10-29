@@ -47,6 +47,7 @@ before(async () => {
   fs.writeFileSync(dbPath, JSON.stringify(fixture))
   process.env.FOURBASE_DB_PATH = dbPath
   delete process.env.SUPABASE_URL
+  process.env.ASSISTANT_WORKSPACE_IDS = '*'
   process.env.APP_URL = 'https://fourbase.example'
   const { default: app } = await import('../api/index.js')
   await new Promise((resolve) => { server = app.listen(0, resolve) })

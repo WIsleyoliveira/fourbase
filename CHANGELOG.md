@@ -6,7 +6,9 @@ versão, atualize os dois e a `version` do `package.json`.
 
 ## Próxima versão (em desenvolvimento)
 
-- **Assistente (ChatGPT), etapa 1** (gestor): token pessoal em Meu Perfil e rotas `/api/assistant/*` para o ChatGPT ver a agenda, listar clientes e criar tarefas em lote (prévia, idempotência, desfazer). Exige a migration `20261101000000_assistant_tokens.sql`. Ver `docs/assistente-chatgpt.md`.
+- **Assistente (ChatGPT)** — gestor de empresa liberada (`ASSISTANT_WORKSPACE_IDS`): nova tela **Assistente** no menu que guia a conexão do ChatGPT em 4 passos + teste automático ("Funcionou!") e, no dia a dia, mostra o status, o histórico "O que o ChatGPT fez" com desfazer seguro (prévia; nunca apaga tarefa em que alguém mexeu), ideias de frases e o que ele pode/não pode. O ChatGPT vê a agenda e os clientes e cria tarefas em lote (prévia, idempotência, etiqueta ChatGPT).
+- Segurança e privacidade do Assistente: aviso do que vai para a OpenAI com autorização registrada (versão do aviso), chave de conexão válida por 1 ano e só para gestor ativo, nova chave substitui a anterior, "Somente eu" no passo a passo, contrato só com `APP_URL`, interruptor `ASSISTANT_ENABLED=false`.
+- Exige a migration `20261101000000_assistant_tokens.sql`. Fora do "O que há de novo" até abrir para todas as empresas (fase B). Ver `docs/assistente-chatgpt.md`.
 
 ## 1.2.0 — 2026-10-26
 
