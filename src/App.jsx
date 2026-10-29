@@ -123,8 +123,17 @@ export default function App() {
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
   }, [])
-  const sidebarExpanded = sidebarOpen && !compactScreen
+  // Nessa faixa o trilho de ícones é o padrão, mas o botão abre a barra completa POR CIMA do
+  // conteúdo (não empurra a página); fecha ao clicar fora ou trocar de tela. Não é lembrado.
+  const [compactOpen, setCompactOpen] = useState(false)
+  useEffect(() => { if (!compactScreen) setCompactOpen(false) }, [compactScreen])
+  const sidebarExpanded = compactScreen ? compactOpen : sidebarOpen
+  const layoutCollapsed = compactScreen || !sidebarOpen
   const toggleSidebar = () => {
+    if (compactScreen) {
+      setCompactOpen((v) => !v)
+      return
+    }
     setSidebarOpen((prev) => {
       const next = !prev
       localStorage.setItem('fb_sidebar_open', next ? '1' : '0')
@@ -227,6 +236,7 @@ export default function App() {
   const changeView = (next) => {
     navigate(viewPath(next))
     setMobileMenuOpen(false)
+    setCompactOpen(false)
   }
 
   // URL que não é uma tela, ou tela de gestor aberta por quem não é gestor,
@@ -366,7 +376,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${sidebarExpanded ? '' : ' sidebar-collapsed'}`}>
+    <div className={`app${layoutCollapsed ? ' sidebar-collapsed' : ''}`}>
       {/* Cabeçalho compacto — só visível abaixo de 768px (ver styles.css) */}
       <header className="mobile-topbar">
         <button
@@ -414,11 +424,16 @@ export default function App() {
       {mobileMenuOpen && (
         <div className="sidebar-backdrop" onClick={() => setMobileMenuOpen(false)} />
       )}
+      {compactScreen && compactOpen && (
+        <div className="sidebar-overlay-backdrop" onClick={() => setCompactOpen(false)} />
+      )}
 
-      <aside className={`sidebar${sidebarExpanded ? '' : ' collapsed'}${mobileMenuOpen ? ' mobile-open' : ''}`}>
+      <aside className={`sidebar${sidebarExpanded ? '' : ' collapsed'}${mobileMenuOpen ? ' mobile-open' : ''}${compactScreen && compactOpen ? ' overlay-open' : ''}`}>
         <button
           className="sidebar-toggle"
-          title={sidebarOpen ? 'Recolher barra lateral' : 'Expandir barra lateral'}
+          title={sidebarExpanded ? 'Recolher barra lateral' : 'Expandir barra lateral'}
+          aria-label={sidebarExpanded ? 'Recolher barra lateral' : 'Expandir barra lateral'}
+          aria-expanded={sidebarExpanded}
           onClick={toggleSidebar}
         >
           <IconChevronRight size={13} />
