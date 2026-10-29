@@ -8,7 +8,7 @@ import { runInBackground } from '../mailer.js'
 import {
   ASSISTANT_TAG, DEFAULT_TOKEN_DAYS, MAX_ACTIVE_TOKENS, MAX_AGENDA_DAYS, MAX_AGENDA_ITEMS, MAX_BATCH,
   NOTICE_VERSION, SCOPES, TIMEZONE, UNDO_WINDOW_MS,
-  assistantEnabledFor, batchItemOf, buildOpenApi, daysBetween, findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate,
+  assistantEnabledForUser, batchItemOf, buildOpenApi, daysBetween, findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate,
   isTokenShape, isValidBatchId, normalizeTaskInput, planUndo, toBatchView, todayIn, tokenPrefixOf, undoDeadline,
 } from '../assistant.js'
 
@@ -30,9 +30,14 @@ router.use('/api/assistant', (req, res, next) =>
 
 const NOT_ENABLED = 'O Assistente não está disponível para esta empresa.'
 // Porta da tela: login normal, só gestor, só empresa liberada.
-const enabledForWorkspace = (req, res, next) =>
-  assistantEnabledFor(workspaceOf(req)) ? next() : res.status(403).json({ error: NOT_ENABLED })
-const screen = [auth, gestorOnly, enabledForWorkspace]
+// O login não traz o e-mail: lê a pessoa no banco (também barra quem foi rebaixado ou desativado).
+const enabledForUser = (req, res, next) => (async () => {
+  const { data: me } = await supabase
+    .from('fourbase_users').select('*').eq('id', req.user.id).eq('workspace_id', workspaceOf(req)).maybeSingle()
+  if (!assistantEnabledForUser(me)) return res.status(403).json({ error: NOT_ENABLED })
+  next()
+})().catch((err) => { console.error(err); res.status(500).json({ error: 'Erro interno' }) })
+const screen = [auth, gestorOnly, enabledForUser]
 
 const appUrl = () => (process.env.APP_URL || '').replace(/\/$/, '')
 const isActiveGestor = (u) => !!u && u.role === 'gestor' && u.status !== 'inactive'
@@ -293,7 +298,7 @@ const authenticate = async (scope, req, res, next) => {
   const { data: user } = await supabase
     .from('fourbase_users').select('*').eq('id', row.user_id).eq('workspace_id', row.workspace_id).maybeSingle()
   if (!isActiveGestor(user)) return deny(req, res, 401, OFF)
-  if (!assistantEnabledFor(row.workspace_id)) return res.status(403).json({ error: NOT_ENABLED })
+  if (!assistantEnabledForUser(user)) return res.status(403).json({ error: NOT_ENABLED })
   if (overUsage(row.id)) return res.status(429).json({ error: 'Muitas chamadas. Aguarde um minuto.' })
   req.user = { id: user.id, name: user.name, role: user.role, workspace_id: user.workspace_id }
   req.apiToken = row

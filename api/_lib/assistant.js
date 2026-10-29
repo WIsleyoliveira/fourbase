@@ -25,6 +25,15 @@ export function assistantEnabledFor(workspaceId, setting = process.env.ASSISTANT
   return !!workspaceId && list.includes(workspaceId)
 }
 
+// Quem pode usar: gestor ativo de uma empresa liberada OU listado por e-mail em ASSISTANT_USER_EMAILS
+// (liberação por pessoa, separados por vírgula, sem diferenciar maiúsculas).
+export function assistantEnabledForUser(user, env = process.env) {
+  if (!user || user.role !== 'gestor' || user.status === 'inactive') return false
+  if (assistantEnabledFor(user.workspace_id, env.ASSISTANT_WORKSPACE_IDS)) return true
+  const emails = String(env.ASSISTANT_USER_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  return !!user.email && emails.includes(String(user.email).trim().toLowerCase())
+}
+
 export const generateToken = () => TOKEN_PREFIX + randomBytes(32).toString('base64url')
 export const hashToken = (token) => createHash('sha256').update(String(token)).digest('hex')
 export const tokenPrefixOf = (token) => token.slice(0, TOKEN_PREFIX.length + 6)

@@ -35,8 +35,9 @@ Textos da tela: `src/assistant/notice.js` (aviso, versão `NOTICE_VERSION`) e
   `tasks/preview`, `tasks`, `batches`, `batches/:id/undo`. Porta da tela (login normal, gestor):
   `tokens` (GET/POST/DELETE), `app/batches`, `app/batches/:id/undo-plan`, `app/batches/:id/undo`.
   A chave nunca abre rota de login e o login nunca abre rota da chave.
-- **Liberação por empresa:** `ASSISTANT_WORKSPACE_IDS` (vazio = ninguém, `*` = todas, ou ids separados
-  por vírgula). Fora da lista: item some do menu e as rotas respondem 403.
+- **Liberação:** por empresa (`ASSISTANT_WORKSPACE_IDS`: vazio = ninguém, `*` = todas, ou ids separados
+  por vírgula) **ou** por pessoa (`ASSISTANT_USER_EMAILS`: e-mails de login de gestores). Só gestor ativo;
+  fora das listas o item some do menu e as rotas respondem 403.
 - **Chave:** só o hash SHA-256 fica no banco; vale 365 dias; só funciona para **gestor ativo** (conferido
   no banco a cada chamada); criar outra pode substituir a anterior; máx. 5 ativas.
 - **Autorização:** criar a chave exige a versão atual do aviso; cada autorização e desligamento vira um
@@ -58,8 +59,9 @@ Textos da tela: `src/assistant/notice.js` (aviso, versão `NOTICE_VERSION`) e
 
 1. Merge (Vercel publica). Sem as tabelas, só o Assistente falha; o resto do app segue normal.
 2. **Backup**, depois rodar `supabase/migrations/20261101000000_assistant_tokens.sql` no SQL Editor.
-3. Na Vercel: `APP_URL` definido e `ASSISTANT_WORKSPACE_IDS=<id da empresa do Evandro>`; Redeploy.
-4. O Evandro **sai e entra de novo** no fourbase (o item do menu vem do login).
+3. Na Vercel: `APP_URL` definido e `ASSISTANT_WORKSPACE_IDS=<id da empresa>` (todos os gestores dela) e/ou
+   `ASSISTANT_USER_EMAILS=<e-mails de login>` (pessoas específicas); Redeploy.
+4. Quem foi liberado só precisa recarregar o fourbase (o app relê o perfil ao abrir).
 5. Antes de entregar a ele: rodar o roteiro de avaliação abaixo num assistente de teste.
 
 ## Roteiro de avaliação do GPT (antes de liberar; ~1h30)

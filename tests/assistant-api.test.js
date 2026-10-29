@@ -359,6 +359,16 @@ test('liberação por empresa: fechado por padrão; só as empresas da lista vee
     const meB = (await raw('GET', '/api/auth/me', { token: jwt.gestorB })).body
     const meF = (await raw('GET', '/api/auth/me', { token: jwt.funcA })).body
     assert.deepEqual([meA.assistant_enabled, meB.assistant_enabled, meF.assistant_enabled], [false, true, false])
+    // por pessoa: o gestor de A entra pelo e-mail (sem diferenciar maiúsculas), mesmo com A fora da lista
+    process.env.ASSISTANT_USER_EMAILS = ' G@A.TEST '
+    assert.equal((await raw('GET', '/api/assistant/tokens', { token: jwt.gestorA })).status, 200)
+    assert.equal((await raw('GET', '/api/assistant/me', { token: tokA.token })).status, 200)
+    assert.equal((await raw('GET', '/api/auth/me', { token: jwt.gestorA })).body.assistant_enabled, true)
+    // e-mail de funcionário listado não vale: o Assistente é só de gestor
+    process.env.ASSISTANT_USER_EMAILS = 'f@a.test'
+    assert.equal((await raw('GET', '/api/auth/me', { token: jwt.funcA })).body.assistant_enabled, false)
+    assert.equal((await raw('GET', '/api/assistant/tokens', { token: jwt.gestorA })).status, 403)
+    delete process.env.ASSISTANT_USER_EMAILS
     delete process.env.ASSISTANT_WORKSPACE_IDS // sem configuração: ninguém
     assert.equal((await raw('GET', '/api/assistant/tokens', { token: jwt.gestorB })).status, 403)
     assert.equal((await raw('GET', '/api/auth/me', { token: jwt.gestorB })).body.assistant_enabled, false)

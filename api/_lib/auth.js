@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import rateLimit from 'express-rate-limit'
 import { supabase } from './supabase.js'
-import { assistantEnabledFor } from './assistant.js'
+import { assistantEnabledForUser } from './assistant.js'
 
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET é obrigatório em produção — defina no .env do servidor.')
@@ -59,7 +59,7 @@ export const publicUser = (u) => ({
   // Usuários anteriores à migration não têm a coluna: contam como "ligado"
   notify_email: u.notify_email ?? true,
   // Assistente (ChatGPT): só gestor de empresa liberada vê o item no menu (o servidor também barra)
-  assistant_enabled: u.role === 'gestor' && assistantEnabledFor(u.workspace_id),
+  assistant_enabled: assistantEnabledForUser(u),
   created_at: u.created_at ?? null,
 })
 
