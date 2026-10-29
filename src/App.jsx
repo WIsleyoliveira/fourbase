@@ -18,6 +18,7 @@ import ClientsView from './components/ClientsView.jsx'
 import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
+import AssistantView from './components/AssistantView.jsx'
 import NewTaskModal from './components/NewTaskModal.jsx'
 import NotificationBell from './components/NotificationBell.jsx'
 import TaskPeekModal from './components/TaskPeekModal.jsx'
@@ -42,6 +43,7 @@ import {
   IconLogout,
   IconUserCog,
   IconChevronRight,
+  IconMessage,
 } from './icons.jsx'
 
 const VIEWS = [
@@ -51,6 +53,7 @@ const VIEWS = [
   { key: 'notas', label: 'Notas', icon: IconNotes, title: 'Notas e documentação', subtitle: 'Escrita livre para ideias, decisões e registros' },
   { key: 'clientes', label: 'Clientes', icon: IconBuilding, title: 'Clientes', subtitle: 'Empresas e clientes cadastrados' },
   { key: 'relatorios', label: 'Relatórios', icon: IconFileSpreadsheet, title: 'Relatórios', subtitle: 'Planilha de atividades por responsável e cliente', gestorOnly: true },
+  { key: 'assistente', label: 'Assistente', icon: IconMessage, title: 'Assistente', subtitle: 'Monte sua agenda conversando com o ChatGPT', gestorOnly: true, requires: 'assistant_enabled' },
 ]
 
 // Fica fora de VIEWS de propósito: é renderizado no bloco inferior da sidebar,
@@ -120,8 +123,17 @@ export default function App() {
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
   }, [])
-  const sidebarExpanded = sidebarOpen && !compactScreen
+  // Nessa faixa o trilho de ícones é o padrão, mas o botão abre a barra completa POR CIMA do
+  // conteúdo (não empurra a página); fecha ao clicar fora ou trocar de tela. Não é lembrado.
+  const [compactOpen, setCompactOpen] = useState(false)
+  useEffect(() => { if (!compactScreen) setCompactOpen(false) }, [compactScreen])
+  const sidebarExpanded = compactScreen ? compactOpen : sidebarOpen
+  const layoutCollapsed = compactScreen || !sidebarOpen
   const toggleSidebar = () => {
+    if (compactScreen) {
+      setCompactOpen((v) => !v)
+      return
+    }
     setSidebarOpen((prev) => {
       const next = !prev
       localStorage.setItem('fb_sidebar_open', next ? '1' : '0')
@@ -176,6 +188,28 @@ export default function App() {
     navigate('/', { replace: true })
   }
 
+  // Ao abrir o app, relê o usuário no servidor: a sessão guardada no navegador pode ser de antes
+  // de uma mudança (nome, papel, Assistente liberado) e o menu depende desses campos. O token
+  // continua o mesmo; só os dados exibidos são atualizados.
+  const sessionToken = session?.token
+  useEffect(() => {
+    if (!sessionToken) return
+    let alive = true
+    api.getProfile()
+      .then((fresh) => {
+        if (!alive || !fresh?.id) return
+        setSession((cur) => {
+          if (!cur || cur.token !== sessionToken) return cur
+          const next = { ...cur, user: { ...cur.user, ...fresh } }
+          if (JSON.stringify(next.user) === JSON.stringify(cur.user)) return cur
+          setAuth(next)
+          return next
+        })
+      })
+      .catch(() => {}) // sem rede ou sessão expirada: o request já trata o 401
+    return () => { alive = false }
+  }, [sessionToken])
+
   // Perfil salvo: o backend devolve {token, user} com um JWT novo (o nome vai
   // assinado nele). Regrava a sessão para a sidebar refletir na hora, sem F5.
   const applyProfileUpdate = ({ token, user: updated }) => {
@@ -224,12 +258,14 @@ export default function App() {
   const changeView = (next) => {
     navigate(viewPath(next))
     setMobileMenuOpen(false)
+    setCompactOpen(false)
   }
 
   // URL que não é uma tela, ou tela de gestor aberta por quem não é gestor,
   // cai no painel (replace: não deixa a URL ruim no histórico).
   const isGestorSession = session?.user?.role === 'gestor'
-  const blockedForRole = GESTOR_ONLY_VIEWS.includes(view) && !isGestorSession
+  const blockedForRole = (GESTOR_ONLY_VIEWS.includes(view) && !isGestorSession)
+    || (view === 'assistente' && !session?.user?.assistant_enabled)
   useEffect(() => {
     if (activationToken || !session) return
     if (!route.valid || blockedForRole) navigate(viewPath(DEFAULT_VIEW), { replace: true })
@@ -286,7 +322,7 @@ export default function App() {
 
   const user = session.user
   const isGestor = user.role === 'gestor'
-  const visibleViews = VIEWS.filter((v) => !v.gestorOnly || isGestor)
+  const visibleViews = VIEWS.filter((v) => (!v.gestorOnly || isGestor) && (!v.requires || user[v.requires]))
   const baseView = [...VIEWS, PROFILE_VIEW, CADASTRO_VIEW, EQUIPE_VIEW].find((v) => v.key === view) || VIEWS[0]
   // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
   const current = selectedClient
@@ -343,6 +379,8 @@ export default function App() {
             onError={handleError}
           />
         )
+      case 'assistente':
+        return isGestor && user.assistant_enabled ? <AssistantView onOpenKanban={() => changeView('kanban')} /> : null
       case 'relatorios':
         return isGestor ? (
           <ReportsView currentUser={user} onError={handleError} />
@@ -360,7 +398,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${sidebarExpanded ? '' : ' sidebar-collapsed'}`}>
+    <div className={`app${layoutCollapsed ? ' sidebar-collapsed' : ''}`}>
       {/* Cabeçalho compacto — só visível abaixo de 768px (ver styles.css) */}
       <header className="mobile-topbar">
         <button
@@ -408,11 +446,16 @@ export default function App() {
       {mobileMenuOpen && (
         <div className="sidebar-backdrop" onClick={() => setMobileMenuOpen(false)} />
       )}
+      {compactScreen && compactOpen && (
+        <div className="sidebar-overlay-backdrop" onClick={() => setCompactOpen(false)} />
+      )}
 
-      <aside className={`sidebar${sidebarExpanded ? '' : ' collapsed'}${mobileMenuOpen ? ' mobile-open' : ''}`}>
+      <aside className={`sidebar${sidebarExpanded ? '' : ' collapsed'}${mobileMenuOpen ? ' mobile-open' : ''}${compactScreen && compactOpen ? ' overlay-open' : ''}`}>
         <button
           className="sidebar-toggle"
-          title={sidebarOpen ? 'Recolher barra lateral' : 'Expandir barra lateral'}
+          title={sidebarExpanded ? 'Recolher barra lateral' : 'Expandir barra lateral'}
+          aria-label={sidebarExpanded ? 'Recolher barra lateral' : 'Expandir barra lateral'}
+          aria-expanded={sidebarExpanded}
           onClick={toggleSidebar}
         >
           <IconChevronRight size={13} />

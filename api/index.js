@@ -16,6 +16,7 @@ import teamRoutes from './_lib/routes/team.js'
 import clientsRoutes from './_lib/routes/clients.js'
 import reportsRoutes from './_lib/routes/reports.js'
 import notificationsRoutes from './_lib/routes/notifications.js'
+import assistantRoutes from './_lib/routes/assistant.js'
 
 // Ponto de entrada da API. A Vercel publica o default export deste arquivo como
 // Serverless Function (vercel.json reescreve /api/* para cá); localmente quem
@@ -60,6 +61,16 @@ app.use(teamRoutes)
 app.use(clientsRoutes)
 app.use(reportsRoutes)
 app.use(notificationsRoutes)
+app.use(assistantRoutes)
+
+// Corpo inválido (JSON malformado, grande demais) responde em JSON, sem a página de erro do Express.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON inválido' })
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Conteúdo grande demais' })
+  console.error(err)
+  res.status(err?.status || 500).json({ error: 'Erro interno' })
+})
 
 export default app
 

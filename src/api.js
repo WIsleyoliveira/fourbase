@@ -55,6 +55,13 @@ export const api = {
 
   // perfil do usuário logado
   getProfile: () => request('/api/auth/me'),
+  // Assistente (ChatGPT): chaves de conexão e histórico do que ele criou (porta da tela, login normal)
+  listAssistantTokens: () => request('/api/assistant/tokens'),
+  createAssistantToken: (body) => request('/api/assistant/tokens', { method: 'POST', body: JSON.stringify(body) }),
+  revokeAssistantToken: (id) => request('/api/assistant/tokens/' + id, { method: 'DELETE' }),
+  listAssistantBatches: (before) => request('/api/assistant/app/batches' + (before ? '?before=' + encodeURIComponent(before) : '')),
+  getAssistantUndoPlan: (batchId) => request('/api/assistant/app/batches/' + encodeURIComponent(batchId) + '/undo-plan'),
+  undoAssistantBatch: (batchId, onlyIds) => request('/api/assistant/app/batches/' + encodeURIComponent(batchId) + '/undo', { method: 'POST', body: JSON.stringify({ only_ids: onlyIds }) }),
   updateProfile: (updates) =>
     request('/api/profile', { method: 'PATCH', body: JSON.stringify(updates) }),
   changePassword: (current_password, new_password) =>
