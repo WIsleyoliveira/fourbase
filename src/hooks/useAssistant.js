@@ -11,13 +11,14 @@ export const ASSISTANT_KEYS = {
   batches: (userId) => ['assistant', 'batches', userId],
 }
 
-export function useAssistantTokens({ testing = false } = {}) {
+export function useAssistantTokens({ testing = false, poll = true, enabled = true } = {}) {
   return useQuery({
     queryKey: ASSISTANT_KEYS.tokens(sessionUserId()),
     queryFn: api.listAssistantTokens,
+    enabled,
     staleTime: 0,
-    // teste: a cada 4 s; uso diário: a cada 30 s (pausa com a aba escondida)
-    refetchInterval: testing ? 4000 : 30000,
+    // teste: a cada 4 s; tela Assistente: a cada 30 s; Painel: sem polling (pausa com a aba escondida)
+    refetchInterval: testing ? 4000 : poll ? 30000 : false,
     refetchIntervalInBackground: false, // pausa com a aba escondida
   })
 }

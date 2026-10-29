@@ -1,7 +1,7 @@
 // Tela Assistente: status honesto, textos e instruções do GPT (sem chave, versão do aviso igual à do servidor).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { activityText, currentKey, deriveAssistantStatus, whenText } from '../src/assistantStatus.js'
+import { activityText, currentKey, deriveAssistantStatus, shortcutText, whenText } from '../src/assistantStatus.js'
 import { GPT_INSTRUCTIONS, GPT_INSTRUCTIONS_VERSION, CONVERSATION_STARTERS } from '../src/assistant/gptInstructions.js'
 import { NOTICE, NOTICE_VERSION } from '../src/assistant/notice.js'
 import { NOTICE_VERSION as SERVER_NOTICE_VERSION } from '../api/_lib/assistant.js'
@@ -37,6 +37,15 @@ test('evidência do selo nunca mostra conteúdo, só a operação e o período',
   assert.equal(activityText({ op: 'criarTarefas', count: 1 }), 'criou 1 tarefa')
   assert.equal(activityText({ op: 'outro' }), '')
   assert.equal(activityText(null), '')
+})
+
+test('atalho do Painel: um texto curto por estado', () => {
+  const ref = new Date(2026, 10, 10, 15, 0)
+  assert.equal(shortcutText({ state: 'never' }), 'Monte sua agenda conversando com o ChatGPT')
+  assert.equal(shortcutText({ state: 'off' }), 'Desconectado · conecte de novo')
+  assert.equal(shortcutText({ state: 'waiting' }), 'Aguardando o primeiro uso')
+  assert.equal(shortcutText({ state: 'stale' }), 'Sem uso há 30 dias')
+  assert.match(shortcutText({ state: 'active', key: { last_used_at: new Date(2026, 10, 10, 8, 12).toISOString() } }, ref), /^Conectado · última atividade hoje às 08:12$/)
 })
 
 test('quando: hoje / ontem / data', () => {

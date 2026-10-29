@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import Onboarding from './Onboarding.jsx'
-import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus, IconCheckPlain, IconCalendar } from '../icons.jsx'
+import { IconKanban, IconNotes, IconFolder, IconArrowRight, IconPlus, IconCheckPlain, IconCalendar, IconMessage } from '../icons.jsx'
 import Avatar from './Avatar.jsx'
 import QuickNoteModal from './QuickNoteModal.jsx'
 import { DONUT_RADIUS, donutSegments, todayAgenda } from '../dashboardData.js'
@@ -10,6 +10,8 @@ import { localToday } from '../notificationText.js'
 import TaskDetailModal from './TaskDetailModal.jsx'
 import { useMyTasks, useTaskActions } from '../hooks/useTasks.js'
 import { useFolders } from '../hooks/useFolders.js'
+import { useAssistantTokens } from '../hooks/useAssistant.js'
+import { deriveAssistantStatus, shortcutText } from '../assistantStatus.js'
 import { useNotes } from '../hooks/useNotes.js'
 import { useClients, useColumns, useMembers, useTagActions, useTags } from '../hooks/useWorkspaceData.js'
 import LoadingBlock, { anyLoading } from './LoadingBlock.jsx'
@@ -96,6 +98,9 @@ function DashboardView({
   // null = ainda carregando — mantém o widget com o mesmo layout enquanto busca
   const folders = useFolders()
   const folderCount = folders.data ? folders.data.length : folders.isError ? 0 : null
+  // Atalho do Assistente: só para gestor de empresa liberada (o servidor também barra)
+  const assistantOn = !!currentUser.assistant_enabled
+  const assistant = useAssistantTokens({ poll: false, enabled: assistantOn })
 
   // Os grupos seguem as colunas do quadro (nome, cor e posição que o gestor definiu)
   const buckets = columnBuckets(columns)
@@ -159,6 +164,14 @@ function DashboardView({
       action: { label: 'Criar tarefa', run: onCreateTask },
       subtitle: `${tasks.length} tarefa${tasks.length === 1 ? '' : 's'} · ${taskProgress}% concluído`,
     },
+    ...(assistantOn ? [{
+      key: 'assistente',
+      icon: <IconMessage size={18} />,
+      title: 'Assistente (ChatGPT)',
+      subtitle: assistant.data
+        ? shortcutText(deriveAssistantStatus(assistant.data.tokens))
+        : assistant.isError ? 'Gerenciar a conexão com o ChatGPT' : 'Carregando...',
+    }] : []),
   ]
 
   return (

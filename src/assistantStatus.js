@@ -40,6 +40,17 @@ export function whenText(iso, now = new Date()) {
   return `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${time}`
 }
 
+// Subtítulo do atalho "Assistente" no Painel principal
+export function shortcutText(status, now = new Date()) {
+  switch (status?.state) {
+    case 'waiting': return 'Aguardando o primeiro uso'
+    case 'active': return `Conectado · última atividade ${whenText(status.key.last_used_at, now)}`
+    case 'stale': return 'Sem uso há 30 dias'
+    case 'off': return 'Desconectado · conecte de novo'
+    default: return 'Monte sua agenda conversando com o ChatGPT'
+  }
+}
+
 const ACTIVITY = {
   verificarConexao: 'conferiu a conexão',
   verAgenda: 'consultou sua agenda',
