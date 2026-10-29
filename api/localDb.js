@@ -38,6 +38,7 @@ const WORKSPACE_SCOPED = [
   'fourbase_notifications',
   'fourbase_api_tokens',
   'fourbase_assistant_batches',
+  'fourbase_assistant_consents',
 ]
 
 const TABLES = ['weflow_workspaces', 'weflow_invitations', ...WORKSPACE_SCOPED]
@@ -67,7 +68,7 @@ const UNIQUE_COLUMNS = {
 const TIMESTAMPED = new Set([
   'fourbase_notes', 'fourbase_media', 'fourbase_folders', 'fourbase_folder_media',
   'fourbase_columns', 'fourbase_clients', 'fourbase_report_activities', 'fourbase_tasks',
-  'fourbase_tags', 'fourbase_notifications', 'fourbase_api_tokens', 'fourbase_assistant_batches',
+  'fourbase_tags', 'fourbase_notifications', 'fourbase_api_tokens', 'fourbase_assistant_batches', 'fourbase_assistant_consents',
   'weflow_workspaces', 'weflow_invitations',
 ])
 
@@ -138,6 +139,7 @@ function seedDb() {
     fourbase_notifications: [],
     fourbase_api_tokens: [],
     fourbase_assistant_batches: [],
+    fourbase_assistant_consents: [],
   }
 }
 

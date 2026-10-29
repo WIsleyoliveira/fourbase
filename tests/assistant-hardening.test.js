@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
+import { NOTICE_VERSION } from '../api/_lib/assistant.js'
 
 const PASSWORD = 'senha-teste-123'
 const now = new Date().toISOString()
@@ -24,7 +25,7 @@ const fixture = {
   fourbase_tasks: [], fourbase_notes: [], fourbase_todos: [], fourbase_media: [], fourbase_folders: [], fourbase_folder_media: [],
   fourbase_columns: [['todo', 'A Fazer'], ['done', 'Concluído']].map(([key, label], position) => ({ id: randomUUID(), workspace_id: ws, key, label, position, color: '#999999', created_at: now })),
   fourbase_clients: [], fourbase_report_activities: [], fourbase_tags: [], fourbase_notifications: [],
-  fourbase_api_tokens: [], fourbase_assistant_batches: [],
+  fourbase_api_tokens: [], fourbase_assistant_batches: [], fourbase_assistant_consents: [],
 }
 
 let server, base, jwt, tok
@@ -46,11 +47,12 @@ before(async () => {
   fs.writeFileSync(dbPath, JSON.stringify(fixture))
   process.env.FOURBASE_DB_PATH = dbPath
   delete process.env.SUPABASE_URL
+  process.env.APP_URL = 'https://fourbase.example'
   const { default: app } = await import('../api/index.js')
   await new Promise((resolve) => { server = app.listen(0, resolve) })
   base = `http://127.0.0.1:${server.address().port}`
   jwt = (await call(null, 'POST', '/api/auth/login', { email: 'g@a.test', password: PASSWORD })).body.token
-  tok = (await call(jwt, 'POST', '/api/assistant/tokens', {})).body.token
+  tok = (await call(jwt, 'POST', '/api/assistant/tokens', { notice_version: NOTICE_VERSION })).body.token
 })
 after(() => server?.close())
 
@@ -74,7 +76,8 @@ test('desfazer não apaga tarefa do lote que o gestor reatribuiu a outra pessoa'
   assert.equal(c.status, 201)
   assert.equal((await call(jwt, 'PATCH', `/api/tasks/${c.body.tasks[0].id}`, { assigned_to: id.func })).status, 200)
   const u = await call(tok, 'POST', '/api/assistant/batches/lote-reatrib-01/undo')
-  assert.deepEqual(u.body, { undone: 1, kept: 1 })
+  assert.equal(u.body.undone, 1)
+  assert.deepEqual(u.body.kept.map((k) => [k.title, k.reason]), [['Vai para a funcionária', 'reassigned']])
   const db = JSON.parse(fs.readFileSync(process.env.FOURBASE_DB_PATH, 'utf8')).fourbase_tasks.map((t) => t.title)
   assert.ok(db.includes('Vai para a funcionária'))
   assert.ok(!db.includes('Fica comigo'))

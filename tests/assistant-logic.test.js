@@ -2,7 +2,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate, isTokenShape, isValidBatchId, normalizeTaskInput,
+  batchItemOf, findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate, isTokenShape, isValidBatchId,
+  normalizeTaskInput, planUndo, taskFingerprint, toBatchView, todayIn,
 } from '../api/_lib/assistant.js'
 
 const today = '2026-10-28'
@@ -65,4 +66,65 @@ test('normalização: prioridade, cliente por nome, campos dependentes', () => {
 test('batch_id: só caracteres seguros, 8 a 80', () => {
   assert.equal(isValidBatchId('lote-2026-11-02:a.b_c'), true)
   for (const b of ['curto', 'com espaço aqui', '../../etc/passwd', 'x'.repeat(81), 12345678, null]) assert.equal(isValidBatchId(b), false)
+})
+
+const task = (over = {}) => ({
+  id: 't1', title: 'Reunião', description: '', priority: 'Média', due_date: '2026-11-10', due_date_end: null,
+  due_time: '10:00:00', due_time_end: null, column_key: 'todo', assigned_to: 'u1', client_id: null,
+  tags: ['ChatGPT'], mentioned_users: [], attachments: [], logged_time_seconds: 0, ...over,
+})
+
+test('impressão digital: estável (ordem de listas, formato de hora) e muda em cada campo editável', () => {
+  const base = taskFingerprint(task())
+  assert.equal(taskFingerprint(task({ due_time: '10:00', tags: ['ChatGPT'] })), base)
+  assert.equal(taskFingerprint(task({ mentioned_users: ['b', 'a'] })), taskFingerprint(task({ mentioned_users: ['a', 'b'] })))
+  assert.equal(taskFingerprint(task({ description: null, logged_time_seconds: null })), base, 'null e vazio são iguais')
+  for (const over of [{ title: 'x' }, { description: 'x' }, { priority: 'Alta' }, { due_date: '2026-11-11' }, { due_date_end: '2026-11-12' },
+    { due_time: '11:00' }, { due_time_end: '11:00' }, { column_key: 'doing' }, { assigned_to: 'u2' }, { client_id: 'c1' },
+    { tags: ['ChatGPT', 'X'] }, { mentioned_users: ['u3'] }, { attachments: ['https://a/b.png'] }, { logged_time_seconds: 60 }]) {
+    assert.notEqual(taskFingerprint(task(over)), base, JSON.stringify(over))
+  }
+})
+
+test('retrato do lote não guarda título nem descrição', () => {
+  const item = batchItemOf(task({ title: 'Segredo', description: 'CPF 123' }))
+  assert.deepEqual(Object.keys(item).sort(), ['due_date', 'due_date_end', 'fp', 'id'])
+})
+
+test('planUndo: intacta sai; motivos na ordem concluída > reatribuída > movida > editada; sumida conta como gone', () => {
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f']
+  const created = ids.map((id) => task({ id }))
+  const batch = { created_at: new Date().toISOString(), undone_at: null, items: created.map(batchItemOf) }
+  const now = [
+    task({ id: 'a' }),
+    task({ id: 'b', column_key: 'done', title: 'mudou também' }),
+    task({ id: 'c', assigned_to: 'u2', column_key: 'doing' }),
+    task({ id: 'd', column_key: 'doing' }),
+    task({ id: 'e', priority: 'Alta' }),
+  ]
+  const p = planUndo(batch, now, { userId: 'u1', firstColumn: 'todo' })
+  assert.deepEqual(p.remove.map((t) => t.id), ['a'])
+  assert.deepEqual(p.keep.map((t) => [t.id, t.reason]), [['b', 'done'], ['c', 'reassigned'], ['d', 'moved'], ['e', 'edited']])
+  assert.equal(p.gone, 1)
+  assert.deepEqual(planUndo(batch, now, { userId: 'u1', firstColumn: 'todo', onlyIds: [] }).remove, [], 'only_ids vazio não remove nada')
+  assert.equal(planUndo({ ...batch, undone_at: 'x' }, now, { userId: 'u1' }).already_undone, true)
+  assert.equal(planUndo({ ...batch, created_at: new Date(Date.now() - 49 * 3600000).toISOString() }, now, { userId: 'u1' }).expired, true)
+  // lote antigo sem retrato: na dúvida, mantém
+  assert.deepEqual(planUndo({ created_at: batch.created_at, task_ids: ['a'] }, now, { userId: 'u1' }).keep.map((t) => t.reason), ['edited'])
+})
+
+test('toBatchView: contagem, títulos vivos (até 5), intervalo de datas e prazo para desfazer', () => {
+  const created = Array.from({ length: 7 }, (_, i) => task({ id: 'k' + i, title: 'T' + i, due_date: '2026-11-1' + i, due_date_end: i === 6 ? '2026-11-20' : null }))
+  const batch = { batch_id: 'lote-xyz-0001', created_at: new Date().toISOString(), undone_at: null, items: created.map(batchItemOf) }
+  const v = toBatchView(batch, created.slice(1))
+  assert.equal(v.count, 7)
+  assert.deepEqual(v.titles, ['T1', 'T2', 'T3', 'T4', 'T5'])
+  assert.deepEqual(v.date_range, { from: '2026-11-10', to: '2026-11-20' })
+  assert.ok(v.undo_until)
+  assert.equal(toBatchView({ ...batch, undone_at: 'x' }, created).undo_until, null)
+})
+
+test('hoje no fuso de Brasília: 01:30 UTC ainda é o dia anterior', () => {
+  assert.equal(todayIn('America/Sao_Paulo', new Date('2026-11-02T01:30:00Z')), '2026-11-01')
+  assert.equal(todayIn('America/Sao_Paulo', new Date('2026-11-02T12:00:00Z')), '2026-11-02')
 })
