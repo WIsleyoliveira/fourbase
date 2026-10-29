@@ -188,6 +188,28 @@ export default function App() {
     navigate('/', { replace: true })
   }
 
+  // Ao abrir o app, relê o usuário no servidor: a sessão guardada no navegador pode ser de antes
+  // de uma mudança (nome, papel, Assistente liberado) e o menu depende desses campos. O token
+  // continua o mesmo; só os dados exibidos são atualizados.
+  const sessionToken = session?.token
+  useEffect(() => {
+    if (!sessionToken) return
+    let alive = true
+    api.getProfile()
+      .then((fresh) => {
+        if (!alive || !fresh?.id) return
+        setSession((cur) => {
+          if (!cur || cur.token !== sessionToken) return cur
+          const next = { ...cur, user: { ...cur.user, ...fresh } }
+          if (JSON.stringify(next.user) === JSON.stringify(cur.user)) return cur
+          setAuth(next)
+          return next
+        })
+      })
+      .catch(() => {}) // sem rede ou sessão expirada: o request já trata o 401
+    return () => { alive = false }
+  }, [sessionToken])
+
   // Perfil salvo: o backend devolve {token, user} com um JWT novo (o nome vai
   // assinado nele). Regrava a sessão para a sidebar refletir na hora, sem F5.
   const applyProfileUpdate = ({ token, user: updated }) => {
