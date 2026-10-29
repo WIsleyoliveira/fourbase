@@ -1,0 +1,100 @@
+{
+ "phase": "verdict",
+ "complete": false,
+ "idea": "Tornar a integração Assistente (ChatGPT) do fourbase didática para o gestor não técnico (Evandro): onboarding, explicação, configuração guiada e feedback",
+ "themeName": "Council",
+ "sessionId": "assistente-chatgpt-didatico-20261028-2123",
+ "date": "2026-10-28",
+ "mode": "standard",
+ "profile": "balanced",
+ "backend": "sequential",
+ "roster": [
+  {
+   "name": "Advocate",
+   "color": "#22c55e",
+   "score": 10,
+   "rationale": "Onboarding sozinho, linguagem, jornada",
+   "skills": [
+    "advocate-journey-mapping"
+   ],
+   "status": "active"
+  },
+  {
+   "name": "Architect",
+   "color": "#60a5fa",
+   "score": 9,
+   "rationale": "Token vs OAuth, tela, status e histórico",
+   "skills": [
+    "codebase-context",
+    "api-design"
+   ],
+   "status": "active"
+  },
+  {
+   "name": "Strategist",
+   "color": "#eab308",
+   "score": 8,
+   "rationale": "Escopo agora vs vários clientes",
+   "skills": [
+    "mvp-scoping"
+   ],
+   "status": "active"
+  },
+  {
+   "name": "Oracle",
+   "color": "#8b5cf6",
+   "score": 8,
+   "rationale": "GPT publicado e instruções",
+   "skills": [
+    "prompt-engineering"
+   ],
+   "status": "active"
+  },
+  {
+   "name": "Skeptic",
+   "color": "#ef4444",
+   "score": 7,
+   "rationale": "Segurança de OAuth e GPT público",
+   "skills": [
+    "threat-model"
+   ],
+   "status": "active"
+  },
+  {
+   "name": "Guardian",
+   "color": "#94a3b8",
+   "score": 7,
+   "rationale": "Dados na OpenAI, LGPD",
+   "skills": [
+    "compliance-review"
+   ],
+   "status": "active"
+  }
+ ],
+ "tensionPairs": [
+  {
+   "a": "Guardian",
+   "b": "Advocate",
+   "tension": "Autorização/interruptor/log já no A vs fluxo sem atrito"
+  },
+  {
+   "a": "Skeptic",
+   "b": "Advocate",
+   "tension": "Copiar chave, Conectado automático e desfazer 1 clique: ajuda ou risco"
+  },
+  {
+   "a": "Strategist",
+   "b": "Architect",
+   "tension": "A mínimo em ~1,5 semana vs preparar banco/contrato para B"
+  }
+ ],
+ "costEstimate": "~120-180K tokens",
+ "phases": [
+  "interview",
+  "assembly",
+  "deliberation",
+  "verdict",
+  "planning",
+  "verification"
+ ]
+}
