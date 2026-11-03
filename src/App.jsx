@@ -19,6 +19,7 @@ import ClientWorkspace from './components/ClientWorkspace.jsx'
 import ReportsView from './components/ReportsView.jsx'
 import ProfileView from './components/ProfileView.jsx'
 import AssistantView from './components/AssistantView.jsx'
+import ConnectView from './components/ConnectView.jsx'
 import NewTaskModal from './components/NewTaskModal.jsx'
 import NotificationBell from './components/NotificationBell.jsx'
 import TaskPeekModal from './components/TaskPeekModal.jsx'
@@ -58,6 +59,15 @@ const VIEWS = [
 
 // Fica fora de VIEWS de propósito: é renderizado no bloco inferior da sidebar,
 // junto do card do usuário, e não na lista principal de navegação.
+// Página que o ChatGPT abre para o gestor autorizar a conexão (login OAuth). Fora do menu.
+const CONNECT_VIEW = {
+  key: 'conectar',
+  label: 'Conectar',
+  icon: IconMessage,
+  title: 'Conectar o ChatGPT',
+  subtitle: 'Autorize o acesso à sua agenda',
+}
+
 const PROFILE_VIEW = {
   key: 'perfil',
   label: 'Meu Perfil',
@@ -265,7 +275,7 @@ export default function App() {
   // cai no painel (replace: não deixa a URL ruim no histórico).
   const isGestorSession = session?.user?.role === 'gestor'
   const blockedForRole = (GESTOR_ONLY_VIEWS.includes(view) && !isGestorSession)
-    || (view === 'assistente' && !session?.user?.assistant_enabled)
+    || ((view === 'assistente' || view === 'conectar') && !session?.user?.assistant_enabled)
   useEffect(() => {
     if (activationToken || !session) return
     if (!route.valid || blockedForRole) navigate(viewPath(DEFAULT_VIEW), { replace: true })
@@ -323,7 +333,7 @@ export default function App() {
   const user = session.user
   const isGestor = user.role === 'gestor'
   const visibleViews = VIEWS.filter((v) => (!v.gestorOnly || isGestor) && (!v.requires || user[v.requires]))
-  const baseView = [...VIEWS, PROFILE_VIEW, CADASTRO_VIEW, EQUIPE_VIEW].find((v) => v.key === view) || VIEWS[0]
+  const baseView = [...VIEWS, PROFILE_VIEW, CADASTRO_VIEW, EQUIPE_VIEW, CONNECT_VIEW].find((v) => v.key === view) || VIEWS[0]
   // No workspace de um cliente, o cabeçalho passa a identificar o cliente aberto
   const current = selectedClient
     ? { title: selectedClient.name || 'Cliente sem nome', subtitle: 'Espaço do cliente · Kanban e Documentações' }
@@ -379,6 +389,8 @@ export default function App() {
             onError={handleError}
           />
         )
+      case 'conectar':
+        return isGestor && user.assistant_enabled ? <ConnectView /> : null
       case 'assistente':
         return isGestor && user.assistant_enabled ? <AssistantView onOpenKanban={() => changeView('kanban')} /> : null
       case 'relatorios':

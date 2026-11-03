@@ -28,13 +28,14 @@ test('status: "ativa" só com uso da chave ATUAL; a mais recente válida vale', 
   const a = key({ id: 'a', created_at: '2026-11-01T00:00:00Z' })
   const b = key({ id: 'b', created_at: '2026-11-04T00:00:00Z' })
   assert.equal(currentKey([a, b], now).id, 'b')
-  assert.equal(currentKey([key({ kind: 'oauth' })], now), null, 'conexões OAuth (fase B) não entram aqui')
+  assert.equal(currentKey([key({ kind: 'oauth' })], now).kind, 'oauth', 'a conexão do app (OAuth) também é uma conexão')
 })
 
 test('evidência do selo nunca mostra conteúdo, só a operação e o período', () => {
   assert.equal(activityText({ op: 'verAgenda', from: '2026-11-03', to: '2026-11-09' }), 'consultou sua agenda de 03/11 a 09/11')
   assert.equal(activityText({ op: 'verAgenda', from: '2026-11-03', to: '2026-11-03' }), 'consultou sua agenda de 03/11')
   assert.equal(activityText({ op: 'criarTarefas', count: 1 }), 'criou 1 tarefa')
+  assert.equal(activityText({ op: 'conectar' }), 'conectou o app')
   assert.equal(activityText({ op: 'outro' }), '')
   assert.equal(activityText(null), '')
 })
@@ -71,4 +72,18 @@ test('instruções do GPT: dentro do limite, versionadas e sem chave', () => {
     assert.ok(GPT_INSTRUCTIONS.includes(op), op)
   }
   assert.equal(CONVERSATION_STARTERS.length, 4)
+})
+
+test('/conectar: só repassa os campos do pedido e só volta para endereços do ChatGPT', async () => {
+  const { readOAuthRequest, isSafeRedirect } = await import('../src/assistant/oauthRedirect.js')
+  const r = readOAuthRequest('?client_id=fbc_x&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2Fa&state=s&code_challenge=c&code_challenge_method=S256&resource=r&scope=a&extra=1')
+  assert.deepEqual(Object.keys(r).sort(), ['client_id', 'code_challenge', 'code_challenge_method', 'redirect_uri', 'resource', 'scope', 'state'])
+  assert.equal(readOAuthRequest('?client_id=' + 'x'.repeat(3000)).client_id, undefined)
+  assert.equal(isSafeRedirect('https://chatgpt.com/connector/oauth/abc?code=1'), true)
+  assert.equal(isSafeRedirect('https://platform.openai.com/apps-manage/oauth'), true)
+  for (const bad of ['https://chatgpt.com.evil.example/x', 'https://evil.example/', 'http://chatgpt.com/x', 'javascript:alert(1)', 'https://user:pw@chatgpt.com/x', 'não é url', '']) {
+    assert.equal(isSafeRedirect(bad), false, bad)
+  }
+  assert.equal(isSafeRedirect('http://localhost:3000/cb'), false)
+  assert.equal(isSafeRedirect('http://localhost:3000/cb', { allowLocal: true }), true)
 })

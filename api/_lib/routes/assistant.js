@@ -70,6 +70,7 @@ router.get('/api/assistant/tokens', ...screen, asyncRoute(async (req, res) => {
     tokens: (data || []).map(({ id, name, kind, prefix, created_at, last_used_at, last_activity, expires_at, revoked_at }) =>
       ({ id, name, kind, prefix, created_at, last_used_at, last_activity: last_activity ?? null, expires_at, revoked_at })),
     openapi_url: appUrl() ? `${appUrl()}/api/assistant/openapi.json` : null,
+    mcp_url: appUrl() ? `${appUrl()}/api/mcp` : null,
     notice: { current_version: NOTICE_VERSION, accepted_version: last?.notice_version ?? null, accepted_at: last?.created_at ?? null },
   })
 }))

@@ -10,7 +10,7 @@ const live = (t, now) => !t.revoked_at && Date.parse(t.expires_at) > now
 // A conexão "atual" é a chave pessoal válida mais recente.
 export function currentKey(tokens = [], now = Date.now()) {
   return tokens
-    .filter((t) => (t.kind || 'personal') === 'personal' && live(t, now))
+    .filter((t) => live(t, now))
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0] || null
 }
 
@@ -52,6 +52,7 @@ export function shortcutText(status, now = new Date()) {
 }
 
 const ACTIVITY = {
+  conectar: 'conectou o app',
   verificarConexao: 'conferiu a conexão',
   verAgenda: 'consultou sua agenda',
   listarClientes: 'consultou a lista de clientes',
