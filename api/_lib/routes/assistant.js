@@ -213,6 +213,14 @@ const deny = (req, res, status, error) => {
   return res.status(status).json({ error })
 }
 
+// 401 de um token que EXISTE (expirado, desligado, dono sem acesso): não é chute de chave, então não conta no
+// limite por IP. O ChatGPT renova o token de acesso a cada hora; se isso contasse, vários usuários atrás do
+// mesmo IP da OpenAI poderiam travar a própria renovação.
+const reject = (req, res, error) => {
+  if (req.wwwAuthenticate) res.set('WWW-Authenticate', req.wwwAuthenticate)
+  return res.status(401).json({ error })
+}
+
 const usage = new Map() // tokenId -> { windowStart, count } (em memória; aproximado na Vercel)
 const USAGE_LIMIT = 120
 function overUsage(tokenId) {
@@ -234,15 +242,16 @@ const authenticate = async (scope, req, res, next) => {
   const { data: row, error } = await supabase
     .from('fourbase_api_tokens').select('*').eq('token_hash', hashToken(token)).maybeSingle()
   if (error) throw error
-  if (!row || !isLive(row)) return deny(req, res, 401, OFF)
+  if (!row) return deny(req, res, 401, OFF) // desconhecido: pode ser chute, conta no limite
+  if (!isLive(row)) return reject(req, res, OFF)
   // token de acesso do OAuth vale 1 hora; a renovação (token de renovação) emite outro
-  if (row.kind === 'oauth' && !(row.access_expires_at && Date.parse(row.access_expires_at) > Date.now())) return deny(req, res, 401, OFF)
+  if (row.kind === 'oauth' && !(row.access_expires_at && Date.parse(row.access_expires_at) > Date.now())) return reject(req, res, OFF)
   if ((row.kind === 'oauth') !== token.startsWith('fbo_')) return deny(req, res, 401, OFF)
   if (!Array.isArray(row.scopes) || !row.scopes.includes(scope)) return deny(req, res, 403, 'Esta conexão não tem permissão para isso.')
   // Papel e status lidos do banco a cada chamada: quem deixou de ser gestor (ou foi desativado) perde o acesso.
   const { data: user } = await supabase
     .from('fourbase_users').select('*').eq('id', row.user_id).eq('workspace_id', row.workspace_id).maybeSingle()
-  if (!isActiveGestor(user)) return deny(req, res, 401, OFF)
+  if (!isActiveGestor(user)) return reject(req, res, OFF)
   if (!assistantEnabledForUser(user)) return res.status(403).json({ error: NOT_ENABLED })
   if (overUsage(row.id)) return res.status(429).json({ error: 'Muitas chamadas. Aguarde um minuto.' })
   req.user = { id: user.id, name: user.name, role: user.role, workspace_id: user.workspace_id }

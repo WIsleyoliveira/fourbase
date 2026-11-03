@@ -91,6 +91,17 @@ test('erros de validação de um token válido não bloqueiam o dono', async () 
   assert.equal((await call(tok, 'GET', '/api/assistant/clients')).status, 200)
 })
 
+test('token que existe mas expirou/foi desligado não conta como força bruta (renovação do ChatGPT)', async () => {
+  const k = (await call(jwt, 'POST', '/api/assistant/tokens', { notice_version: NOTICE_VERSION })).body
+  const rows = JSON.parse(fs.readFileSync(process.env.FOURBASE_DB_PATH, 'utf8')).fourbase_api_tokens
+  assert.ok(rows.some((r) => r.id === k.id))
+  assert.equal((await call(jwt, 'DELETE', `/api/assistant/tokens/${k.id}`)).status, 204)
+  // 40 chamadas com um token desligado (existe no banco): sempre 401, nunca 429
+  const st = []
+  for (let i = 0; i < 40; i++) st.push((await call(k.token, 'GET', '/api/assistant/clients')).status)
+  assert.deepEqual([...new Set(st)], [401])
+})
+
 test('força bruta: após 30 tokens inválidos o IP recebe 429, mas o token válido continua passando', async () => {
   const st = []
   for (let i = 0; i < 32; i++) st.push((await call('fbk_' + String(i).padStart(43, 'Z'), 'GET', '/api/assistant/clients')).status)

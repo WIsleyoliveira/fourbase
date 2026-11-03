@@ -193,6 +193,8 @@ test('troca do código: PKCE, uso único, expiração, cliente e endereço têm 
   const c = await fresh()
   const [r1, r2] = await Promise.all([ex(c.code, c.p), ex(c.code, c.p)])
   assert.deepEqual([r1.status, r2.status].sort(), [200, 400])
+  const won = [r1, r2].find((r) => r.status === 200).body.access_token
+  assert.equal((await rpc(won, 'ping')).status, 200, 'o pedido perdedor não derruba a conexão do vencedor')
   // expirado
   const d = await fresh()
   await setRow('fourbase_oauth_codes', { client_id: client.client_id }, { expires_at: new Date(Date.now() - 1000).toISOString(), created_at: new Date(Date.now() - 600000).toISOString() })
@@ -215,10 +217,14 @@ test('fluxo completo: token de acesso e de renovação, resposta no padrão, só
   assert.ok(!JSON.stringify(db()).includes(c.access_token) && !JSON.stringify(db()).includes(c.refresh_token), 'nada em claro')
   const consent = db().fourbase_assistant_consents.filter((x) => x.user_id === id.gestorA && x.event === 'authorized').at(-1)
   assert.equal(consent.notice_version, NOTICE_VERSION)
-  // replay do código: recusado e desliga o que ele gerou
-  const replay = await call('POST', '/api/oauth/token', { form: { grant_type: 'authorization_code', code: c.code, client_id: c.client.client_id, redirect_uri: REDIRECT, code_verifier: c.p.verifier } })
-  assert.equal(replay.body.error, 'invalid_grant')
-  assert.equal((await rpc(c.access_token, 'ping')).status, 401, 'código reaproveitado desliga a conexão')
+  const again = () => call('POST', '/api/oauth/token', { form: { grant_type: 'authorization_code', code: c.code, client_id: c.client.client_id, redirect_uri: REDIRECT, code_verifier: c.p.verifier } })
+  // pedido repetido logo depois (resposta lenta, repetição): recusado, mas a conexão do primeiro continua valendo
+  assert.equal((await again()).body.error, 'invalid_grant')
+  assert.equal((await rpc(c.access_token, 'ping')).status, 200, 'repetição imediata não derruba a conexão')
+  // código reaproveitado muito depois: possível interceptação, desliga o que ele gerou
+  await setRow('fourbase_oauth_codes', { client_id: c.client.client_id }, { used_at: new Date(Date.now() - 60000).toISOString() })
+  assert.equal((await again()).body.error, 'invalid_grant')
+  assert.equal((await rpc(c.access_token, 'ping')).status, 401, 'código reaproveitado tarde desliga a conexão')
 })
 
 test('MCP: sem token → 401 com o endereço dos metadados; GET/DELETE → 405; origem desconhecida → 403', async () => {

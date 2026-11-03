@@ -143,6 +143,7 @@ router.post('/api/oauth/authorize', killSwitch, ...screen, asyncRoute(async (req
 }))
 
 // ---------- Token ----------
+const REPLAY_GRACE_MS = 30 * 1000
 const tokenError = (res, status, error, error_description) =>
   res.status(status).set({ 'Cache-Control': 'no-store', Pragma: 'no-cache' }).json({ error, error_description })
 
@@ -167,8 +168,10 @@ async function exchangeCode(req, res) {
   const { data: row } = await supabase.from('fourbase_oauth_codes').select('*').eq('code_hash', hashSecret(String(code))).maybeSingle()
   if (!row) return tokenError(res, 400, 'invalid_grant', 'Código inválido')
   if (row.used_at) {
-    // código reaproveitado: possível interceptação — desliga o que ele gerou
-    await revokeConnections(row.user_id, row.client_id, 'user')
+    // Reaproveitado DEPOIS da janela de tolerância: possível interceptação — desliga o que ele gerou.
+    // Dentro da janela é só um pedido repetido (resposta lenta, repetição do ChatGPT, dois pedidos juntos):
+    // recusa sem desligar, senão a conexão que o primeiro pedido acabou de criar morreria.
+    if (Date.now() - Date.parse(row.used_at) > REPLAY_GRACE_MS) await revokeConnections(row.user_id, row.client_id, 'user')
     return tokenError(res, 400, 'invalid_grant', 'Código já usado')
   }
   if (Date.parse(row.expires_at) <= Date.now()) return tokenError(res, 400, 'invalid_grant', 'Código expirado')
