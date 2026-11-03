@@ -37,7 +37,8 @@ export function assistantEnabledForUser(user, env = process.env) {
 export const generateToken = () => TOKEN_PREFIX + randomBytes(32).toString('base64url')
 export const hashToken = (token) => createHash('sha256').update(String(token)).digest('hex')
 export const tokenPrefixOf = (token) => token.slice(0, TOKEN_PREFIX.length + 6)
-export const isTokenShape = (value) => typeof value === 'string' && /^fbk_[A-Za-z0-9_-]{40,60}$/.test(value)
+// fbk_ = chave pessoal (GPT/Ação); fbo_ = token de acesso do login OAuth (servidor MCP)
+export const isTokenShape = (value) => typeof value === 'string' && /^fb[ko]_[A-Za-z0-9_-]{40,60}$/.test(value)
 
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
 

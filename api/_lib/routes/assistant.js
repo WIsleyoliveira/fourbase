@@ -38,6 +38,12 @@ const enabledForUser = (req, res, next) => (async () => {
   next()
 })().catch((err) => { console.error(err); res.status(500).json({ error: 'Erro interno' }) })
 const screen = [auth, gestorOnly, enabledForUser]
+export { screen }
+// Interruptor geral para as outras portas (OAuth e MCP), com a mesma regra do /api/assistant
+export const killSwitch = (req, res, next) =>
+  process.env.ASSISTANT_ENABLED === 'false'
+    ? res.status(503).json({ error: 'O Assistente está temporariamente desligado.' })
+    : next()
 
 const isActiveGestor = (u) => !!u && u.role === 'gestor' && u.status !== 'inactive'
 const isLive = (t, now = Date.now()) => !t.revoked_at && Date.parse(t.expires_at) > now
@@ -199,6 +205,7 @@ function recordFailure(ip) {
 }
 const deny = (req, res, status, error) => {
   if (status === 401) {
+    if (req.wwwAuthenticate) res.set('WWW-Authenticate', req.wwwAuthenticate)
     if (failureCount(req.ip) >= FAIL_LIMIT) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos.' })
     recordFailure(req.ip)
   }
@@ -227,6 +234,9 @@ const authenticate = async (scope, req, res, next) => {
     .from('fourbase_api_tokens').select('*').eq('token_hash', hashToken(token)).maybeSingle()
   if (error) throw error
   if (!row || !isLive(row)) return deny(req, res, 401, OFF)
+  // token de acesso do OAuth vale 1 hora; a renovação (token de renovação) emite outro
+  if (row.kind === 'oauth' && !(row.access_expires_at && Date.parse(row.access_expires_at) > Date.now())) return deny(req, res, 401, OFF)
+  if ((row.kind === 'oauth') !== token.startsWith('fbo_')) return deny(req, res, 401, OFF)
   if (!Array.isArray(row.scopes) || !row.scopes.includes(scope)) return deny(req, res, 403, 'Esta conexão não tem permissão para isso.')
   // Papel e status lidos do banco a cada chamada: quem deixou de ser gestor (ou foi desativado) perde o acesso.
   const { data: user } = await supabase

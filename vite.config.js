@@ -15,6 +15,11 @@ export default defineConfig({
         target: `http://localhost:${apiPort}`,
         changeOrigin: true,
       },
+      // descoberta do login OAuth do Assistente (MCP)
+      '/.well-known': {
+        target: `http://localhost:${apiPort}`,
+        changeOrigin: true,
+      },
     },
   },
 })
