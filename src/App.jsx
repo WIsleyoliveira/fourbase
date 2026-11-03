@@ -606,7 +606,8 @@ export default function App() {
           onClose={() => setKanbanDraft(null)}
         />
       )}
-      {whatsNewOpen && (
+      {/* nunca por cima da autorização do ChatGPT (/conectar): a pessoa está no meio de uma decisão */}
+      {whatsNewOpen && view !== 'conectar' && (
         <WhatsNewModal
           releases={RELEASES}
           onClose={closeWhatsNew}
