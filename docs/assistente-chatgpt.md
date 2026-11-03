@@ -32,18 +32,24 @@ MCP com escrita a alguns planos — **conferir na conta**).
    `code_challenge_methods_supported: [S256]`, cliente público (`none`). Vercel reescreve `/.well-known/*` para a API.
 3. Registro (DCR) `POST /api/oauth/register`: **só endereços de retorno do ChatGPT/OpenAI** (`chatgpt.com/connector_platform_oauth_redirect`,
    `chatgpt.com/connector/oauth/<id>`, `platform.openai.com/apps-manage/oauth`; local só fora de produção); 30 por IP/hora.
+   Outro método de autenticação pedido não é recusado: a resposta diz `none` (cliente público; PKCE no lugar de segredo).
+   **Trava opcional `OAUTH_ALLOWED_REDIRECTS`** (endereços exatos): preenchida, só eles registram **e** autorizam — quem registrasse um app
+   apontando para o próprio ChatGPT não receberia código de ninguém. A tela `/conectar` mostra para onde o navegador volta.
 4. `/conectar` (tela, login normal do gestor; só empresa/pessoa liberada) → `POST /api/oauth/authorize` com a versão atual
    do aviso → grava a **autorização** (`fourbase_assistant_consents`) e devolve o código (uso único, 5 min, hash, PKCE) ao ChatGPT.
    Pedido inválido **nunca redireciona** (erro na tela).
 5. `POST /api/oauth/token`: troca o código (PKCE, `redirect_uri`, `client_id`, `resource`) por **token de acesso `fbo_` (1 h)** e
-   **de renovação `fbr_` (troca a cada uso; a conexão vai até 90 dias à frente)**. Só hashes no banco. Reconectar desliga a anterior.
+   **de renovação `fbr_` (troca a cada uso; a conexão vai até 90 dias à frente)**; o escopo devolvido inclui `offline_access`. Só hashes no banco.
+   Os tokens são **derivados** (HMAC com `JWT_SECRET` do id da conexão + geração): repetir a renovação com o token que acabou de ser
+   trocado (**até 60 s**: resposta perdida, dois pedidos juntos) devolve exatamente os mesmos tokens e não derruba nada; o mesmo token
+   voltando **depois de 60 s** é tratado como cópia roubada e desliga a conexão. Reconectar desliga a anterior.
    Código reaproveitado **depois de 30 s** desliga o que ele gerou; repetição imediata só é recusada (não derruba o vencedor).
 6. Cada conexão é uma linha de `fourbase_api_tokens` (`kind='oauth'`) que a tela Assistente lista e **Desconecta** (corta na hora).
    Gestor rebaixado/desativado ou empresa fora da liberação perde acesso e renovação.
 7. Ferramentas MCP (`api/_lib/mcp.js`): `verificar_conexao`, `ver_agenda`, `listar_clientes`, `conferir_tarefas`, `criar_tarefas`,
    `listar_lotes`, `desfazer_lote`. Só leitura = `readOnlyHint`; criar/desfazer pedem **Permitir** (`destructiveHint` no desfazer).
    O servidor manda `instructions` (o texto do assistente) no `initialize`.
-8. Segurança extra: `Origin` desconhecido → 403 (DNS rebinding); 401 de token que existe (expirado) **não** conta no limite por IP
+8. Segurança extra: `Origin` que não seja do ChatGPT/OpenAI (nem do próprio fourbase) → 403 (DNS rebinding); 401 de token que existe (expirado) **não** conta no limite por IP
    (IPs da OpenAI são compartilhados); `ASSISTANT_ENABLED=false` desliga descoberta, login e MCP.
 
 O caminho antigo (GPT personalizado com chave `fbk_` + Ações) segue funcionando enquanto a OpenAI mantiver os GPTs

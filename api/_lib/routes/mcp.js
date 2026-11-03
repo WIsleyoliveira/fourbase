@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { appUrl } from '../assistantService.js'
 import { handleMessage } from '../mcp.js'
+import { logOAuth } from '../oauth.js'
 import { assistantAuth, killSwitch } from './assistant.js'
 
 // Servidor MCP do fourbase para o ChatGPT: POST /api/mcp (JSON-RPC, sem estado).
@@ -15,9 +16,18 @@ const allowedOrigins = () => new Set([
   'https://chatgpt.com', 'https://chat.openai.com', 'https://platform.openai.com',
   ...(appUrl() ? [new URL(appUrl()).origin] : []),
 ])
+const openaiOrigin = (origin) => {
+  try {
+    const u = new URL(origin)
+    return u.protocol === 'https:' && /(^|\.)(chatgpt|openai)\.com$/.test(u.hostname)
+  } catch { return false }
+}
 const originGuard = (req, res, next) => {
   const origin = req.headers.origin
-  if (origin && !allowedOrigins().has(origin)) return res.status(403).json({ error: 'Origem não permitida' })
+  if (origin && !allowedOrigins().has(origin) && !openaiOrigin(origin)) {
+    logOAuth('origem_recusada', { origem: String(origin).slice(0, 120) })
+    return res.status(403).json({ error: 'Origem não permitida' })
+  }
   next()
 }
 

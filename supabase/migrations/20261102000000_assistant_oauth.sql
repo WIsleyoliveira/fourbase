@@ -9,6 +9,9 @@
 --   refresh_hash       hash do token de renovação atual (troca a cada uso; vale até refresh_expires_at)
 --   expires_at         fim da conexão = fim do token de renovação (renovar estende, no máx. 90 dias à frente)
 --   oauth_client_id    qual aplicativo (o ChatGPT) recebeu o acesso
+--   refresh_gen        geração dos tokens (os tokens são derivados do id da conexão + geração, ver api/_lib/oauth.js)
+--   prev_refresh_hash  hash do token de renovação ANTERIOR e prev_refresh_at (quando foi trocado): permite repetir
+--                      a renovação por até 60 s sem derrubar a conexão (resposta perdida, pedidos simultâneos)
 -- Tokens e códigos NUNCA são guardados: só o hash SHA-256.
 
 create table if not exists fourbase_oauth_clients (
@@ -42,8 +45,14 @@ alter table fourbase_api_tokens add column if not exists access_expires_at  time
 alter table fourbase_api_tokens add column if not exists refresh_hash       text;
 alter table fourbase_api_tokens add column if not exists refresh_expires_at timestamptz;
 
+alter table fourbase_api_tokens add column if not exists refresh_gen        integer;
+alter table fourbase_api_tokens add column if not exists prev_refresh_hash  text;
+alter table fourbase_api_tokens add column if not exists prev_refresh_at    timestamptz;
+
 create unique index if not exists fourbase_api_tokens_refresh_hash_idx
   on fourbase_api_tokens (refresh_hash) where refresh_hash is not null;
+create index if not exists fourbase_api_tokens_prev_refresh_idx
+  on fourbase_api_tokens (prev_refresh_hash) where prev_refresh_hash is not null;
 
 -- RLS ligado e SEM policies: só a API (service_role) alcança as tabelas. Nunca criar policy permissiva.
 alter table fourbase_oauth_clients enable row level security;

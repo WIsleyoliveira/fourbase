@@ -7,6 +7,7 @@ import {
   appUrl, listBatches, loadBatch, opAgenda, opBatches, opClients, opCreate, opMe, opPreview, opUndo, planFor, undoBatch,
 } from '../assistantService.js'
 import { runInBackground } from '../mailer.js'
+import { logOAuth } from '../oauth.js'
 import {
   DEFAULT_TOKEN_DAYS, MAX_ACTIVE_TOKENS, NOTICE_VERSION, SCOPES,
   assistantEnabledForUser, buildOpenApi, generateToken, hashToken, isTokenShape, tokenPrefixOf, toBatchView, undoDeadline,
@@ -204,7 +205,8 @@ function recordFailure(ip) {
   if (!f || now - f.start >= FAIL_WINDOW_MS) failures.set(ip, { start: now, count: 1 })
   else f.count += 1
 }
-const deny = (req, res, status, error) => {
+const deny = (req, res, status, error, why = 'negado') => {
+  logOAuth('acesso_negado', { status, motivo: why, rota: req.path })
   if (status === 401) {
     if (req.wwwAuthenticate) res.set('WWW-Authenticate', req.wwwAuthenticate)
     if (failureCount(req.ip) >= FAIL_LIMIT) return res.status(429).json({ error: 'Muitas tentativas. Aguarde alguns minutos.' })
@@ -216,7 +218,8 @@ const deny = (req, res, status, error) => {
 // 401 de um token que EXISTE (expirado, desligado, dono sem acesso): não é chute de chave, então não conta no
 // limite por IP. O ChatGPT renova o token de acesso a cada hora; se isso contasse, vários usuários atrás do
 // mesmo IP da OpenAI poderiam travar a própria renovação.
-const reject = (req, res, error) => {
+const reject = (req, res, error, why = 'rejeitado') => {
+  logOAuth('acesso_negado', { status: 401, motivo: why, rota: req.path })
   if (req.wwwAuthenticate) res.set('WWW-Authenticate', req.wwwAuthenticate)
   return res.status(401).json({ error })
 }
@@ -238,20 +241,20 @@ const assistantAuth = (scope) => (req, res, next) => authenticate(scope, req, re
 })
 const authenticate = async (scope, req, res, next) => {
   const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  if (!isTokenShape(token)) return deny(req, res, 401, OFF)
+  if (!isTokenShape(token)) return deny(req, res, 401, OFF, token ? 'formato_do_token' : 'sem_token')
   const { data: row, error } = await supabase
     .from('fourbase_api_tokens').select('*').eq('token_hash', hashToken(token)).maybeSingle()
   if (error) throw error
-  if (!row) return deny(req, res, 401, OFF) // desconhecido: pode ser chute, conta no limite
-  if (!isLive(row)) return reject(req, res, OFF)
+  if (!row) return deny(req, res, 401, OFF, 'token_desconhecido') // desconhecido: pode ser chute, conta no limite
+  if (!isLive(row)) return reject(req, res, OFF, 'conexao_desligada_ou_vencida')
   // token de acesso do OAuth vale 1 hora; a renovação (token de renovação) emite outro
-  if (row.kind === 'oauth' && !(row.access_expires_at && Date.parse(row.access_expires_at) > Date.now())) return reject(req, res, OFF)
-  if ((row.kind === 'oauth') !== token.startsWith('fbo_')) return deny(req, res, 401, OFF)
-  if (!Array.isArray(row.scopes) || !row.scopes.includes(scope)) return deny(req, res, 403, 'Esta conexão não tem permissão para isso.')
+  if (row.kind === 'oauth' && !(row.access_expires_at && Date.parse(row.access_expires_at) > Date.now())) return reject(req, res, OFF, 'token_de_acesso_vencido')
+  if ((row.kind === 'oauth') !== token.startsWith('fbo_')) return deny(req, res, 401, OFF, 'tipo_do_token')
+  if (!Array.isArray(row.scopes) || !row.scopes.includes(scope)) return deny(req, res, 403, 'Esta conexão não tem permissão para isso.', 'sem_escopo')
   // Papel e status lidos do banco a cada chamada: quem deixou de ser gestor (ou foi desativado) perde o acesso.
   const { data: user } = await supabase
     .from('fourbase_users').select('*').eq('id', row.user_id).eq('workspace_id', row.workspace_id).maybeSingle()
-  if (!isActiveGestor(user)) return reject(req, res, OFF)
+  if (!isActiveGestor(user)) return reject(req, res, OFF, 'usuario_sem_acesso')
   if (!assistantEnabledForUser(user)) return res.status(403).json({ error: NOT_ENABLED })
   if (overUsage(row.id)) return res.status(429).json({ error: 'Muitas chamadas. Aguarde um minuto.' })
   req.user = { id: user.id, name: user.name, role: user.role, workspace_id: user.workspace_id }

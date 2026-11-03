@@ -21,7 +21,7 @@ export default function ConnectView() {
       return undefined
     }
     api.oauthCheck({ client_id: request.client_id, redirect_uri: request.redirect_uri })
-      .then((r) => { if (alive) setState({ phase: 'ready', clientName: r.client_name }) })
+      .then((r) => { if (alive) setState({ phase: 'ready', clientName: r.client_name, destination: r.destination }) })
       .catch((err) => {
         if (!alive) return
         setState({ phase: /disponível/i.test(err.message) ? 'blocked' : 'invalid' })
@@ -66,6 +66,11 @@ export default function ConnectView() {
       <section className="panel">
         <h2>Conectar o {state.clientName || 'ChatGPT'} ao seu fourbase</h2>
         <p>Você está dando ao ChatGPT acesso à sua agenda no fourbase. Leia o aviso e decida.</p>
+        {state.destination && (
+          <p className="asst-muted" data-testid="connect-destination">
+            Depois de autorizar, o navegador volta para <strong>{state.destination}</strong>. Se esse não for o endereço do ChatGPT, clique em Cancelar.
+          </p>
+        )}
         <NoticeBox />
         <p className="asst-consent">{NOTICE.consent}</p>
         <div className="asst-actions">

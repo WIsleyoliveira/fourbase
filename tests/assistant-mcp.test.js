@@ -7,7 +7,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
-import { NOTICE_VERSION } from '../api/_lib/assistant.js'
+import { NOTICE_VERSION, isTokenShape } from '../api/_lib/assistant.js'
+import { deriveAccessToken, deriveRefreshToken, isAllowedRedirectUri } from '../api/_lib/oauth.js'
 
 const PASSWORD = 'senha-teste-123'
 const APP = 'https://fourbase.example'
@@ -96,6 +97,7 @@ before(async () => {
   process.env.ASSISTANT_WORKSPACE_IDS = '*'
   delete process.env.SUPABASE_URL
   delete process.env.ASSISTANT_ENABLED
+  process.env.OAUTH_REGISTER_LIMIT = '100000' // os testes registram muitos aplicativos do mesmo IP
   const { default: app } = await import('../api/index.js')
   ;({ supabase: sb } = await import('../api/_lib/supabase.js'))
   await new Promise((resolve) => { server = app.listen(0, resolve) })
@@ -140,8 +142,50 @@ test('registro: só endereços do ChatGPT; só cliente público', async () => {
   }
   assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: [] } })).status, 400)
   assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: [REDIRECT, 'https://evil.example/x'] } })).status, 400, 'basta um ruim')
-  assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: [REDIRECT], token_endpoint_auth_method: 'client_secret_basic' } })).status, 400)
+  // pede outro método de autenticação: não recusa, responde o que vale (cliente público, PKCE no lugar de segredo)
+  const other = await call('POST', '/api/oauth/register', { body: { redirect_uris: [REDIRECT], token_endpoint_auth_method: 'client_secret_basic' } })
+  assert.equal(other.status, 201)
+  assert.equal(other.body.token_endpoint_auth_method, 'none')
+  assert.equal(other.body.client_secret, undefined)
   assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: ['https://platform.openai.com/apps-manage/oauth'] } })).status, 201)
+  // id do callback com ponto e til (válidos em URL); só pontos ('..') nunca
+  assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: ['https://chatgpt.com/connector/oauth/ab.c~d-9_Z'] } })).status, 201)
+  assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: ['https://chatgpt.com/connector/oauth/..'] } })).status, 400)
+})
+
+test('registro: limite por IP (429)', async () => {
+  process.env.OAUTH_REGISTER_LIMIT = '1'
+  try {
+    const r = await call('POST', '/api/oauth/register', { body: { redirect_uris: [REDIRECT] } })
+    assert.equal(r.status, 429)
+    assert.equal(r.body.error, 'invalid_request')
+  } finally { process.env.OAUTH_REGISTER_LIMIT = '100000' }
+  assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: [REDIRECT] } })).status, 201)
+})
+
+test('trava de endereços (OAUTH_ALLOWED_REDIRECTS): só os listados registram e autorizam, mesmo app já registrado', async () => {
+  const before = await registerClient() // registrado antes da trava, com REDIRECT
+  const lockedTo = 'https://chatgpt.com/connector/oauth/travado_1'
+  process.env.OAUTH_ALLOWED_REDIRECTS = ` ${lockedTo} , https://chatgpt.com/connector_platform_oauth_redirect `
+  try {
+    assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: [lockedTo] } })).status, 201)
+    assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: [REDIRECT] } })).status, 400, 'endereço do ChatGPT, mas fora da lista')
+    assert.equal((await call('POST', '/api/oauth/register', { body: { redirect_uris: ['https://evil.example/cb'] } })).status, 400)
+    // app registrado antes da trava: o endereço dele não está na lista, então não recebe código
+    const p = pkce()
+    const body = { client_id: before.client_id, redirect_uri: REDIRECT, state: 's', code_challenge: p.challenge, code_challenge_method: 'S256', resource: RESOURCE, decision: 'allow', notice_version: NOTICE_VERSION }
+    const a = await call('POST', '/api/oauth/authorize', { token: jwt.gestorA, body })
+    assert.equal(a.status, 400)
+    assert.equal(a.body.redirect_to, undefined)
+    assert.equal((await call('GET', `/api/oauth/authorize/check?client_id=${before.client_id}&redirect_uri=${encodeURIComponent(REDIRECT)}`, { token: jwt.gestorA })).status, 400)
+  } finally { delete process.env.OAUTH_ALLOWED_REDIRECTS }
+  // sem a trava volta a valer a regra geral
+  assert.equal((await call('GET', `/api/oauth/authorize/check?client_id=${before.client_id}&redirect_uri=${encodeURIComponent(REDIRECT)}`, { token: jwt.gestorA })).status, 200)
+  // a regra pura
+  assert.equal(isAllowedRedirectUri(REDIRECT, { locked: [] }), true)
+  assert.equal(isAllowedRedirectUri(REDIRECT, { locked: [lockedTo] }), false)
+  assert.equal(isAllowedRedirectUri('https://evil.example/cb', { locked: ['https://evil.example/cb'] }), true, 'a lista manda: quem configura é o dono do sistema')
+  assert.equal(isAllowedRedirectUri('http://evil.example/cb', { locked: ['http://evil.example/cb'], allowLocal: false }), false, 'http só para localhost')
 })
 
 test('autorizar: só gestor logado; pedido inválido nunca redireciona; aviso atual obrigatório; recusar volta com access_denied', async () => {
@@ -168,7 +212,9 @@ test('autorizar: só gestor logado; pedido inválido nunca redireciona; aviso at
   assert.equal(deny.get('state'), 's1')
   assert.equal(db().fourbase_oauth_codes.length, 0, 'nada foi criado em nenhum desses pedidos')
   // check da tela
-  assert.equal((await call('GET', `/api/oauth/authorize/check?client_id=${client.client_id}&redirect_uri=${encodeURIComponent(REDIRECT)}`, { token: jwt.gestorA })).body.client_name, 'ChatGPT')
+  const check = (await call('GET', `/api/oauth/authorize/check?client_id=${client.client_id}&redirect_uri=${encodeURIComponent(REDIRECT)}`, { token: jwt.gestorA })).body
+  assert.equal(check.client_name, 'ChatGPT')
+  assert.equal(check.destination, 'chatgpt.com', 'a tela mostra para onde o navegador volta')
   assert.equal((await call('GET', `/api/oauth/authorize/check?client_id=${client.client_id}&redirect_uri=${encodeURIComponent('https://chatgpt.com/x')}`, { token: jwt.gestorA })).status, 400)
 })
 
@@ -209,6 +255,7 @@ test('fluxo completo: token de acesso e de renovação, resposta no padrão, só
   assert.match(c.refresh_token, /^fbr_/)
   assert.equal(c.token_type, 'Bearer')
   assert.equal(c.expires_in, 3600)
+  assert.deepEqual(c.scope.split(' ').sort(), ['agenda:read', 'agenda:write', 'offline_access'], 'offline_access vai junto: toda conexão tem renovação')
   assert.equal(c.token.headers.get('cache-control'), 'no-store')
   const row = db().fourbase_api_tokens.find((t) => t.oauth_client_id === c.client.client_id)
   assert.equal(row.kind, 'oauth')
@@ -239,6 +286,11 @@ test('MCP: sem token → 401 com o endereço dos metadados; GET/DELETE → 405; 
   assert.equal(evil.status, 403)
   const fine = await call('POST', '/api/mcp', { token: c.access_token, headers: { Origin: 'https://chatgpt.com' }, body: { jsonrpc: '2.0', id: 1, method: 'ping' } })
   assert.equal(fine.status, 200)
+  const sub = await call('POST', '/api/mcp', { token: c.access_token, headers: { Origin: 'https://sandbox.chatgpt.com' }, body: { jsonrpc: '2.0', id: 1, method: 'ping' } })
+  assert.equal(sub.status, 200, 'subdomínio do ChatGPT/OpenAI')
+  for (const o of ['https://chatgpt.com.evil.example', 'http://chatgpt.com', 'https://notchatgpt.com']) {
+    assert.equal((await call('POST', '/api/mcp', { token: c.access_token, headers: { Origin: o }, body: { jsonrpc: '2.0', id: 1, method: 'ping' } })).status, 403, o)
+  }
 })
 
 test('MCP: initialize, tools/list (permissões e anotações), notificações e erros de protocolo', async () => {
@@ -323,13 +375,24 @@ test('renovação: rotação do token (o antigo morre), concorrência, cliente c
   assert.notEqual(r1.body.refresh_token, c.refresh_token)
   assert.equal((await rpc(c.access_token, 'ping')).status, 401, 'o token de acesso antigo deixou de valer')
   assert.equal((await rpc(r1.body.access_token, 'ping')).status, 200)
-  assert.equal((await rf(c.refresh_token)).body.error, 'invalid_grant', 'o token de renovação antigo não vale mais')
+  // repetir a renovação logo depois (resposta perdida, pedidos simultâneos): devolve EXATAMENTE os mesmos tokens
+  const same = await rf(c.refresh_token)
+  assert.equal(same.status, 200)
+  assert.equal(same.body.access_token, r1.body.access_token)
+  assert.equal(same.body.refresh_token, r1.body.refresh_token)
+  assert.equal((await rpc(r1.body.access_token, 'ping')).status, 200, 'a repetição não derruba a conexão')
   assert.equal((await rf(r1.body.refresh_token, 'fbc_outroCliente1234567')).body.error, 'invalid_grant', 'outro aplicativo')
   assert.equal((await rf('fbr_naoexiste')).body.error, 'invalid_grant')
   assert.equal((await call('POST', '/api/oauth/token', { form: { grant_type: 'refresh_token' } })).body.error, 'invalid_request')
-  // duas renovações ao mesmo tempo: só uma vence
+  // duas renovações ao mesmo tempo: as duas funcionam e recebem os MESMOS tokens (uma troca, a outra repete)
   const [x, y] = await Promise.all([rf(r1.body.refresh_token), rf(r1.body.refresh_token)])
-  assert.deepEqual([x.status, y.status].sort(), [200, 400])
+  assert.deepEqual([x.status, y.status], [200, 200])
+  assert.equal(x.body.access_token, y.body.access_token)
+  assert.equal(x.body.refresh_token, y.body.refresh_token)
+  assert.notEqual(x.body.refresh_token, r1.body.refresh_token)
+  // um token duas gerações atrás não existe mais para o servidor: recusado, sem derrubar a conexão atual
+  assert.equal((await rf(c.refresh_token)).body.error, 'invalid_grant')
+  assert.equal((await rpc(x.body.access_token, 'ping')).status, 200)
   // access token expirado: 401 (e a renovação emite outro)
   const live = db().fourbase_api_tokens.find((t) => t.oauth_client_id === c.client.client_id && !t.revoked_at)
   await setRow('fourbase_api_tokens', { id: live.id }, { access_expires_at: new Date(Date.now() - 1000).toISOString() })
@@ -340,6 +403,35 @@ test('renovação: rotação do token (o antigo morre), concorrência, cliente c
   const row = db().fourbase_api_tokens.find((t) => t.oauth_client_id === c2.client.client_id && !t.revoked_at)
   await setRow('fourbase_api_tokens', { id: row.id }, { refresh_expires_at: new Date(Date.now() - 1000).toISOString() })
   assert.equal((await call('POST', '/api/oauth/token', { form: { grant_type: 'refresh_token', refresh_token: c2.refresh_token, client_id: c2.client.client_id } })).body.error, 'invalid_grant')
+})
+
+test('renovação: token já trocado reaparecendo depois da tolerância desliga a conexão (cópia roubada)', async () => {
+  const c = await connect()
+  const rf = (refresh_token) => call('POST', '/api/oauth/token', { form: { grant_type: 'refresh_token', refresh_token, client_id: c.client.client_id } })
+  const r1 = await rf(c.refresh_token)
+  assert.equal(r1.status, 200)
+  await setRow('fourbase_api_tokens', { oauth_client_id: c.client.client_id }, { prev_refresh_at: new Date(Date.now() - 120000).toISOString() })
+  const late = await rf(c.refresh_token)
+  assert.equal(late.status, 400)
+  assert.equal(late.body.error, 'invalid_grant')
+  assert.equal((await rpc(r1.body.access_token, 'ping')).status, 401, 'a conexão inteira foi desligada')
+  assert.equal((await rf(r1.body.refresh_token)).body.error, 'invalid_grant', 'e a renovação atual também')
+  assert.ok(db().fourbase_assistant_consents.some((e) => e.event === 'disconnected' && e.reason === 'user'))
+})
+
+test('tokens derivados: mesmos para a mesma conexão e geração, diferentes entre gerações e conexões, no formato aceito', async () => {
+  const a = randomUUID()
+  assert.equal(deriveAccessToken(a, 1), deriveAccessToken(a, 1))
+  assert.equal(deriveRefreshToken(a, 3), deriveRefreshToken(a, 3))
+  assert.notEqual(deriveAccessToken(a, 1), deriveAccessToken(a, 2))
+  assert.notEqual(deriveAccessToken(a, 1), deriveAccessToken(randomUUID(), 1))
+  assert.notEqual(deriveAccessToken(a, 1).slice(4), deriveRefreshToken(a, 1).slice(4), 'acesso e renovação nunca coincidem')
+  assert.ok(isTokenShape(deriveAccessToken(a, 1)))
+  assert.match(deriveRefreshToken(a, 1), /^fbr_[A-Za-z0-9_-]{43}$/)
+  const saved = process.env.JWT_SECRET
+  const withOldSecret = deriveAccessToken(a, 1)
+  process.env.JWT_SECRET = 'outro-segredo-qualquer'
+  try { assert.notEqual(deriveAccessToken(a, 1), withOldSecret, 'sem o segredo do servidor não dá para calcular os tokens') } finally { if (saved === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = saved }
 })
 
 test('desligar a conexão na tela corta o ChatGPT na hora; reconectar desliga a anterior', async () => {
