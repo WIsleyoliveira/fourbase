@@ -3,13 +3,13 @@ import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, gestorOnly, workspaceOf } from '../auth.js'
 import { isUuid } from '../validation.js'
-import { resolveColumnKey, workspaceColumnKeys } from '../columnKeys.js'
+import {
+  appUrl, listBatches, loadBatch, opAgenda, opBatches, opClients, opCreate, opMe, opPreview, opUndo, planFor, undoBatch,
+} from '../assistantService.js'
 import { runInBackground } from '../mailer.js'
 import {
-  ASSISTANT_TAG, DEFAULT_TOKEN_DAYS, MAX_ACTIVE_TOKENS, MAX_AGENDA_DAYS, MAX_AGENDA_ITEMS, MAX_BATCH,
-  NOTICE_VERSION, SCOPES, TIMEZONE, UNDO_WINDOW_MS,
-  assistantEnabledForUser, batchItemOf, buildOpenApi, daysBetween, findConflicts, findDuplicates, generateToken, hashToken, hhmm, isDate,
-  isTokenShape, isValidBatchId, normalizeTaskInput, planUndo, toBatchView, todayIn, tokenPrefixOf, undoDeadline,
+  DEFAULT_TOKEN_DAYS, MAX_ACTIVE_TOKENS, NOTICE_VERSION, SCOPES,
+  assistantEnabledForUser, buildOpenApi, generateToken, hashToken, isTokenShape, tokenPrefixOf, toBatchView, undoDeadline,
 } from '../assistant.js'
 
 // Assistente (ChatGPT). O gestor cria uma "chave de conexão" na tela Assistente e o GPT dele usa as
@@ -39,7 +39,6 @@ const enabledForUser = (req, res, next) => (async () => {
 })().catch((err) => { console.error(err); res.status(500).json({ error: 'Erro interno' }) })
 const screen = [auth, gestorOnly, enabledForUser]
 
-const appUrl = () => (process.env.APP_URL || '').replace(/\/$/, '')
 const isActiveGestor = (u) => !!u && u.role === 'gestor' && u.status !== 'inactive'
 const isLive = (t, now = Date.now()) => !t.revoked_at && Date.parse(t.expires_at) > now
 
@@ -137,71 +136,6 @@ router.delete('/api/assistant/tokens/:id', ...screen, asyncRoute(async (req, res
   await recordConsent({ workspace_id: workspaceId, user_id: req.user.id, token_id: req.params.id, event: 'disconnected', reason: 'user' })
   res.status(204).end()
 }))
-
-// ---------- Lotes: serviço único das duas portas ----------
-async function loadBatch(userId, workspaceId, batchId) {
-  if (!isValidBatchId(batchId)) return null
-  const { data } = await supabase.from('fourbase_assistant_batches').select('*')
-    .eq('user_id', userId).eq('workspace_id', workspaceId).eq('batch_id', batchId).maybeSingle()
-  return data
-}
-
-const batchTaskIds = (b) => (Array.isArray(b.items) && b.items.length ? b.items.map((i) => i.id) : b.task_ids || [])
-
-async function tasksByIds(ids, workspaceId) {
-  if (!ids.length) return []
-  const { data, error } = await supabase.from('fourbase_tasks').select('*').in('id', ids).eq('workspace_id', workspaceId)
-  if (error) throw error
-  return data || []
-}
-
-async function listBatches(userId, workspaceId, { limit, before } = {}) {
-  const { data, error } = await supabase.from('fourbase_assistant_batches').select('*')
-    .eq('user_id', userId).eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  const all = (data || []).filter((b) => !before || b.created_at < before)
-  const page = all.slice(0, limit)
-  const tasks = await tasksByIds([...new Set(page.flatMap(batchTaskIds))], workspaceId)
-  return { page, tasks, hasMore: all.length > page.length }
-}
-
-async function firstColumnOf(workspaceId) {
-  const keys = await workspaceColumnKeys(workspaceId)
-  return keys.find((k) => k !== 'done') || null
-}
-
-async function planFor(batch, userId, workspaceId, onlyIds) {
-  const current = await tasksByIds(batchTaskIds(batch), workspaceId)
-  return planUndo(batch, current, { userId, firstColumn: await firstColumnOf(workspaceId), onlyIds })
-}
-
-// Executa o desfazer. Só remove o que o plano diz (inalteradas, do dono, dentro de onlyIds) e grava o resultado.
-async function undoBatch(batch, userId, workspaceId, onlyIds = null) {
-  const plan = await planFor(batch, userId, workspaceId, onlyIds)
-  if (plan.already_undone) return { status: 200, body: { undone: 0, removed: [], kept: [], gone: 0, already_undone: true } }
-  if (plan.expired) return { status: 400, body: { error: 'Só dá para desfazer pedidos das últimas 48 horas.' } }
-  const ids = plan.remove.map((t) => t.id)
-  if (ids.length) {
-    const { error } = await supabase.from('fourbase_tasks').delete()
-      .in('id', ids).eq('workspace_id', workspaceId).eq('assigned_to', userId)
-    if (error) throw error
-  }
-  const result = new Map([...plan.remove.map((t) => [t.id, 'removed']), ...plan.keep.map((t) => [t.id, `kept_${t.reason}`])])
-  const items = (Array.isArray(batch.items) ? batch.items : []).map((i) => ({ ...i, result: result.get(i.id) || 'gone' }))
-  const { error: e2 } = await supabase.from('fourbase_assistant_batches')
-    .update({ undone_at: new Date().toISOString(), items }).eq('id', batch.id)
-  if (e2) throw e2
-  return {
-    status: 200,
-    body: {
-      undone: ids.length,
-      removed: plan.remove.map(({ id, title }) => ({ id, title })),
-      kept: plan.keep.map(({ id, title, reason }) => ({ id, title, reason })),
-      gone: plan.gone,
-    },
-  }
-}
 
 // ---------- Porta da tela: histórico e desfazer com prévia (JWT, só gestor) ----------
 router.get('/api/assistant/app/batches', ...screen, asyncRoute(async (req, res) => {
@@ -311,6 +245,7 @@ const authenticate = async (scope, req, res, next) => {
   })
   next()
 }
+export { assistantAuth }
 const readAuth = assistantAuth('agenda:read')
 const writeAuth = assistantAuth('agenda:write')
 
@@ -321,161 +256,19 @@ router.get('/api/assistant/openapi.json', (req, res) => {
   res.json(buildOpenApi(appUrl()))
 })
 
-// ---------- Porta do GPT: leitura ----------
-const taskView = (t, labels = {}) => ({
-  id: t.id, title: t.title, description: t.description || '', priority: t.priority,
-  due_date: t.due_date, due_date_end: t.due_date_end, due_time: hhmm(t.due_time), due_time_end: hhmm(t.due_time_end),
-  status: labels[t.column_key] || t.column_key, client_id: t.client_id, tags: t.tags || [],
-})
-const clock = () => ({ today: todayIn(), timezone: TIMEZONE })
-
-async function myTasks(req) {
-  const { data, error } = await supabase
-    .from('fourbase_tasks').select('*')
-    .eq('workspace_id', workspaceOf(req)).eq('assigned_to', req.user.id)
-  if (error) throw error
-  return data || []
-}
-
-router.get('/api/assistant/me', readAuth, asyncRoute(async (req, res) => {
-  req.activity = { op: 'verificarConexao' }
-  const { data: ws } = await supabase.from('weflow_workspaces').select('name').eq('id', workspaceOf(req)).maybeSingle()
-  res.json({
-    user_name: req.user.name, workspace_name: ws?.name ?? null, connection_name: req.apiToken.name,
-    ...clock(), scopes: req.apiToken.scopes,
-    limits: { max_batch: MAX_BATCH, undo_hours: UNDO_WINDOW_MS / 3600000, max_agenda_days: MAX_AGENDA_DAYS },
-  })
-}))
-
-router.get('/api/assistant/clients', readAuth, asyncRoute(async (req, res) => {
-  req.activity = { op: 'listarClientes' }
-  const { data, error } = await supabase
-    .from('fourbase_clients').select('id, name').eq('workspace_id', workspaceOf(req)).order('name', { ascending: true })
-  if (error) throw error
-  res.json(data || [])
-}))
-
-router.get('/api/assistant/agenda', readAuth, asyncRoute(async (req, res) => {
-  const { from, to } = req.query
-  if (!isDate(from) || !isDate(to)) return res.status(400).json({ error: 'Informe from e to no formato AAAA-MM-DD' })
-  if (to < from) return res.status(400).json({ error: 'to não pode ser antes de from' })
-  if (daysBetween(from, to) + 1 > MAX_AGENDA_DAYS) return res.status(400).json({ error: `Período máximo de ${MAX_AGENDA_DAYS} dias` })
-  const { data: cols } = await supabase.from('fourbase_columns').select('key, label').eq('workspace_id', workspaceOf(req))
-  const labels = Object.fromEntries((cols || []).map((c) => [c.key, c.label]))
-  const items = (await myTasks(req))
-    .filter((t) => t.due_date && t.due_date <= to && (t.due_date_end || t.due_date) >= from)
-    .sort((a, b) => (a.due_date + (a.due_time || '')).localeCompare(b.due_date + (b.due_time || '')))
-  req.activity = { op: 'verAgenda', from, to, count: items.length }
-  res.json({
-    from, to, ...clock(), total: items.length, truncated: items.length > MAX_AGENDA_ITEMS,
-    tasks: items.slice(0, MAX_AGENDA_ITEMS).map((t) => taskView(t, labels)),
-  })
-}))
-
-router.get('/api/assistant/batches', readAuth, asyncRoute(async (req, res) => {
-  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 20)
-  const { page, tasks } = await listBatches(req.user.id, workspaceOf(req), { limit })
-  req.activity = { op: 'listarLotes', count: page.length }
-  res.json({ ...clock(), batches: page.map((b) => toBatchView(b, tasks)) })
-}))
-
-// ---------- Porta do GPT: criação em lote ----------
-// Valida o lote inteiro (tudo ou nada) e calcula conflitos/duplicatas.
-async function prepareBatch(req) {
-  const { tasks } = req.body || {}
-  if (!Array.isArray(tasks) || !tasks.length) return { status: 400, error: 'Envie uma lista "tasks" com pelo menos uma tarefa' }
-  if (tasks.length > MAX_BATCH) return { status: 400, error: `Máximo de ${MAX_BATCH} tarefas por lote` }
-  const { data: clients } = await supabase.from('fourbase_clients').select('id, name').eq('workspace_id', workspaceOf(req))
-  const today = todayIn()
-  const normalized = []
-  const errors = []
-  tasks.forEach((item, index) => {
-    const r = normalizeTaskInput(item, { clients: clients || [], today })
-    if (r.errors) errors.push({ index, title: item?.title ?? null, errors: r.errors })
-    else normalized.push(r.task)
-  })
-  if (errors.length) return { status: 400, error: 'Há tarefas inválidas; nada foi criado', details: errors }
-  const existing = await myTasks(req)
-  return { tasks: normalized, conflicts: findConflicts(normalized, existing), duplicates: findDuplicates(normalized, existing) }
-}
-
-router.post('/api/assistant/tasks/preview', writeAuth, asyncRoute(async (req, res) => {
-  const p = await prepareBatch(req)
-  req.activity = { op: 'prever', count: p.tasks?.length ?? 0 }
-  if (p.error) return res.status(p.status).json({ error: p.error, details: p.details })
-  res.json({ ok: true, ...clock(), count: p.tasks.length, tasks: p.tasks, conflicts: p.conflicts, duplicates: p.duplicates })
-}))
-
-async function ensureAssistantTag(workspaceId) {
-  const { data } = await supabase.from('fourbase_tags').select('id').eq('workspace_id', workspaceId).eq('name', ASSISTANT_TAG.name).maybeSingle()
-  if (data) return
-  const { error } = await supabase.from('fourbase_tags').insert({ ...ASSISTANT_TAG, workspace_id: workspaceId })
-  if (error && error.code !== '23505') console.error('tag ChatGPT:', error.message)
-}
-
-router.post('/api/assistant/tasks', writeAuth, asyncRoute(async (req, res) => {
-  const batchId = req.body?.batch_id
-  if (!isValidBatchId(batchId)) return res.status(400).json({ error: 'batch_id obrigatório (8 a 80 caracteres: letras, números, _ . : -)' })
-  const workspaceId = workspaceOf(req)
-  req.activity = { op: 'criarTarefas' }
-
-  // Mesmo lote de novo = não cria nada; devolve o que já existe.
-  const prior = await loadBatch(req.user.id, workspaceId, batchId)
-  if (prior) {
-    if (prior.undone_at) return res.status(409).json({ error: 'Este lote foi desfeito. Use um batch_id novo para criar de novo.' })
-    const existing = await tasksByIds(batchTaskIds(prior), workspaceId)
-    return res.status(200).json({ already_created: true, batch_id: batchId, count: existing.length, undo_until: undoDeadline(prior), tasks: existing.map((t) => taskView(t)) })
-  }
-
-  const p = await prepareBatch(req)
-  if (p.error) return res.status(p.status).json({ error: p.error, details: p.details })
-
-  // Reserva o lote primeiro: a chave única (user_id, batch_id) barra a corrida de duas chamadas iguais.
-  const { data: claimed, error: claimErr } = await supabase
-    .from('fourbase_assistant_batches')
-    .insert({ workspace_id: workspaceId, user_id: req.user.id, token_id: req.apiToken.id, batch_id: batchId, task_ids: [], items: [] })
-    .select().single()
-  if (claimErr) {
-    if (claimErr.code === '23505') return res.status(409).json({ error: 'Este lote já está sendo processado. Consulte a agenda.' })
-    throw claimErr
-  }
-
-  try {
-    await ensureAssistantTag(workspaceId)
-    const column_key = await resolveColumnKey(workspaceId, undefined)
-    const { data: created, error } = await supabase
-      .from('fourbase_tasks')
-      .insert(p.tasks.map((t) => ({
-        workspace_id: workspaceId, ...t, column_key, user_id: req.user.id, assigned_to: req.user.id,
-        tags: [ASSISTANT_TAG.name], attachments: [], mentioned_users: [],
-      })))
-      .select()
-    if (error) throw error
-    // retrato tirado da linha que o banco devolveu (defaults incluídos): é o que o desfazer compara
-    const { error: upErr } = await supabase
-      .from('fourbase_assistant_batches')
-      .update({ task_ids: created.map((t) => t.id), items: created.map(batchItemOf) })
-      .eq('id', claimed.id)
-    if (upErr) throw upErr
-    req.activity = { op: 'criarTarefas', count: created.length }
-    res.status(201).json({
-      batch_id: batchId, count: created.length, conflicts: p.conflicts, duplicates: p.duplicates,
-      undo_until: undoDeadline(claimed),
-      tasks: created.map((t) => ({ ...taskView(t), link: appUrl() ? `${appUrl()}/painel?tarefa=${t.id}` : null })),
-    })
-  } catch (err) {
-    // não deixa um lote "fantasma" travando o batch_id
-    await supabase.from('fourbase_assistant_batches').delete().eq('id', claimed.id)
-    throw err
-  }
-}))
-
-router.post('/api/assistant/batches/:batchId/undo', writeAuth, asyncRoute(async (req, res) => {
-  req.activity = { op: 'desfazerLote' }
-  const workspaceId = workspaceOf(req)
-  const batch = await loadBatch(req.user.id, workspaceId, req.params.batchId)
-  if (!batch) return res.status(404).json({ error: 'Lote não encontrado' })
-  const r = await undoBatch(batch, req.user.id, workspaceId)
-  req.activity = { op: 'desfazerLote', count: r.body.undone ?? 0 }
+// ---------- Porta do GPT (REST): finas camadas sobre as operações do serviço ----------
+// req.activity → metadados do último uso (gravados depois da resposta, ver assistantAuth)
+const ctxOf = (req) => ({ user: req.user, token: req.apiToken })
+const run = (op) => asyncRoute(async (req, res) => {
+  const r = await op(ctxOf(req), req)
+  req.activity = r.activity
   res.status(r.status).json(r.body)
-}))
+})
+
+router.get('/api/assistant/me', readAuth, run((ctx) => opMe(ctx)))
+router.get('/api/assistant/clients', readAuth, run((ctx) => opClients(ctx)))
+router.get('/api/assistant/agenda', readAuth, run((ctx, req) => opAgenda(ctx, { from: req.query.from, to: req.query.to })))
+router.get('/api/assistant/batches', readAuth, run((ctx, req) => opBatches(ctx, { limit: req.query.limit })))
+router.post('/api/assistant/tasks/preview', writeAuth, run((ctx, req) => opPreview(ctx, req.body)))
+router.post('/api/assistant/tasks', writeAuth, run((ctx, req) => opCreate(ctx, req.body)))
+router.post('/api/assistant/batches/:batchId/undo', writeAuth, run((ctx, req) => opUndo(ctx, req.params.batchId)))
