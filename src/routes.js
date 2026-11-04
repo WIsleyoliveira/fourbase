@@ -3,6 +3,7 @@
 //
 //   /painel  /kanban  /calendario  /notas  /clientes  /relatorios
 //   /cadastro  /equipe  /perfil  /assistente
+//   /conectar                Autorização do login OAuth do ChatGPT (aberta pelo próprio ChatGPT, com ?client_id=…)
 //   /clientes/:id            Espaço do cliente (Kanban)
 //   /clientes/:id?aba=docs   Espaço do cliente, aba Documentações
 //   /activate/:token         Ativação de convite (link enviado pelo gestor)
@@ -12,11 +13,11 @@ export const DEFAULT_VIEW = 'painel'
 
 export const VIEW_KEYS = [
   'painel', 'kanban', 'calendario', 'notas', 'clientes',
-  'relatorios', 'cadastro', 'equipe', 'perfil', 'assistente',
+  'relatorios', 'cadastro', 'equipe', 'perfil', 'assistente', 'conectar',
 ]
 
 // Telas que só o gestor pode abrir (o backend também barra os dados).
-export const GESTOR_ONLY_VIEWS = ['relatorios', 'equipe', 'cadastro', 'assistente']
+export const GESTOR_ONLY_VIEWS = ['relatorios', 'equipe', 'cadastro', 'assistente', 'conectar']
 
 const ACTIVATE_RE = /^\/activate\/([A-Za-z0-9._-]+)\/?$/
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]+$/

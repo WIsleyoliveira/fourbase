@@ -9,7 +9,53 @@ Desenho decidido pelo Conselho (sessão `.claude/council/sessions/assistente-cha
 de conexão, guiado pela tela **Assistente**. **Fase B** (antes do 2º cliente): GPT oficial "fourbase" com
 login ("Entrar no fourbase", OAuth).
 
-## Para o gestor: tela Assistente (menu → Assistente)
+## Caminho principal: app do ChatGPT (servidor MCP + login OAuth)
+
+A OpenAI está descontinuando os **GPTs personalizados** (criação de novos encerrada em 26/10/2026; deixam de
+funcionar em 11/12/2026 — fontes: blogs e imprensa, sem página oficial confirmando; **conferir nas notas de versão
+da OpenAI**). As Ações dos GPTs não migram: o substituto é um **app com servidor MCP**. O ChatGPT **não aceita chave de
+API** em MCP — só **OAuth 2.1** (código + PKCE S256). Por isso o fourbase passou a ser, ao mesmo tempo, o servidor
+de recursos (`/api/mcp`) e o servidor de autorização (`/api/oauth/*`). As regras (agenda, lote, desfazer seguro,
+isolamento, gestor ativo) são **as mesmas** da API REST: ambas chamam `api/_lib/assistantService.js`.
+
+**Para o gestor** (tela Assistente, 4 passos): aviso → ligar o **modo desenvolvedor** no ChatGPT (Configurações → Apps →
+Avançado) → **criar o app** (Apps → Criar; nome `fourbase`; URL do servidor MCP `<APP_URL>/api/mcp`; autenticação
+**OAuth**) → **Conectar**: o ChatGPT abre `/conectar` no fourbase, o gestor lê o aviso e clica **Autorizo e conectar**. A tela
+muda sozinha para **Funcionou!**. Não há chave nem instruções para copiar. Os nomes dos botões do ChatGPT podem variar;
+quem não encontra o modo desenvolvedor provavelmente tem um plano que não permite criar apps (a OpenAI restringe
+MCP com escrita a alguns planos — **conferir na conta**).
+
+**Fluxo técnico**
+1. `POST /api/mcp` sem token → 401 + `WWW-Authenticate: Bearer resource_metadata="<APP_URL>/.well-known/oauth-protected-resource"`.
+2. Descoberta: `/.well-known/oauth-protected-resource` (recurso `<APP_URL>/api/mcp`) e `/.well-known/oauth-authorization-server`
+   (também em `openid-configuration`): `authorization_endpoint` = `<APP_URL>/conectar`, `token_endpoint`, `registration_endpoint`,
+   `code_challenge_methods_supported: [S256]`, cliente público (`none`). Vercel reescreve `/.well-known/*` para a API.
+3. Registro (DCR) `POST /api/oauth/register`: **só endereços de retorno do ChatGPT/OpenAI** (`chatgpt.com/connector_platform_oauth_redirect`,
+   `chatgpt.com/connector/oauth/<id>`, `platform.openai.com/apps-manage/oauth`; local só fora de produção); 30 por IP/hora.
+   Outro método de autenticação pedido não é recusado: a resposta diz `none` (cliente público; PKCE no lugar de segredo).
+   **Trava opcional `OAUTH_ALLOWED_REDIRECTS`** (endereços exatos): preenchida, só eles registram **e** autorizam — quem registrasse um app
+   apontando para o próprio ChatGPT não receberia código de ninguém. A tela `/conectar` mostra para onde o navegador volta.
+4. `/conectar` (tela, login normal do gestor; só empresa/pessoa liberada) → `POST /api/oauth/authorize` com a versão atual
+   do aviso → grava a **autorização** (`fourbase_assistant_consents`) e devolve o código (uso único, 5 min, hash, PKCE) ao ChatGPT.
+   Pedido inválido **nunca redireciona** (erro na tela).
+5. `POST /api/oauth/token`: troca o código (PKCE, `redirect_uri`, `client_id`, `resource`) por **token de acesso `fbo_` (1 h)** e
+   **de renovação `fbr_` (troca a cada uso; a conexão vai até 90 dias à frente)**; o escopo devolvido inclui `offline_access`. Só hashes no banco.
+   Os tokens são **derivados** (HMAC com `JWT_SECRET` do id da conexão + geração): repetir a renovação com o token que acabou de ser
+   trocado (**até 60 s**: resposta perdida, dois pedidos juntos) devolve exatamente os mesmos tokens e não derruba nada; o mesmo token
+   voltando **depois de 60 s** é tratado como cópia roubada e desliga a conexão. Reconectar desliga a anterior.
+   Código reaproveitado **depois de 30 s** desliga o que ele gerou; repetição imediata só é recusada (não derruba o vencedor).
+6. Cada conexão é uma linha de `fourbase_api_tokens` (`kind='oauth'`) que a tela Assistente lista e **Desconecta** (corta na hora).
+   Gestor rebaixado/desativado ou empresa fora da liberação perde acesso e renovação.
+7. Ferramentas MCP (`api/_lib/mcp.js`): `verificar_conexao`, `ver_agenda`, `listar_clientes`, `conferir_tarefas`, `criar_tarefas`,
+   `listar_lotes`, `desfazer_lote`. Só leitura = `readOnlyHint`; criar/desfazer pedem **Permitir** (`destructiveHint` no desfazer).
+   O servidor manda `instructions` (o texto do assistente) no `initialize`.
+8. Segurança extra: `Origin` que não seja do ChatGPT/OpenAI (nem do próprio fourbase) → 403 (DNS rebinding); 401 de token que existe (expirado) **não** conta no limite por IP
+   (IPs da OpenAI são compartilhados); `ASSISTANT_ENABLED=false` desliga descoberta, login e MCP.
+
+O caminho antigo (GPT personalizado com chave `fbk_` + Ações) segue funcionando enquanto a OpenAI mantiver os GPTs
+(link "Ver o modo antigo" no passo 1).
+
+## Para o gestor: tela Assistente — modo antigo (GPT com chave)
 
 - **Sem conexão — 4 passos + teste**, um passo por vez, com botões de copiar:
   1. **Autorizar e criar a chave** — aviso "O que o ChatGPT vai ver" (2 camadas) e o botão
@@ -58,11 +104,14 @@ Textos da tela: `src/assistant/notice.js` (aviso, versão `NOTICE_VERSION`) e
 ## Deploy (só com aprovação)
 
 1. Merge (Vercel publica). Sem as tabelas, só o Assistente falha; o resto do app segue normal.
-2. **Backup**, depois rodar `supabase/migrations/20261101000000_assistant_tokens.sql` no SQL Editor.
+2. **Backup**, depois rodar no SQL Editor, **nesta ordem**: `supabase/migrations/20261101000000_assistant_tokens.sql` (se ainda não rodou) e
+   `supabase/migrations/20261102000000_assistant_oauth.sql` (aditiva: 2 tabelas + 4 colunas nulas em `fourbase_api_tokens`).
 3. Na Vercel: `APP_URL` definido e `ASSISTANT_WORKSPACE_IDS=<id da empresa>` (todos os gestores dela) e/ou
    `ASSISTANT_USER_EMAILS=<e-mails de login>` (pessoas específicas); Redeploy.
 4. Quem foi liberado só precisa recarregar o fourbase (o app relê o perfil ao abrir).
-5. Antes de entregar a ele: rodar o roteiro de avaliação abaixo num assistente de teste.
+5. Conferir por fora: `/.well-known/oauth-authorization-server` e `/.well-known/oauth-protected-resource` respondem com o endereço certo; `POST /api/mcp` sem token dá 401 com `WWW-Authenticate`.
+6. Criar o app no ChatGPT (passos acima) e testar com a conta do gestor.
+7. Antes de entregar a ele: rodar o roteiro de avaliação abaixo (adaptado: o app, não o GPT) em conversa de teste.
 
 ## Roteiro de avaliação do GPT (antes de liberar; ~1h30)
 

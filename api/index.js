@@ -17,6 +17,8 @@ import clientsRoutes from './_lib/routes/clients.js'
 import reportsRoutes from './_lib/routes/reports.js'
 import notificationsRoutes from './_lib/routes/notifications.js'
 import assistantRoutes from './_lib/routes/assistant.js'
+import oauthRoutes from './_lib/routes/oauth.js'
+import mcpRoutes from './_lib/routes/mcp.js'
 
 // Ponto de entrada da API. A Vercel publica o default export deste arquivo como
 // Serverless Function (vercel.json reescreve /api/* para cá); localmente quem
@@ -62,6 +64,8 @@ app.use(clientsRoutes)
 app.use(reportsRoutes)
 app.use(notificationsRoutes)
 app.use(assistantRoutes)
+app.use(oauthRoutes)
+app.use(mcpRoutes)
 
 // Corpo inválido (JSON malformado, grande demais) responde em JSON, sem a página de erro do Express.
 // eslint-disable-next-line no-unused-vars

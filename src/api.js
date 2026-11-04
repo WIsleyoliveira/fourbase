@@ -59,6 +59,10 @@ export const api = {
   listAssistantTokens: () => request('/api/assistant/tokens'),
   createAssistantToken: (body) => request('/api/assistant/tokens', { method: 'POST', body: JSON.stringify(body) }),
   revokeAssistantToken: (id) => request('/api/assistant/tokens/' + id, { method: 'DELETE' }),
+  // login OAuth do ChatGPT (tela /conectar)
+  oauthCheck: ({ client_id, redirect_uri }) =>
+    request('/api/oauth/authorize/check?client_id=' + encodeURIComponent(client_id) + '&redirect_uri=' + encodeURIComponent(redirect_uri)),
+  oauthAuthorize: (body) => request('/api/oauth/authorize', { method: 'POST', body: JSON.stringify(body) }),
   listAssistantBatches: (before) => request('/api/assistant/app/batches' + (before ? '?before=' + encodeURIComponent(before) : '')),
   getAssistantUndoPlan: (batchId) => request('/api/assistant/app/batches/' + encodeURIComponent(batchId) + '/undo-plan'),
   undoAssistantBatch: (batchId, onlyIds) => request('/api/assistant/app/batches/' + encodeURIComponent(batchId) + '/undo', { method: 'POST', body: JSON.stringify({ only_ids: onlyIds }) }),

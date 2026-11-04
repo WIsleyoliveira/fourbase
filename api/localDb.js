@@ -41,7 +41,8 @@ const WORKSPACE_SCOPED = [
   'fourbase_assistant_consents',
 ]
 
-const TABLES = ['weflow_workspaces', 'weflow_invitations', ...WORKSPACE_SCOPED]
+// OAuth do Assistente (MCP): clientes registrados e códigos de autorização — sem workspace_id próprio.
+const TABLES = ['weflow_workspaces', 'weflow_invitations', ...WORKSPACE_SCOPED, 'fourbase_oauth_clients', 'fourbase_oauth_codes']
 
 // Nome do workspace criado na primeira execução e usado para adotar os dados
 // que existiam antes da arquitetura multi-tenant.
@@ -59,7 +60,9 @@ const UNIQUE_COLUMNS = {
   // Avisos de prazo: um por (usuário, tarefa, data); dedupe_key nulo não conflita
   fourbase_notifications: [['user_id', 'dedupe_key']],
   // Assistente (ChatGPT): token guardado só como hash; um lote por (usuário, batch_id)
-  fourbase_api_tokens: ['token_hash'],
+  fourbase_api_tokens: ['token_hash', 'refresh_hash'],
+  fourbase_oauth_clients: ['client_id'],
+  fourbase_oauth_codes: ['code_hash'],
   fourbase_assistant_batches: [['user_id', 'batch_id']],
   weflow_invitations: ['token_hash'],
 }
@@ -69,7 +72,7 @@ const TIMESTAMPED = new Set([
   'fourbase_notes', 'fourbase_media', 'fourbase_folders', 'fourbase_folder_media',
   'fourbase_columns', 'fourbase_clients', 'fourbase_report_activities', 'fourbase_tasks',
   'fourbase_tags', 'fourbase_notifications', 'fourbase_api_tokens', 'fourbase_assistant_batches', 'fourbase_assistant_consents',
-  'weflow_workspaces', 'weflow_invitations',
+  'weflow_workspaces', 'weflow_invitations', 'fourbase_oauth_clients', 'fourbase_oauth_codes',
 ])
 
 // Etiquetas padrão enviadas pela Amanda — pré-cadastradas na primeira execução.
@@ -140,6 +143,8 @@ function seedDb() {
     fourbase_api_tokens: [],
     fourbase_assistant_batches: [],
     fourbase_assistant_consents: [],
+    fourbase_oauth_clients: [],
+    fourbase_oauth_codes: [],
   }
 }
 

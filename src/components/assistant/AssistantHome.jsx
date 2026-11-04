@@ -49,8 +49,8 @@ export default function AssistantHome({ data, status, onReconnect, onResume, onR
         <div className="asst-actions">
           {status.state === 'waiting' ? (
             <>
-              <button type="button" className="asst-btn" onClick={() => onResume(5)}>Ver o teste</button>
-              <button type="button" className="asst-btn ghost" onClick={() => onResume(2)}>Continuar a configuração</button>
+              <button type="button" className="asst-btn" onClick={() => onResume(key.kind === 'oauth' ? 4 : 5)}>Ver o teste</button>
+              <button type="button" className="asst-btn ghost" onClick={() => onResume(key.kind === 'oauth' ? 3 : 2)}>Continuar a configuração</button>
             </>
           ) : (
             <a className="asst-btn" href={CHATGPT_URL} target="_blank" rel="noopener noreferrer">Abrir o ChatGPT <IconExternal size={15} /></a>
@@ -69,7 +69,9 @@ export default function AssistantHome({ data, status, onReconnect, onResume, onR
             </div>
           </div>
         )}
-        <button type="button" className="asst-link small" onClick={() => setConfirmShared(true)}>Compartilhei meu assistente por engano</button>
+        {key.kind !== 'oauth' && (
+          <button type="button" className="asst-link small" onClick={() => setConfirmShared(true)}>Compartilhei meu assistente por engano</button>
+        )}
         {confirmShared && (
           <div className="asst-confirm" role="alertdialog" aria-labelledby="asst-shared-title">
             <strong id="asst-shared-title">Trocar a chave</strong>
@@ -169,9 +171,10 @@ export default function AssistantHome({ data, status, onReconnect, onResume, onR
             return (
               <li key={t.id} className={off ? 'off' : ''}>
                 <div>
-                  <strong>{t.name}</strong> <code>{t.prefix}…</code>
+                  <strong>{t.name}</strong>{' '}
+                  {t.kind === 'oauth' ? <span className="asst-muted">(app do ChatGPT)</span> : <code>{t.prefix}…</code>}
                   <small>
-                    {t.revoked_at ? `Desligada em ${fmtDay(t.revoked_at)}` : `Criada em ${fmtDay(t.created_at)} · Válida até ${fmtDay(t.expires_at)} · Último uso: ${t.last_used_at ? whenText(t.last_used_at) : 'nunca'}`}
+                    {t.revoked_at ? `Desligada em ${fmtDay(t.revoked_at)}` : `Criada em ${fmtDay(t.created_at)} · ${t.kind === 'oauth' ? 'Renova sozinha enquanto for usada' : `Válida até ${fmtDay(t.expires_at)}`} · Último uso: ${t.last_used_at ? whenText(t.last_used_at) : 'nunca'}`}
                   </small>
                 </div>
                 {!off && (
