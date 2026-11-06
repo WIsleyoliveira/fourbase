@@ -9813,3 +9813,19 @@ img.kb-avatar {
   .calview-weekdays span::first-letter { font-size: 14px; }
   .calview-cell.out-month .calview-day-number { opacity: 0.35; }
 }
+
+@media (max-width: 640px) {
+  .calview-week { min-height: clamp(96px, calc((100dvh - 330px) / 6), 130px); }
+  .calview-cell { padding: 6px 1px 4px; gap: 3px; }
+  .calview-day-number { font-size: 15px; min-width: 28px; height: 28px; }
+  .calview-cell-chips { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 0 1px; min-width: 0; }
+  .calview-cell-chip { display: block; width: 100%; padding: 1px 3px; border-radius: 4px; background: color-mix(in srgb, var(--owner, var(--primary)) 28%, transparent); border-left: 2px solid var(--owner, var(--primary)); color: var(--text); font-size: 9.5px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  .calview-cell-chip.done { opacity: 0.45; text-decoration: line-through; }
+  .calview-cell-more { font-size: 10px; font-weight: 700; color: var(--muted-strong); text-align: center; }
+  .calview-cell-dots { display: none; }
+  .calagenda-close { flex: 0 0 auto; width: 36px; height: 36px; border: none; border-radius: 50%; background: var(--surface-2, rgba(127,127,127,0.2)); color: var(--text); font-size: 16px; }
+}
+
+@media (max-width: 640px) {
+  .calview-cell-chip { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; font-size: 10px; line-height: 1.2; padding: 2px 3px; }
+}

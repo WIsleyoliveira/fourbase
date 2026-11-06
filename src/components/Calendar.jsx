@@ -308,17 +308,16 @@ function CalendarView({ currentUser }) {
               }
 
   // Celular: ao tocar num dia da grade, a lista rola até ele (só no toque, nunca ao abrir a tela)
+  const [picked, setPicked] = useState(null)
   const pickDay = (date) => {
     setSelectedDate(date)
+    setPicked(date)
     setTimeout(() => document.getElementById(`cal-day-${toKey(date)}`)?.scrollIntoView({ block: 'start' }), 60)
   }
 
-  // Agenda do mês (celular): dias do mês exibido que têm tarefa, em ordem, cada um com as tarefas por horário.
+  // Celular: tarefas só do dia tocado (nada aparece embaixo até o usuário tocar num dia).
   const agendaDays = useMemo(() => {
-    const prefix = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-`
-    const keys = new Set(Object.keys(tasksByDay).filter((k) => k.startsWith(prefix)))
-    if (selectedDate && toKey(selectedDate).startsWith(prefix)) keys.add(toKey(selectedDate))
-    return [...keys].sort().map((key) => {
+    return (picked ? [toKey(picked)] : []).map((key) => {
       const [y, m, d] = key.split('-').map(Number)
       const tasks = (tasksByDay[key] || []).slice().sort((a, b) => {
         if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time)
@@ -328,7 +327,7 @@ function CalendarView({ currentUser }) {
       })
       return { key, date: new Date(y, m - 1, d), tasks }
     })
-  }, [tasksByDay, cursor, selectedDate])
+  }, [tasksByDay, picked])
 
   const weeks = useMemo(() => {
     const rows = []
@@ -618,7 +617,7 @@ function CalendarView({ currentUser }) {
               <div className="calview-week-cells">
                 {cells.map(({ date, inMonth }) => {
                   const isToday = isSameDay(date, today)
-                  const isSelected = selectedDate && isSameDay(date, selectedDate)
+                  const isSelected = compact ? picked && isSameDay(date, picked) : selectedDate && isSameDay(date, selectedDate)
                   return (
                     <div
                       key={toKey(date)}
@@ -638,11 +637,11 @@ function CalendarView({ currentUser }) {
                         <span className="calview-day-number">{date.getDate()}</span>
                       </div>
                       {compact && (tasksByDay[toKey(date)] || []).length > 0 && (
-                        <div className="calview-cell-dots" aria-label={`${tasksByDay[toKey(date)].length} tarefas`}>
-                          {tasksByDay[toKey(date)].slice(0, 3).map((t) => (
-                            <span key={t.id} className={`calview-cell-dot${t.column_key === 'done' ? ' done' : ''}`} style={{ background: memberColor(t.assigned_to, members) }} />
+                        <div className="calview-cell-chips" aria-label={`${tasksByDay[toKey(date)].length} tarefas`}>
+                          {tasksByDay[toKey(date)].slice(0, 2).map((t) => (
+                            <span key={t.id} className={`calview-cell-chip${t.column_key === 'done' ? ' done' : ''}`} style={{ '--owner': memberColor(t.assigned_to, members) }}>{t.title}</span>
                           ))}
-                          {tasksByDay[toKey(date)].length > 3 && <span className="calview-cell-more">+{tasksByDay[toKey(date)].length - 3}</span>}
+                          {tasksByDay[toKey(date)].length > 2 && <span className="calview-cell-more">+{tasksByDay[toKey(date)].length - 2}</span>}
                         </div>
                       )}
                     </div>
@@ -701,9 +700,8 @@ function CalendarView({ currentUser }) {
           ))}
         </div>
 
-        {compact && (
-          <section className="calagenda calagenda-month" aria-label="Tarefas do mês">
-            {agendaDays.length === 0 && <p className="calagenda-empty">Nenhuma tarefa com data neste mês.</p>}
+        {compact && picked && (
+          <section className="calagenda calagenda-month" aria-label="Tarefas do dia">
             {agendaDays.map(({ key, date, tasks: dayTasks }) => {
               const picked = selectedDate && isSameDay(date, selectedDate)
               return (
@@ -712,6 +710,7 @@ function CalendarView({ currentUser }) {
                     <span className="calagenda-daylabel">{date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
                     <span className="calagenda-daycount">{dayTasks.length === 0 ? 'sem tarefas' : `${dayTasks.length} tarefa${dayTasks.length > 1 ? 's' : ''}`}</span>
                     <button type="button" className="calagenda-add" onClick={() => openNewTask(date)}>+ Nova</button>
+                    <button type="button" className="calagenda-close" onClick={() => setPicked(null)} aria-label="Fechar">✕</button>
                   </h3>
                   {dayTasks.length === 0 && <p className="calagenda-empty">Nada agendado para este dia.</p>}
                   {dayTasks.map(agendaCard)}
