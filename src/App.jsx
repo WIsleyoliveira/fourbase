@@ -4,6 +4,7 @@ import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { useToast } from './toast.jsx'
 import { api, getAuth, setAuth } from './api.js'
 import { patchMemberInCache, useClients } from './hooks/useWorkspaceData.js'
+import { getHomeView } from './homeView.js'
 import { DEFAULT_VIEW, GESTOR_ONLY_VIEWS, clientPath, parseLocation, viewPath, withTaskParam } from './routes.js'
 
 import Login from './components/Login.jsx'
@@ -181,12 +182,15 @@ export default function App() {
     if (userId) markSeen(userId, LATEST_VERSION)
   }
 
+  // Tela inicial escolhida pela pessoa (só vale para quem abre o app em "/" ou entra agora)
+  const homeOf = (u) => getHomeView(u?.id, { isGestor: u?.role === 'gestor', assistantEnabled: !!u?.assistant_enabled })
+
   const login = (auth) => {
     setAuth(auth)
     setSession(auth)
     // Quem chegou por um link direto (ex.: /kanban) entra nele; URL que não
     // é tela (ex.: "/") vai para o painel.
-    if (!route.valid || route.activationToken) navigate(viewPath(DEFAULT_VIEW), { replace: true })
+    if (!route.valid || route.activationToken) navigate(viewPath(homeOf(auth.user)), { replace: true })
   }
 
   const logout = () => {
@@ -278,7 +282,8 @@ export default function App() {
     || ((view === 'assistente' || view === 'conectar') && !session?.user?.assistant_enabled)
   useEffect(() => {
     if (activationToken || !session) return
-    if (!route.valid || blockedForRole) navigate(viewPath(DEFAULT_VIEW), { replace: true })
+    if (blockedForRole) navigate(viewPath(DEFAULT_VIEW), { replace: true })
+    else if (!route.valid) navigate(viewPath(homeOf(session.user)), { replace: true })
   }, [activationToken, session, route.valid, blockedForRole, navigate])
 
   // /clientes/:id com um id que não existe (apagado, de outro workspace, link
