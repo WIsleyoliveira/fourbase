@@ -9720,3 +9720,23 @@ img.kb-avatar {
   /* No toque não há hover: o "+" do dia fica sempre visível. */
   .calview-cell-add { opacity: 1; transform: none; }
 }
+
+/* ── Calendário no celular: mês com pontos por dia; o toque abre a lista do dia ── */
+.calview-cell-dots { display: none; }
+@media (max-width: 640px) {
+  .calview-week { min-height: 56px; }
+  .calview-week-events { display: none; }
+  .calview-cell-add { display: none; }
+  .calview-cell { padding: 6px 2px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .calview-cell-top { justify-content: center; }
+  .calview-day-number { font-size: 13px; min-width: 26px; height: 26px; }
+  .calview-cell-dots { display: flex; align-items: center; justify-content: center; gap: 3px; flex-wrap: wrap; }
+  .calview-cell-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .calview-cell-dot.done { opacity: 0.4; }
+  .calview-cell-more { font-size: 10px; font-weight: 700; color: var(--muted-strong); line-height: 1; }
+}
+@media (max-width: 640px) {
+  /* Cabeçalho da semana só com a inicial (os nomes cortavam em "Se…", "Q…") */
+  .calview-weekdays span { display: block; font-size: 0; text-align: center; }
+  .calview-weekdays span::first-letter { font-size: 12px; }
+}

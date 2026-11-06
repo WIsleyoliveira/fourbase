@@ -125,6 +125,14 @@ function CalendarView({ currentUser }) {
   const [search, setSearch] = useState('')
   // Arrastando uma tarefa: as faixas deixam de captar o mouse para o dia embaixo receber o drop
   const [dragging, setDragging] = useState(false)
+  // Celular: o mês mostra só pontos por dia e o toque abre a lista do dia (as faixas não cabem em ~50px).
+  const [compact, setCompact] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const on = (e) => setCompact(e.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
 
   const viewMenuRef = useRef(null)
   const collapseTimerRef = useRef(null)
@@ -549,7 +557,7 @@ function CalendarView({ currentUser }) {
                     <div
                       key={toKey(date)}
                       className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                      onClick={(e) => openQuick(e, date)}
+                      onClick={(e) => (compact ? openDayDetail(date) : openQuick(e, date))}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => dropOnDay(e, date)}
                     >
@@ -563,6 +571,14 @@ function CalendarView({ currentUser }) {
                         </button>
                         <span className="calview-day-number">{date.getDate()}</span>
                       </div>
+                      {compact && (tasksByDay[toKey(date)] || []).length > 0 && (
+                        <div className="calview-cell-dots" aria-label={`${tasksByDay[toKey(date)].length} tarefas`}>
+                          {tasksByDay[toKey(date)].slice(0, 3).map((t) => (
+                            <span key={t.id} className={`calview-cell-dot${t.column_key === 'done' ? ' done' : ''}`} style={{ background: memberColor(t.assigned_to, members) }} />
+                          ))}
+                          {tasksByDay[toKey(date)].length > 3 && <span className="calview-cell-more">+{tasksByDay[toKey(date)].length - 3}</span>}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
