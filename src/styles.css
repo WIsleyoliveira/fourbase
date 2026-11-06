@@ -9788,3 +9788,14 @@ img.kb-avatar {
   .calagenda-desc { font-size: 15px; color: var(--text); opacity: 0.85; }
   .calagenda-pill { font-size: 13px; }
 }
+
+@media (max-width: 640px) {
+  .calmode { display: none; }
+  .calagenda-month { padding-top: 12px; border-top: 1px solid var(--border); }
+  .calagenda-daygroup { scroll-margin-top: 70px; padding: 0 2px; border-radius: 12px; }
+  .calagenda-daygroup.is-picked .calagenda-daytitle { color: var(--primary-text); }
+  .calagenda-daytitle { flex-wrap: wrap; align-items: center; }
+  .calagenda-daylabel { flex: 1 1 auto; min-width: 0; }
+  .calagenda-daycount { order: 3; flex: 1 0 100%; font-size: 13px; font-weight: 600; color: var(--muted-strong); }
+  .calagenda-daytitle .calagenda-add { min-height: 36px; padding: 0 12px; font-size: 14px; }
+}

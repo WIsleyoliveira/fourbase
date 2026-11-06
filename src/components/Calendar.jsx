@@ -307,13 +307,20 @@ function CalendarView({ currentUser }) {
               )
               }
 
+  // Celular: ao tocar num dia da grade, a lista rola até ele (só no toque, nunca ao abrir a tela)
+  const pickDay = (date) => {
+    setSelectedDate(date)
+    setTimeout(() => document.getElementById(`cal-day-${toKey(date)}`)?.scrollIntoView({ block: 'start' }), 60)
+  }
+
   // Agenda do mês (celular): dias do mês exibido que têm tarefa, em ordem, cada um com as tarefas por horário.
-  const [mobileMode, setMobileMode] = useState('agenda')
   const agendaDays = useMemo(() => {
     const prefix = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-`
-    return Object.keys(tasksByDay).filter((k) => k.startsWith(prefix)).sort().map((key) => {
+    const keys = new Set(Object.keys(tasksByDay).filter((k) => k.startsWith(prefix)))
+    if (selectedDate && toKey(selectedDate).startsWith(prefix)) keys.add(toKey(selectedDate))
+    return [...keys].sort().map((key) => {
       const [y, m, d] = key.split('-').map(Number)
-      const tasks = tasksByDay[key].slice().sort((a, b) => {
+      const tasks = (tasksByDay[key] || []).slice().sort((a, b) => {
         if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time)
         if (a.due_time) return -1
         if (b.due_time) return 1
@@ -321,7 +328,7 @@ function CalendarView({ currentUser }) {
       })
       return { key, date: new Date(y, m - 1, d), tasks }
     })
-  }, [tasksByDay, cursor])
+  }, [tasksByDay, cursor, selectedDate])
 
   const weeks = useMemo(() => {
     const rows = []
@@ -599,28 +606,6 @@ function CalendarView({ currentUser }) {
           </div>
         </header>
 
-        {compact && (
-          <div className="calmode" role="tablist" aria-label="Modo de visualização">
-            <button type="button" role="tab" aria-selected={mobileMode === 'agenda'} className={mobileMode === 'agenda' ? 'active' : ''} onClick={() => setMobileMode('agenda')}>Agenda</button>
-            <button type="button" role="tab" aria-selected={mobileMode === 'mes'} className={mobileMode === 'mes' ? 'active' : ''} onClick={() => setMobileMode('mes')}>Mês</button>
-          </div>
-        )}
-        {compact && mobileMode === 'agenda' && (
-          <section className="calagenda calagenda-month" aria-label="Tarefas do mês">
-            {agendaDays.length === 0 && <p className="calagenda-empty">Nenhuma tarefa com data neste mês.</p>}
-            {agendaDays.map(({ key, date, tasks: dayTasks }) => (
-              <div key={key} className="calagenda-daygroup">
-                <h3 className={`calagenda-daytitle${isSameDay(date, today) ? ' is-today' : ''}`}>
-                  {date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  <span>{dayTasks.length} tarefa{dayTasks.length > 1 ? 's' : ''}</span>
-                </h3>
-                {dayTasks.map(agendaCard)}
-              </div>
-            ))}
-          </section>
-        )}
-        {!(compact && mobileMode === 'agenda') && (
-          <>
         <div className="calview-weekdays">
           {WEEKDAYS_FULL.map((w) => (
             <span key={w}>{w}</span>
@@ -638,7 +623,7 @@ function CalendarView({ currentUser }) {
                     <div
                       key={toKey(date)}
                       className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                      onClick={(e) => (compact ? setSelectedDate(date) : openQuick(e, date))}
+                      onClick={(e) => (compact ? pickDay(date) : openQuick(e, date))}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => dropOnDay(e, date)}
                     >
@@ -716,24 +701,24 @@ function CalendarView({ currentUser }) {
           ))}
         </div>
 
-          </>
-        )}
-        {compact && mobileMode === 'mes' && selectedDate && (
-          <section className="calagenda" aria-label="Tarefas do dia selecionado">
-            <header className="calagenda-head">
-              <div>
-                <strong className="calagenda-day">
-                  {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                </strong>
-                <span className="calagenda-count">
-                  {tasksForSelectedDate.length === 0 ? 'Nenhuma tarefa' : `${tasksForSelectedDate.length} tarefa${tasksForSelectedDate.length > 1 ? 's' : ''}`}
-                </span>
-              </div>
-              <button type="button" className="calagenda-add" onClick={() => openNewTask(selectedDate)}>+ Nova</button>
-            </header>
-            {tasksForSelectedDate.length === 0 && <p className="calagenda-empty">Nada agendado para este dia. Toque em “+ Nova” para criar.</p>}
-            {tasksForSelectedDate.map(agendaCard)}
-            </section>
+        {compact && (
+          <section className="calagenda calagenda-month" aria-label="Tarefas do mês">
+            {agendaDays.length === 0 && <p className="calagenda-empty">Nenhuma tarefa com data neste mês.</p>}
+            {agendaDays.map(({ key, date, tasks: dayTasks }) => {
+              const picked = selectedDate && isSameDay(date, selectedDate)
+              return (
+                <div key={key} id={`cal-day-${key}`} className={`calagenda-daygroup${picked ? ' is-picked' : ''}`}>
+                  <h3 className={`calagenda-daytitle${isSameDay(date, today) ? ' is-today' : ''}`}>
+                    <span className="calagenda-daylabel">{date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+                    <span className="calagenda-daycount">{dayTasks.length === 0 ? 'sem tarefas' : `${dayTasks.length} tarefa${dayTasks.length > 1 ? 's' : ''}`}</span>
+                    <button type="button" className="calagenda-add" onClick={() => openNewTask(date)}>+ Nova</button>
+                  </h3>
+                  {dayTasks.length === 0 && <p className="calagenda-empty">Nada agendado para este dia.</p>}
+                  {dayTasks.map(agendaCard)}
+                </div>
+              )
+            })}
+          </section>
         )}
       </div>
 
