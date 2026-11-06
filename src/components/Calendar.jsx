@@ -557,7 +557,7 @@ function CalendarView({ currentUser }) {
                     <div
                       key={toKey(date)}
                       className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                      onClick={(e) => (compact ? openDayDetail(date) : openQuick(e, date))}
+                      onClick={(e) => (compact ? setSelectedDate(date) : openQuick(e, date))}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => dropOnDay(e, date)}
                     >
@@ -634,6 +634,64 @@ function CalendarView({ currentUser }) {
             </div>
           ))}
         </div>
+
+        {compact && selectedDate && (
+          <section className="calagenda" aria-label="Tarefas do dia selecionado">
+            <header className="calagenda-head">
+              <div>
+                <strong className="calagenda-day">
+                  {selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </strong>
+                <span className="calagenda-count">
+                  {tasksForSelectedDate.length === 0 ? 'Nenhuma tarefa' : `${tasksForSelectedDate.length} tarefa${tasksForSelectedDate.length > 1 ? 's' : ''}`}
+                </span>
+              </div>
+              <button type="button" className="calagenda-add" onClick={() => openNewTask(selectedDate)}>+ Nova</button>
+            </header>
+            {tasksForSelectedDate.length === 0 && <p className="calagenda-empty">Nada agendado para este dia. Toque em “+ Nova” para criar.</p>}
+            {tasksForSelectedDate.map((t) => {
+              const done = t.column_key === 'done'
+              const assignee = members.find((m) => m.id === t.assigned_to)
+              const client = clients.find((c) => c.id === t.client_id)
+              const status = columns?.find((c) => c.key === t.column_key)?.label
+              return (
+                <article key={t.id} className={`calagenda-card${done ? ' done' : ''}`} style={{ '--owner': memberColor(t.assigned_to, members) }}>
+                  <button
+                    type="button"
+                    className={`calagenda-check${done ? ' checked' : ''}`}
+                    onClick={() => toggleComplete(t)}
+                    aria-label={done ? 'Reabrir tarefa' : 'Concluir tarefa'}
+                  >
+                    {done && <IconCheckPlain size={14} />}
+                  </button>
+                  <button type="button" className="calagenda-body" onClick={(e) => openDetail(e, t)}>
+                    <span className="calagenda-time">
+                      {t.due_time ? `${formatTime(t.due_time)}${t.due_time_end ? `–${formatTime(t.due_time_end)}` : ''}` : 'Dia todo'}
+                      {t.due_date_end && t.due_date_end !== t.due_date ? ` · até ${formatDay(t.due_date_end)}` : ''}
+                    </span>
+                    <span className="calagenda-title">{t.title}</span>
+                    {t.description && <span className="calagenda-desc">{t.description}</span>}
+                    <span className="calagenda-meta">
+                      {status && <span className="calagenda-pill">{status}</span>}
+                      <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>{t.priority}</span>
+                      {client && <span className="calagenda-pill">{client.name}</span>}
+                      {assignee && <span className="calagenda-pill">{assignee.name}</span>}
+                    </span>
+                    {t.tags?.length > 0 && (
+                      <span className="calagenda-meta">
+                        {t.tags.map((name) => {
+                          const color = tagColor(name, tags)
+                          return <span key={name} className="card-tag-pill" style={{ background: `${color}1f`, color }}>{name}</span>
+                        })}
+                      </span>
+                    )}
+                    <span className="calagenda-more">Ver detalhes ›</span>
+                  </button>
+                </article>
+              )
+            })}
+          </section>
+        )}
       </div>
 
       {sideOpen && (
