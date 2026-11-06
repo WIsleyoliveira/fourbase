@@ -9799,3 +9799,17 @@ img.kb-avatar {
   .calagenda-daycount { order: 3; flex: 1 0 100%; font-size: 13px; font-weight: 600; color: var(--muted-strong); }
   .calagenda-daytitle .calagenda-add { min-height: 36px; padding: 0 12px; font-size: 14px; }
 }
+@media (max-width: 640px) {
+  /* Mês no estilo do calendário do iPhone: células altas que ocupam a tela, número grande, pontos maiores */
+  .calview-week { min-height: clamp(76px, calc((100dvh - 330px) / 6), 120px); }
+  .calview-cell { padding: 8px 2px 6px; gap: 6px; justify-content: flex-start; }
+  .calview-day-number { font-size: 18px; font-weight: 600; min-width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+  .calview-cell.is-today .calview-day-number { background: var(--primary); color: var(--white); border-radius: 50%; }
+  .calview-cell.is-selected:not(.is-today) .calview-day-number { background: var(--text); color: var(--surface); border-radius: 50%; }
+  .calview-cell.is-selected { outline: none; box-shadow: none; background: var(--primary-light); }
+  .calview-cell-dots { gap: 4px; }
+  .calview-cell-dot { width: 9px; height: 9px; }
+  .calview-cell-more { font-size: 11px; }
+  .calview-weekdays span::first-letter { font-size: 14px; }
+  .calview-cell.out-month .calview-day-number { opacity: 0.35; }
+}
