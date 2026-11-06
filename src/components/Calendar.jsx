@@ -264,6 +264,65 @@ function CalendarView({ currentUser }) {
   }, [cursor])
 
   // Semanas da grade com as faixas já posicionadas (vários dias = uma barra só)
+  // Cartão de tarefa da agenda (celular): título inteiro, descrição, status, prioridade, cliente, responsável, etiquetas.
+  const agendaCard = (t) => {
+              const done = t.column_key === 'done'
+              const assignee = members.find((m) => m.id === t.assigned_to)
+              const client = clients.find((c) => c.id === t.client_id)
+              const status = columns?.find((c) => c.key === t.column_key)?.label
+              return (
+                <article key={t.id} className={`calagenda-card${done ? ' done' : ''}`} style={{ '--owner': memberColor(t.assigned_to, members) }}>
+                  <button
+                    type="button"
+                    className={`calagenda-check${done ? ' checked' : ''}`}
+                    onClick={() => toggleComplete(t)}
+                    aria-label={done ? 'Reabrir tarefa' : 'Concluir tarefa'}
+                  >
+                    {done && <IconCheckPlain size={14} />}
+                  </button>
+                  <button type="button" className="calagenda-body" onClick={(e) => openDetail(e, t)}>
+                    <span className="calagenda-time">
+                      {t.due_time ? `${formatTime(t.due_time)}${t.due_time_end ? `–${formatTime(t.due_time_end)}` : ''}` : 'Dia todo'}
+                      {t.due_date_end && t.due_date_end !== t.due_date ? ` · até ${formatDay(t.due_date_end)}` : ''}
+                    </span>
+                    <span className="calagenda-title">{t.title}</span>
+                    {t.description && <span className="calagenda-desc">{t.description}</span>}
+                    <span className="calagenda-meta">
+                      {status && <span className="calagenda-pill">{status}</span>}
+                      <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>{t.priority}</span>
+                      {client && <span className="calagenda-pill">{client.name}</span>}
+                      {assignee && <span className="calagenda-pill">{assignee.name}</span>}
+                    </span>
+                    {t.tags?.length > 0 && (
+                      <span className="calagenda-meta">
+                        {t.tags.map((name) => {
+                          const color = tagColor(name, tags)
+                          return <span key={name} className="card-tag-pill" style={{ background: `${color}1f`, color }}>{name}</span>
+                        })}
+                      </span>
+                    )}
+                    <span className="calagenda-more">Ver detalhes ›</span>
+                  </button>
+                </article>
+              )
+              }
+
+  // Agenda do mês (celular): dias do mês exibido que têm tarefa, em ordem, cada um com as tarefas por horário.
+  const [mobileMode, setMobileMode] = useState('agenda')
+  const agendaDays = useMemo(() => {
+    const prefix = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-`
+    return Object.keys(tasksByDay).filter((k) => k.startsWith(prefix)).sort().map((key) => {
+      const [y, m, d] = key.split('-').map(Number)
+      const tasks = tasksByDay[key].slice().sort((a, b) => {
+        if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time)
+        if (a.due_time) return -1
+        if (b.due_time) return 1
+        return a.title.localeCompare(b.title)
+      })
+      return { key, date: new Date(y, m - 1, d), tasks }
+    })
+  }, [tasksByDay, cursor])
+
   const weeks = useMemo(() => {
     const rows = []
     for (let i = 0; i < grid.length; i += 7) {
@@ -540,6 +599,28 @@ function CalendarView({ currentUser }) {
           </div>
         </header>
 
+        {compact && (
+          <div className="calmode" role="tablist" aria-label="Modo de visualização">
+            <button type="button" role="tab" aria-selected={mobileMode === 'agenda'} className={mobileMode === 'agenda' ? 'active' : ''} onClick={() => setMobileMode('agenda')}>Agenda</button>
+            <button type="button" role="tab" aria-selected={mobileMode === 'mes'} className={mobileMode === 'mes' ? 'active' : ''} onClick={() => setMobileMode('mes')}>Mês</button>
+          </div>
+        )}
+        {compact && mobileMode === 'agenda' && (
+          <section className="calagenda calagenda-month" aria-label="Tarefas do mês">
+            {agendaDays.length === 0 && <p className="calagenda-empty">Nenhuma tarefa com data neste mês.</p>}
+            {agendaDays.map(({ key, date, tasks: dayTasks }) => (
+              <div key={key} className="calagenda-daygroup">
+                <h3 className={`calagenda-daytitle${isSameDay(date, today) ? ' is-today' : ''}`}>
+                  {date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  <span>{dayTasks.length} tarefa{dayTasks.length > 1 ? 's' : ''}</span>
+                </h3>
+                {dayTasks.map(agendaCard)}
+              </div>
+            ))}
+          </section>
+        )}
+        {!(compact && mobileMode === 'agenda') && (
+          <>
         <div className="calview-weekdays">
           {WEEKDAYS_FULL.map((w) => (
             <span key={w}>{w}</span>
@@ -635,7 +716,9 @@ function CalendarView({ currentUser }) {
           ))}
         </div>
 
-        {compact && selectedDate && (
+          </>
+        )}
+        {compact && mobileMode === 'mes' && selectedDate && (
           <section className="calagenda" aria-label="Tarefas do dia selecionado">
             <header className="calagenda-head">
               <div>
@@ -649,48 +732,8 @@ function CalendarView({ currentUser }) {
               <button type="button" className="calagenda-add" onClick={() => openNewTask(selectedDate)}>+ Nova</button>
             </header>
             {tasksForSelectedDate.length === 0 && <p className="calagenda-empty">Nada agendado para este dia. Toque em “+ Nova” para criar.</p>}
-            {tasksForSelectedDate.map((t) => {
-              const done = t.column_key === 'done'
-              const assignee = members.find((m) => m.id === t.assigned_to)
-              const client = clients.find((c) => c.id === t.client_id)
-              const status = columns?.find((c) => c.key === t.column_key)?.label
-              return (
-                <article key={t.id} className={`calagenda-card${done ? ' done' : ''}`} style={{ '--owner': memberColor(t.assigned_to, members) }}>
-                  <button
-                    type="button"
-                    className={`calagenda-check${done ? ' checked' : ''}`}
-                    onClick={() => toggleComplete(t)}
-                    aria-label={done ? 'Reabrir tarefa' : 'Concluir tarefa'}
-                  >
-                    {done && <IconCheckPlain size={14} />}
-                  </button>
-                  <button type="button" className="calagenda-body" onClick={(e) => openDetail(e, t)}>
-                    <span className="calagenda-time">
-                      {t.due_time ? `${formatTime(t.due_time)}${t.due_time_end ? `–${formatTime(t.due_time_end)}` : ''}` : 'Dia todo'}
-                      {t.due_date_end && t.due_date_end !== t.due_date ? ` · até ${formatDay(t.due_date_end)}` : ''}
-                    </span>
-                    <span className="calagenda-title">{t.title}</span>
-                    {t.description && <span className="calagenda-desc">{t.description}</span>}
-                    <span className="calagenda-meta">
-                      {status && <span className="calagenda-pill">{status}</span>}
-                      <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>{t.priority}</span>
-                      {client && <span className="calagenda-pill">{client.name}</span>}
-                      {assignee && <span className="calagenda-pill">{assignee.name}</span>}
-                    </span>
-                    {t.tags?.length > 0 && (
-                      <span className="calagenda-meta">
-                        {t.tags.map((name) => {
-                          const color = tagColor(name, tags)
-                          return <span key={name} className="card-tag-pill" style={{ background: `${color}1f`, color }}>{name}</span>
-                        })}
-                      </span>
-                    )}
-                    <span className="calagenda-more">Ver detalhes ›</span>
-                  </button>
-                </article>
-              )
-            })}
-          </section>
+            {tasksForSelectedDate.map(agendaCard)}
+            </section>
         )}
       </div>
 
