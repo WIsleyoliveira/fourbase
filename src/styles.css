@@ -9666,3 +9666,57 @@ img.kb-avatar {
 }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Ajustes de mobile (auditoria): altura dinâmica, campos sem zoom no iPhone,
+   alvos de toque maiores e cabeçalho do editor de notas que quebra linha.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* 100vh no celular inclui a área da barra do navegador: dvh acompanha a área visível. */
+@supports (height: 100dvh) {
+  body, .app { min-height: 100dvh; }
+  .modal { max-height: calc(100dvh - 40px); }
+  .modal.task-detail-v2 { max-height: 90dvh; }
+}
+
+@media (max-width: 768px) {
+  /* Campo com fonte menor que 16px faz o iPhone dar zoom ao focar. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Notas: título e "Virar tarefa" não cabem na mesma linha em tela estreita. */
+  .editor-panel-header { flex-wrap: wrap; }
+  .editor-panel-header > * { min-width: 0; }
+}
+
+@media (max-width: 600px) {
+  /* O modal de detalhe ocupa a tela toda: sem margem do backdrop (ele começava acima do topo). */
+  .modal-backdrop:has(> .modal.task-detail-v2) { padding: 0; }
+  .modal.task-detail-v2 { max-height: 100vh; height: 100vh; }
+}
+@supports (height: 100dvh) {
+  @media (max-width: 600px) {
+    .modal.task-detail-v2 { max-height: 100dvh; height: 100dvh; }
+  }
+}
+
+/* Alvos de toque: a área clicável cresce para ~44px sem mudar o visual dos controles. */
+@media (hover: none), (max-width: 768px) {
+  .icon-btn, .card-complete-btn, .calview-cell-add, .kb-quick-btn, .kb-toggle {
+    position: relative;
+  }
+  .icon-btn::after, .card-complete-btn::after, .calview-cell-add::after {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  .kb-quick-btn, .kb-toggle { min-height: 36px; }
+  /* No toque não há hover: o "+" do dia fica sempre visível. */
+  .calview-cell-add { opacity: 1; transform: none; }
+}
