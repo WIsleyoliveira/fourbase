@@ -8,6 +8,7 @@ import { supabase, AVATARS_BUCKET, storagePathFromUrl } from '../supabase.js'
 import { assigneeColor } from '../colors.js'
 import ColorPickerField from './ColorPickerField.jsx'
 import { Link } from 'react-router-dom'
+import { getHomeView, homeChoices, setHomeView } from '../homeView.js'
 
 const AVATAR_EXTS = ['png', 'jpg', 'jpeg', 'webp']
 const AVATAR_LIMIT_MB = 5
@@ -109,6 +110,8 @@ export default function ProfileView({ currentUser, onProfileSaved, onToast, onEr
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isGestor = profile?.role === 'gestor'
+  const homePerms = { isGestor, assistantEnabled: !!profile?.assistant_enabled }
+  const [homeView, setHomeViewState] = useState(() => getHomeView(currentUser?.id, { isGestor: currentUser?.role === 'gestor', assistantEnabled: !!currentUser?.assistant_enabled }))
   const accentColor = assigneeColor(profile?.id, color)
 
   const dirty =
@@ -468,6 +471,29 @@ export default function ProfileView({ currentUser, onProfileSaved, onToast, onEr
             <span className="profile-switch-thumb" />
           </button>
         </div>
+      </div>
+
+      {/* ══ Tela inicial ═════════════════════════════════════════════════ */}
+      <div className="panel profile-card">
+        <div className="panel-header"><h3>Tela inicial</h3></div>
+        <div className="profile-switch-text">
+          <label htmlFor="home-view" className="profile-switch-label">Abrir o app em</label>
+          <small className="profile-field-hint">É a tela que aparece primeiro quando você entra no fourbase neste navegador.</small>
+        </div>
+        <select
+          id="home-view"
+          className="profile-home-select"
+          value={homeView}
+          onChange={(e) => {
+            const v = e.target.value
+            if (setHomeView(profile?.id, v, homePerms)) {
+              setHomeViewState(v)
+              onToast('Tela inicial salva!')
+            } else onError(new Error('Não foi possível salvar neste navegador.'))
+          }}
+        >
+          {homeChoices(homePerms).map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
       </div>
 
       {isGestor && profile?.assistant_enabled && (

@@ -125,6 +125,14 @@ function CalendarView({ currentUser }) {
   const [search, setSearch] = useState('')
   // Arrastando uma tarefa: as faixas deixam de captar o mouse para o dia embaixo receber o drop
   const [dragging, setDragging] = useState(false)
+  // Celular: o mês mostra só pontos por dia e o toque abre a lista do dia (as faixas não cabem em ~50px).
+  const [compact, setCompact] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const on = (e) => setCompact(e.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
 
   const viewMenuRef = useRef(null)
   const collapseTimerRef = useRef(null)
@@ -256,6 +264,71 @@ function CalendarView({ currentUser }) {
   }, [cursor])
 
   // Semanas da grade com as faixas já posicionadas (vários dias = uma barra só)
+  // Cartão de tarefa da agenda (celular): título inteiro, descrição, status, prioridade, cliente, responsável, etiquetas.
+  const agendaCard = (t) => {
+              const done = t.column_key === 'done'
+              const assignee = members.find((m) => m.id === t.assigned_to)
+              const client = clients.find((c) => c.id === t.client_id)
+              const status = columns?.find((c) => c.key === t.column_key)?.label
+              return (
+                <article key={t.id} className={`calagenda-card${done ? ' done' : ''}`} style={{ '--owner': memberColor(t.assigned_to, members) }}>
+                  <button
+                    type="button"
+                    className={`calagenda-check${done ? ' checked' : ''}`}
+                    onClick={() => toggleComplete(t)}
+                    aria-label={done ? 'Reabrir tarefa' : 'Concluir tarefa'}
+                  >
+                    {done && <IconCheckPlain size={14} />}
+                  </button>
+                  <button type="button" className="calagenda-body" onClick={(e) => openDetail(e, t)}>
+                    <span className="calagenda-time">
+                      {t.due_time ? `${formatTime(t.due_time)}${t.due_time_end ? `–${formatTime(t.due_time_end)}` : ''}` : 'Dia todo'}
+                      {t.due_date_end && t.due_date_end !== t.due_date ? ` · até ${formatDay(t.due_date_end)}` : ''}
+                    </span>
+                    <span className="calagenda-title">{t.title}</span>
+                    {t.description && <span className="calagenda-desc">{t.description}</span>}
+                    <span className="calagenda-meta">
+                      {status && <span className="calagenda-pill">{status}</span>}
+                      <span className={`priority-tag ${PRIORITY_CLASS[t.priority] || 'p-media'}`}>{t.priority}</span>
+                      {client && <span className="calagenda-pill">{client.name}</span>}
+                      {assignee && <span className="calagenda-pill">{assignee.name}</span>}
+                    </span>
+                    {t.tags?.length > 0 && (
+                      <span className="calagenda-meta">
+                        {t.tags.map((name) => {
+                          const color = tagColor(name, tags)
+                          return <span key={name} className="card-tag-pill" style={{ background: `${color}1f`, color }}>{name}</span>
+                        })}
+                      </span>
+                    )}
+                    <span className="calagenda-more">Ver detalhes ›</span>
+                  </button>
+                </article>
+              )
+              }
+
+  // Celular: ao tocar num dia da grade, a lista rola até ele (só no toque, nunca ao abrir a tela)
+  const [picked, setPicked] = useState(null)
+  const pickDay = (date) => {
+    setSelectedDate(date)
+    setPicked(date)
+    setTimeout(() => document.getElementById(`cal-day-${toKey(date)}`)?.scrollIntoView({ block: 'start' }), 60)
+  }
+
+  // Celular: tarefas só do dia tocado (nada aparece embaixo até o usuário tocar num dia).
+  const agendaDays = useMemo(() => {
+    return (picked ? [toKey(picked)] : []).map((key) => {
+      const [y, m, d] = key.split('-').map(Number)
+      const tasks = (tasksByDay[key] || []).slice().sort((a, b) => {
+        if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time)
+        if (a.due_time) return -1
+        if (b.due_time) return 1
+        return a.title.localeCompare(b.title)
+      })
+      return { key, date: new Date(y, m - 1, d), tasks }
+    })
+  }, [tasksByDay, picked])
+
   const weeks = useMemo(() => {
     const rows = []
     for (let i = 0; i < grid.length; i += 7) {
@@ -544,12 +617,12 @@ function CalendarView({ currentUser }) {
               <div className="calview-week-cells">
                 {cells.map(({ date, inMonth }) => {
                   const isToday = isSameDay(date, today)
-                  const isSelected = selectedDate && isSameDay(date, selectedDate)
+                  const isSelected = compact ? picked && isSameDay(date, picked) : selectedDate && isSameDay(date, selectedDate)
                   return (
                     <div
                       key={toKey(date)}
                       className={`calview-cell${inMonth ? '' : ' out-month'}${isToday ? ' is-today' : ''}${isSelected ? ' is-selected' : ''}`}
-                      onClick={(e) => openQuick(e, date)}
+                      onClick={(e) => (compact ? pickDay(date) : openQuick(e, date))}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => dropOnDay(e, date)}
                     >
@@ -563,6 +636,14 @@ function CalendarView({ currentUser }) {
                         </button>
                         <span className="calview-day-number">{date.getDate()}</span>
                       </div>
+                      {compact && (tasksByDay[toKey(date)] || []).length > 0 && (
+                        <div className="calview-cell-chips" aria-label={`${tasksByDay[toKey(date)].length} tarefas`}>
+                          {tasksByDay[toKey(date)].slice(0, 2).map((t) => (
+                            <span key={t.id} className={`calview-cell-chip${t.column_key === 'done' ? ' done' : ''}`} style={{ '--owner': memberColor(t.assigned_to, members) }}>{t.title}</span>
+                          ))}
+                          {tasksByDay[toKey(date)].length > 2 && <span className="calview-cell-more">+{tasksByDay[toKey(date)].length - 2}</span>}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -618,6 +699,26 @@ function CalendarView({ currentUser }) {
             </div>
           ))}
         </div>
+
+        {compact && picked && (
+          <section className="calagenda calagenda-month" aria-label="Tarefas do dia">
+            {agendaDays.map(({ key, date, tasks: dayTasks }) => {
+              const picked = selectedDate && isSameDay(date, selectedDate)
+              return (
+                <div key={key} id={`cal-day-${key}`} className={`calagenda-daygroup${picked ? ' is-picked' : ''}`}>
+                  <h3 className={`calagenda-daytitle${isSameDay(date, today) ? ' is-today' : ''}`}>
+                    <span className="calagenda-daylabel">{date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+                    <span className="calagenda-daycount">{dayTasks.length === 0 ? 'sem tarefas' : `${dayTasks.length} tarefa${dayTasks.length > 1 ? 's' : ''}`}</span>
+                    <button type="button" className="calagenda-add" onClick={() => openNewTask(date)}>+ Nova</button>
+                    <button type="button" className="calagenda-close" onClick={() => setPicked(null)} aria-label="Fechar">✕</button>
+                  </h3>
+                  {dayTasks.length === 0 && <p className="calagenda-empty">Nada agendado para este dia.</p>}
+                  {dayTasks.map(agendaCard)}
+                </div>
+              )
+            })}
+          </section>
+        )}
       </div>
 
       {sideOpen && (

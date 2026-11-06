@@ -9666,3 +9666,168 @@ img.kb-avatar {
 }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Ajustes de mobile (auditoria): altura dinâmica, campos sem zoom no iPhone,
+   alvos de toque maiores e cabeçalho do editor de notas que quebra linha.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* 100vh no celular inclui a área da barra do navegador: dvh acompanha a área visível. */
+@supports (height: 100dvh) {
+  body, .app { min-height: 100dvh; }
+  .modal { max-height: calc(100dvh - 40px); }
+  .modal.task-detail-v2 { max-height: 90dvh; }
+}
+
+@media (max-width: 768px) {
+  /* Campo com fonte menor que 16px faz o iPhone dar zoom ao focar. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Notas: título e "Virar tarefa" não cabem na mesma linha em tela estreita. */
+  .editor-panel-header { flex-wrap: wrap; }
+  .editor-panel-header > * { min-width: 0; }
+}
+
+@media (max-width: 600px) {
+  /* O modal de detalhe ocupa a tela toda: sem margem do backdrop (ele começava acima do topo). */
+  .modal-backdrop:has(> .modal.task-detail-v2) { padding: 0; }
+  .modal.task-detail-v2 { max-height: 100vh; height: 100vh; }
+}
+@supports (height: 100dvh) {
+  @media (max-width: 600px) {
+    .modal.task-detail-v2 { max-height: 100dvh; height: 100dvh; }
+  }
+}
+
+/* Alvos de toque: a área clicável cresce para ~44px sem mudar o visual dos controles. */
+@media (hover: none), (max-width: 768px) {
+  .icon-btn, .card-complete-btn, .calview-cell-add, .kb-quick-btn, .kb-toggle {
+    position: relative;
+  }
+  .icon-btn::after, .card-complete-btn::after, .calview-cell-add::after {
+    content: '';
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  .kb-quick-btn, .kb-toggle { min-height: 36px; }
+  /* No toque não há hover: o "+" do dia fica sempre visível. */
+  .calview-cell-add { opacity: 1; transform: none; }
+}
+
+/* ── Calendário no celular: mês com pontos por dia; o toque abre a lista do dia ── */
+.calview-cell-dots { display: none; }
+@media (max-width: 640px) {
+  .calview-week { min-height: 56px; }
+  .calview-week-events { display: none; }
+  .calview-cell-add { display: none; }
+  .calview-cell { padding: 6px 2px 4px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .calview-cell-top { justify-content: center; }
+  .calview-day-number { font-size: 13px; min-width: 26px; height: 26px; }
+  .calview-cell-dots { display: flex; align-items: center; justify-content: center; gap: 3px; flex-wrap: wrap; }
+  .calview-cell-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .calview-cell-dot.done { opacity: 0.4; }
+  .calview-cell-more { font-size: 10px; font-weight: 700; color: var(--muted-strong); line-height: 1; }
+}
+@media (max-width: 640px) {
+  /* Cabeçalho da semana só com a inicial (os nomes cortavam em "Se…", "Q…") */
+  .calview-weekdays span { display: block; font-size: 0; text-align: center; }
+  .calview-weekdays span::first-letter { font-size: 12px; }
+}
+
+/* Agenda do dia (celular): lista completa e legível abaixo do mês */
+.calagenda { display: none; }
+@media (max-width: 640px) {
+  .calview-week { min-height: 62px; }
+  .calview-cell-dot { width: 8px; height: 8px; }
+  .calview-cell.is-selected { background: var(--primary-light); }
+  .calagenda { display: block; padding: 14px 12px 20px; border-top: 1px solid var(--border); }
+  .calagenda-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .calagenda-day { display: block; font-size: 17px; text-transform: capitalize; color: var(--text); }
+  .calagenda-count { font-size: 13px; color: var(--muted-strong); }
+  .calagenda-add { min-height: 44px; padding: 0 16px; border: none; border-radius: var(--radius-sm); background: var(--primary); color: var(--white); font-weight: 700; font-size: 15px; }
+  .calagenda-empty { margin: 8px 0; color: var(--muted-strong); font-size: 15px; line-height: 1.4; }
+  .calagenda-card { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; padding: 12px; border: 1px solid var(--border); border-left: 4px solid var(--owner, var(--primary)); border-radius: 12px; background: var(--surface); }
+  .calagenda-card.done .calagenda-title { text-decoration: line-through; opacity: 0.6; }
+  .calagenda-check { flex: 0 0 auto; width: 30px; height: 30px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--muted); background: transparent; display: inline-flex; align-items: center; justify-content: center; color: var(--white); position: relative; }
+  .calagenda-check::after { content: ''; position: absolute; inset: -8px; }
+  .calagenda-check.checked { background: var(--primary); border-color: var(--primary); }
+  .calagenda-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; border: none; background: transparent; padding: 0; color: var(--text); }
+  .calagenda-time { font-size: 13px; font-weight: 700; color: var(--primary-text); }
+  .calagenda-title { font-size: 16px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+  .calagenda-desc { font-size: 14px; line-height: 1.4; color: var(--muted-strong); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .calagenda-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .calagenda-pill { padding: 3px 9px; border-radius: 999px; background: var(--surface-2, rgba(127,127,127,0.15)); color: var(--muted-strong); font-size: 12.5px; font-weight: 600; }
+  .calagenda-more { font-size: 13.5px; font-weight: 700; color: var(--primary-text); }
+}
+@media (max-width: 640px) {
+  .calagenda-day { text-transform: none; }
+  .calagenda-day::first-letter { text-transform: uppercase; }
+  .calagenda-add { white-space: nowrap; flex: 0 0 auto; }
+}
+
+@media (max-width: 640px) {
+  .calmode { display: flex; gap: 4px; margin: 10px 12px; padding: 4px; border-radius: 12px; background: var(--surface-2, rgba(127,127,127,0.15)); }
+  .calmode button { flex: 1; min-height: 44px; border: none; border-radius: 9px; background: transparent; color: var(--muted-strong); font-size: 16px; font-weight: 700; }
+  .calmode button.active { background: var(--primary); color: var(--white); }
+  .calagenda-month { border-top: none; padding-top: 4px; }
+  .calagenda-daygroup { margin-bottom: 14px; }
+  .calagenda-daytitle { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 8px; padding: 8px 2px; background: var(--surface); font-size: 16px; color: var(--text); text-transform: none; border-bottom: 1px solid var(--border); }
+  .calagenda-daytitle::first-letter { text-transform: uppercase; }
+  .calagenda-daytitle span { font-size: 13px; font-weight: 600; color: var(--muted-strong); }
+  .calagenda-daytitle.is-today { color: var(--primary-text); }
+  /* Texto mais nítido e legível */
+  .calagenda-title { font-size: 17px; }
+  .calagenda-time { font-size: 14px; }
+  .calagenda-desc { font-size: 15px; color: var(--text); opacity: 0.85; }
+  .calagenda-pill { font-size: 13px; }
+}
+
+@media (max-width: 640px) {
+  .calmode { display: none; }
+  .calagenda-month { padding-top: 12px; border-top: 1px solid var(--border); }
+  .calagenda-daygroup { scroll-margin-top: 70px; padding: 0 2px; border-radius: 12px; }
+  .calagenda-daygroup.is-picked .calagenda-daytitle { color: var(--primary-text); }
+  .calagenda-daytitle { flex-wrap: wrap; align-items: center; }
+  .calagenda-daylabel { flex: 1 1 auto; min-width: 0; }
+  .calagenda-daycount { order: 3; flex: 1 0 100%; font-size: 13px; font-weight: 600; color: var(--muted-strong); }
+  .calagenda-daytitle .calagenda-add { min-height: 36px; padding: 0 12px; font-size: 14px; }
+}
+@media (max-width: 640px) {
+  /* Mês no estilo do calendário do iPhone: células altas que ocupam a tela, número grande, pontos maiores */
+  .calview-week { min-height: clamp(76px, calc((100dvh - 330px) / 6), 120px); }
+  .calview-cell { padding: 8px 2px 6px; gap: 6px; justify-content: flex-start; }
+  .calview-day-number { font-size: 18px; font-weight: 600; min-width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+  .calview-cell.is-today .calview-day-number { background: var(--primary); color: var(--white); border-radius: 50%; }
+  .calview-cell.is-selected:not(.is-today) .calview-day-number { background: var(--text); color: var(--surface); border-radius: 50%; }
+  .calview-cell.is-selected { outline: none; box-shadow: none; background: var(--primary-light); }
+  .calview-cell-dots { gap: 4px; }
+  .calview-cell-dot { width: 9px; height: 9px; }
+  .calview-cell-more { font-size: 11px; }
+  .calview-weekdays span::first-letter { font-size: 14px; }
+  .calview-cell.out-month .calview-day-number { opacity: 0.35; }
+}
+
+@media (max-width: 640px) {
+  .calview-week { min-height: clamp(96px, calc((100dvh - 330px) / 6), 130px); }
+  .calview-cell { padding: 6px 1px 4px; gap: 3px; }
+  .calview-day-number { font-size: 15px; min-width: 28px; height: 28px; }
+  .calview-cell-chips { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 0 1px; min-width: 0; }
+  .calview-cell-chip { display: block; width: 100%; padding: 1px 3px; border-radius: 4px; background: color-mix(in srgb, var(--owner, var(--primary)) 28%, transparent); border-left: 2px solid var(--owner, var(--primary)); color: var(--text); font-size: 9.5px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  .calview-cell-chip.done { opacity: 0.45; text-decoration: line-through; }
+  .calview-cell-more { font-size: 10px; font-weight: 700; color: var(--muted-strong); text-align: center; }
+  .calview-cell-dots { display: none; }
+  .calagenda-close { flex: 0 0 auto; width: 36px; height: 36px; border: none; border-radius: 50%; background: var(--surface-2, rgba(127,127,127,0.2)); color: var(--text); font-size: 16px; }
+}
+
+@media (max-width: 640px) {
+  .calview-cell-chip { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; font-size: 10px; line-height: 1.2; padding: 2px 3px; }
+}
+
+.profile-home-select { width: 100%; max-width: 360px; margin-top: 10px; padding: 11px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
