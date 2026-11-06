@@ -9,6 +9,50 @@
 
 export const RELEASES = [
   {
+    version: '1.3.0',
+    date: '2026-11-06',
+    title: 'Calendário no celular e tela inicial à sua escolha',
+    intro: 'Deixamos o fourbase mais confortável no celular e mais do seu jeito:',
+    items: [
+      {
+        kind: 'Novo',
+        icon: 'IconUser',
+        title: 'Escolha a sua tela inicial',
+        text: 'Gosta de começar pelo Calendário? Agora o fourbase abre direto na tela que você preferir.',
+        points: [
+          'Vá em Meu Perfil → Tela inicial e escolha: Painel, Kanban, Calendário, Notas, Clientes e outras',
+          'A escolha vale para você, neste navegador: cada pessoa tem a sua',
+          'Se você abrir um link direto (por exemplo, de uma notificação), ele continua abrindo onde o link diz',
+        ],
+        cta: { label: 'Escolher minha tela inicial', path: '/perfil' },
+      },
+      {
+        kind: 'Melhoria',
+        icon: 'IconCalendar',
+        title: 'Calendário feito para o celular',
+        text: 'O mês agora tem quadrados grandes, como no calendário do iPhone, e mostra o nome das tarefas dentro de cada dia.',
+        points: [
+          'Toque num dia para ver as tarefas dele por inteiro: horário, descrição, status, prioridade, cliente e responsável',
+          'Toque numa tarefa para abrir os detalhes e use o círculo para concluir',
+          'O botão “+ Nova” cria uma tarefa já naquele dia',
+        ],
+        cta: { label: 'Abrir o Calendário', path: '/calendario' },
+      },
+      {
+        kind: 'Melhoria',
+        icon: 'IconKanban',
+        title: 'Mais fácil de usar com o dedo',
+        text: 'Ajustamos botões, campos e telas para o celular.',
+        points: [
+          'Botões pequenos ficaram mais fáceis de tocar',
+          'Ao tocar num campo, a tela não dá mais zoom no iPhone',
+          'Notas não rola mais para o lado, e a tarefa aberta ocupa a tela toda',
+        ],
+        cta: null,
+      },
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-10-26',
     title: 'Anexos de qualquer tipo e colunas do Kanban editáveis',

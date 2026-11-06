@@ -11,6 +11,12 @@ versão, atualize os dois e a `version` do `package.json`.
 - **Assistente como app do ChatGPT (MCP + login OAuth):** novo caminho principal, porque a OpenAI está descontinuando os GPTs personalizados e o ChatGPT só aceita OAuth em servidor MCP. A tela Assistente passa a guiar 4 passos (modo desenvolvedor → criar o app → conectar) e o gestor autoriza na página `/conectar`; não há chave nem instruções para copiar. Mesmas regras do caminho antigo (agenda, lote, desfazer seguro, gestor ativo). Exige também a migration `20261102000000_assistant_oauth.sql`.
 - Exige a migration `20261101000000_assistant_tokens.sql`. Fora do "O que há de novo" até abrir para todas as empresas (fase B). Ver `docs/assistente-chatgpt.md`.
 
+## 1.3.0 — 2026-11-06
+
+- **Tela inicial à escolha de cada pessoa:** Meu Perfil → Tela inicial. Ao entrar (ou abrir o app em "/"), vai para a tela escolhida; fica por usuário neste navegador e só aceita telas que a pessoa pode abrir. Links diretos continuam abrindo onde dizem.
+- **Calendário no celular:** mês com células altas (estilo iPhone) mostrando até 2 tarefas por dia (nome em 2 linhas, cor do responsável) e "+N"; tocar no dia abre embaixo as tarefas dele em cartões completos, com "+ Nova" e fechar. No computador nada muda.
+- **Ajustes de mobile:** Notas sem rolagem lateral, campos com 16px (sem zoom no iPhone), área de toque de ~44px nos botões pequenos, altura por `dvh`, tarefa aberta em tela cheia.
+
 ## 1.2.0 — 2026-10-26
 
 - **Anexos de tarefa aceitam qualquer tipo de arquivo** (PDF, planilhas, documentos, zip, áudio…), além de imagens: imagens aparecem como miniaturas e os demais arquivos numa lista com ícone, nome, baixar e excluir. Limite de 25 MB por arquivo; executáveis, scripts e páginas (.exe, .js, .html, .svg…) são recusados por segurança.
