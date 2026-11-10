@@ -9831,3 +9831,41 @@ img.kb-avatar {
 }
 
 .profile-home-select { width: 100%; max-width: 360px; margin-top: 10px; padding: 11px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+
+/* ── Equipe: Kanban de uma pessoa + sininho ── */
+.member-kanban-btn { margin-top: 10px; width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2, var(--surface)); color: var(--primary-text); font-weight: 700; cursor: pointer; }
+.member-kanban-btn:hover { background: var(--primary-light); }
+.member-kanban-modal { max-width: 1100px; width: 100%; max-height: calc(100vh - 40px); overflow-y: auto; padding: 20px; }
+.mkm-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.mkm-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mkm-id small { color: var(--muted-strong); overflow: hidden; text-overflow: ellipsis; }
+.mkm-progress { margin-bottom: 16px; }
+.mkm-progress-top { display: flex; justify-content: space-between; margin-bottom: 6px; color: var(--muted-strong); font-size: 14px; }
+.mkm-progress-top strong { color: var(--text); font-size: 18px; }
+.mkm-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(240px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+.mkm-col { background: var(--surface-2, rgba(127,127,127,0.08)); border-radius: 12px; padding: 10px; min-width: 0; }
+.mkm-col h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; }
+.mkm-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--col, var(--primary)); }
+.mkm-count { margin-left: auto; color: var(--muted-strong); font-weight: 600; }
+.mkm-empty { color: var(--muted-strong); font-size: 13px; margin: 6px 2px; }
+.mkm-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+.mkm-card.done { opacity: 0.65; }
+.mkm-card-top { display: flex; align-items: flex-start; gap: 8px; }
+.mkm-title { flex: 1; min-width: 0; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.mkm-bell { flex: 0 0 auto; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 50%; background: var(--primary-light); color: var(--primary-text); cursor: pointer; }
+.mkm-bell:hover:not(:disabled) { background: var(--primary); color: var(--white); }
+.mkm-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.mkm-due { font-size: 12.5px; color: var(--muted-strong); }
+.mkm-due.late { color: #d64562; font-weight: 700; }
+.mkm-nudge { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 6px; }
+.mkm-nudge label { font-size: 13px; font-weight: 700; }
+.mkm-nudge textarea { width: 100%; resize: vertical; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; }
+.mkm-nudge small { color: var(--muted-strong); }
+.mkm-error { color: #d64562; margin: 0; font-size: 13px; }
+.mkm-nudge-actions { display: flex; gap: 8px; justify-content: flex-end; }
+@media (max-width: 640px) {
+  .member-kanban-modal { max-height: 100dvh; height: 100dvh; border-radius: 0; padding: 14px; }
+  .mkm-board { grid-auto-flow: row; grid-auto-columns: auto; overflow-x: visible; }
+  .mkm-bell { width: 44px; height: 44px; }
+  .mkm-title { font-size: 16px; }
+}

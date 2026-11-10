@@ -168,6 +168,7 @@ export const api = {
   // equipe (gestor)
   getTeamOverview: () => request('/api/team/overview'),
   getTeamTasks: () => request('/api/team/tasks'),
+  nudgeMember: (userId, body) => request(`/api/team/members/${userId}/nudge`, { method: 'POST', body: JSON.stringify(body) }),
 
   // pastas de documentos
   getFolders: () => request('/api/folders'),
