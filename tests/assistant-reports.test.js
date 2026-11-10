@@ -52,8 +52,8 @@ const fixture = {
 let server, base, ops
 const jwt = {}
 const ctx = (who) => ({ user: { id: id[who], name: who, workspace_id: who.endsWith('B') ? wsB : wsA }, token: { scopes: ['agenda:read', 'agenda:write'] } })
-const call = async (method, url, token) => {
-  const res = await fetch(base + url, { method, headers: token ? { Authorization: `Bearer ${token}` } : {} })
+const call = async (method, url, token, body) => {
+  const res = await fetch(base + url, { method, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined })
   const text = await res.text()
   return { status: res.status, body: text ? JSON.parse(text) : null }
 }
@@ -132,6 +132,19 @@ test('listar_relatorios e rotas da tela: só do próprio workspace e só gestor;
   assert.equal(screen.body[0].client_name, 'Acme Indústria')
   const rid = screen.body[0].id
   assert.equal((await call('GET', `/api/reports/generated/${rid}`, jwt.gestorA)).body.intro_text, 'Prezados,\nSegue o relatório.')
+  // salvar alterações no rascunho
+  const patch = (token, b) => call('PATCH', `/api/reports/generated/${rid}`, token, b)
+  const saved = await patch(jwt.gestorA, { intro_text: '  Novo texto  ', period_to: '2026-11-15' })
+  assert.equal(saved.status, 200)
+  assert.deepEqual([saved.body.intro_text, saved.body.period_to, saved.body.period_from], ['Novo texto', '2026-11-15', '2026-10-01'])
+  assert.equal((await patch(jwt.gestorA, { intro_text: '' })).body.intro_text, null, 'vazio limpa')
+  assert.equal((await patch(jwt.gestorA, { period_to: '2026-09-01' })).status, 400, 'fim antes do início')
+  assert.equal((await patch(jwt.gestorA, { period_from: 'x' })).status, 400)
+  assert.equal((await patch(jwt.gestorA, { client_id: id.bClient })).status, 400, 'cliente de outra empresa')
+  assert.equal((await patch(jwt.gestorA, { intro_text: 'x'.repeat(4001) })).status, 400)
+  assert.equal((await patch(jwt.gestorB, { intro_text: 'invasão' })).status, 404, 'outra empresa não altera')
+  assert.equal((await patch(jwt.funcA, { intro_text: 'x' })).status, 403)
+  assert.equal(db().fourbase_reports.find((r) => r.id === rid).intro_text, null)
   assert.equal((await call('GET', '/api/reports/generated', jwt.funcA)).status, 403, 'funcionário')
   assert.equal((await call('GET', '/api/reports/generated')).status, 401)
   assert.equal((await call('GET', `/api/reports/generated/${rid}`, jwt.gestorB)).status, 404, 'outra empresa não abre')

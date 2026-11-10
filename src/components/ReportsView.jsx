@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import { memberColor } from '../colors.js'
 import { useClients, useColumns, useMembers } from '../hooks/useWorkspaceData.js'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useToast } from '../toast.jsx'
 
 const NO_CLIENTS = []
 
@@ -102,18 +103,78 @@ export default function ReportsView({ currentUser, onError }) {
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Abre um rascunho do ChatGPT: preenche cliente, período, responsável e introdução; o resto da tela segue igual.
-  const applyGenerated = (r) => {
+  // ── Rascunhos do ChatGPT ──────────────────────────────────────────────────────
+  // Abrir um rascunho só PREENCHE a tela (cliente, período, responsável, introdução). Dá para ajustar, salvar de
+  // volta no rascunho, voltar ao relatório em branco ou excluir. Nada é enviado a ninguém.
+  const { showToast } = useToast()
+  const [activeDraft, setActiveDraft] = useState(null)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [showAllDrafts, setShowAllDrafts] = useState(false)
+
+  const draftIntro = activeDraft?.intro_text || ''
+  const introNow = introEdited ? introText : ''
+  const draftDirty = !!activeDraft && (
+    clientId !== activeDraft.client_id ||
+    dateFrom !== (activeDraft.period_from || '') ||
+    dateTo !== (activeDraft.period_to || '') ||
+    (managerId || '') !== (activeDraft.manager_id || currentUser?.id || '') ||
+    draftIntro !== introNow
+  )
+  const hasUnsavedWork = draftDirty || (!activeDraft && (introEdited || !!clientId || !!dateFrom || !!dateTo))
+
+  const fillFrom = (r) => {
     setClientId(r.client_id)
     setDateFrom(r.period_from || '')
     setDateTo(r.period_to || '')
-    if (r.manager_id) setManagerId(r.manager_id)
+    setManagerId(r.manager_id || currentUser?.id || '')
     setIntroText(r.intro_text || '')
     setIntroEdited(Boolean(r.intro_text))
+  }
+  const applyGenerated = (r, { confirmFirst = true } = {}) => {
+    if (activeDraft?.id === r.id && !draftDirty) return
+    if (confirmFirst && hasUnsavedWork && !window.confirm('Há alterações no relatório atual que ainda não foram salvas. Abrir este rascunho e descartá-las?')) return
+    fillFrom(r)
+    setActiveDraft(r)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+  const clearForm = () => {
+    setActiveDraft(null)
+    setClientId('')
+    setDateFrom('')
+    setDateTo('')
+    setManagerId(currentUser?.id || '')
+    setIntroEdited(false)
+  }
+  const leaveDraft = () => {
+    if (draftDirty && !window.confirm('Descartar as alterações e voltar ao relatório em branco? O rascunho salvo continua na lista.')) return
+    clearForm()
+  }
+  const restoreDraftText = () => {
+    setIntroText(draftIntro)
+    setIntroEdited(true)
+  }
+  const saveDraft = async () => {
+    if (!activeDraft) return
+    setSavingDraft(true)
+    try {
+      const saved = await api.updateGeneratedReport(activeDraft.id, {
+        client_id: clientId, period_from: dateFrom, period_to: dateTo, manager_id: managerId || null,
+        intro_text: introEdited ? introText : '',
+      })
+      const next = { ...activeDraft, ...saved }
+      setActiveDraft(next)
+      setGenerated((prev) => prev.map((g) => (g.id === next.id ? { ...g, ...saved, client_name: clientName(saved.client_id) || g.client_name } : g)))
+      showToast('Rascunho atualizado.')
+    } catch (err) {
+      onError(err)
+    } finally {
+      setSavingDraft(false)
+    }
+  }
   const removeGenerated = (r) => {
+    if (!window.confirm(`Excluir o rascunho de ${r.client_name || 'cliente'} (${formatDateBR(r.period_from)} a ${formatDateBR(r.period_to)})? Isso não pode ser desfeito.`)) return
     setGenerated((prev) => prev.filter((g) => g.id !== r.id))
+    if (activeDraft?.id === r.id) clearForm()
     api.deleteGeneratedReport(r.id).catch((err) => {
       onError(err)
       api.getGeneratedReports().then(setGenerated).catch(() => {})
@@ -124,7 +185,7 @@ export default function ReportsView({ currentUser, onError }) {
     api.getGeneratedReports().then(setGenerated).catch(() => {})
     const wanted = new URLSearchParams(location.search).get('relatorio')
     if (wanted) {
-      api.getGeneratedReport(wanted).then(applyGenerated).catch(onError)
+      api.getGeneratedReport(wanted).then((r) => applyGenerated(r, { confirmFirst: false })).catch(onError)
       navigate({ pathname: location.pathname }, { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -321,26 +382,49 @@ export default function ReportsView({ currentUser, onError }) {
 
   return (
     <div className="reports-view">
+      {activeDraft && (
+        <div className="rg-banner no-print" role="status">
+          <div className="rg-banner-text">
+            <span className="rg-badge">Rascunho do ChatGPT</span>
+            <strong>{activeDraft.client_name || clientName(activeDraft.client_id)} · {formatDateBR(activeDraft.period_from)} a {formatDateBR(activeDraft.period_to)}</strong>
+            <small>{draftDirty ? 'Você tem alterações que ainda não foram salvas neste rascunho.' : 'Confira os dados, ajuste o que precisar e exporte quando estiver pronto. Nada é enviado ao cliente.'}</small>
+          </div>
+          <div className="rg-banner-actions">
+            {draftDirty && <button type="button" className="rg-btn" onClick={saveDraft} disabled={savingDraft}>{savingDraft ? 'Salvando…' : 'Salvar alterações'}</button>}
+            {draftIntro && draftIntro !== introNow && <button type="button" className="rg-btn ghost" onClick={restoreDraftText}>Restaurar texto do ChatGPT</button>}
+            <button type="button" className="rg-btn ghost" onClick={leaveDraft}>Voltar ao relatório em branco</button>
+          </div>
+        </div>
+      )}
+
       {generated.length > 0 && (
-        <div className="panel reports-generated no-print">
-          <div className="panel-header">
+        <div className="panel rg-panel no-print">
+          <div className="rg-head">
             <div>
-              <h3>Rascunhos do ChatGPT</h3>
-              <span>Gerados a seu pedido. Abra, confira e ajuste antes de baixar: nada é enviado ao cliente.</span>
+              <h3>Rascunhos do ChatGPT <span className="rg-count">{generated.length}</span></h3>
+              <p>Gerados a seu pedido no ChatGPT. Abra para conferir e ajustar antes de baixar.</p>
             </div>
           </div>
-          <ul className="reports-generated-list">
-            {generated.map((r) => (
-              <li key={r.id}>
-                <div className="reports-generated-info">
-                  <strong>{r.client_name || 'Cliente'}</strong>
-                  <small>{formatDateBR(r.period_from)} a {formatDateBR(r.period_to)} · criado em {formatDateBR((r.created_at || '').slice(0, 10))}</small>
-                </div>
-                <button type="button" className="primary" onClick={() => applyGenerated(r)}>Abrir</button>
-                <button type="button" className="icon-btn danger" title="Excluir rascunho" aria-label="Excluir rascunho" onClick={() => removeGenerated(r)}><IconTrash size={14} /></button>
-              </li>
-            ))}
+          <ul className="rg-list">
+            {(showAllDrafts ? generated : generated.slice(0, 3)).map((r) => {
+              const active = activeDraft?.id === r.id
+              return (
+                <li key={r.id} className={active ? 'is-active' : ''}>
+                  <div className="rg-info">
+                    <strong>{r.client_name || 'Cliente'}{active && <span className="rg-badge small">Em edição</span>}</strong>
+                    <small>{formatDateBR(r.period_from)} a {formatDateBR(r.period_to)} · criado em {formatDateBR((r.created_at || '').slice(0, 10))}</small>
+                  </div>
+                  <button type="button" className="rg-btn" onClick={() => applyGenerated(r)} disabled={active && !draftDirty}>{active ? 'Aberto' : 'Abrir'}</button>
+                  <button type="button" className="rg-icon danger" title="Excluir rascunho" aria-label={`Excluir o rascunho de ${r.client_name || 'cliente'}`} onClick={() => removeGenerated(r)}><IconTrash size={15} /></button>
+                </li>
+              )
+            })}
           </ul>
+          {generated.length > 3 && (
+            <button type="button" className="rg-more" onClick={() => setShowAllDrafts((v) => !v)}>
+              {showAllDrafts ? 'Mostrar menos' : `Ver todos (${generated.length})`}
+            </button>
+          )}
         </div>
       )}
 
