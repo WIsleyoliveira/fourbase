@@ -1,7 +1,7 @@
 // Aviso de privacidade da tela Assistente (texto do Conselho: Guardian + Advocate).
 // O gestor autoriza ESTA versão ao criar a chave; o servidor recusa outra (api/_lib/assistant.js).
 // Mudou o texto de forma relevante? Suba a versão aqui e lá — tests/assistant-front.test.js confere.
-export const NOTICE_VERSION = '2026-11-01'
+export const NOTICE_VERSION = '2026-11-10'
 
 export const NOTICE = {
   title: 'O que o ChatGPT vai ver',
@@ -14,7 +14,8 @@ export const NOTICE = {
   ],
   // camada 2: "Ver detalhes"
   details: [
-    { title: 'O que ele não vê', text: 'Tarefas da equipe, e-mails e telefones de clientes, notas, anexos e membros da empresa.' },
+    { title: 'O que ele não vê', text: 'E-mails e telefones de clientes, notas, anexos e a lista de membros da empresa. Tarefas da equipe também não, com uma exceção: ao pedir um relatório de um cliente, ele vê as tarefas daquele cliente no período, de toda a equipe (título, status, responsável e datas).' },
+    { title: 'Relatórios', text: 'Você pode pedir ao ChatGPT o relatório de um cliente. Ele lê as tarefas daquele cliente no período, escreve a introdução e salva um RASCUNHO no fourbase. Nada é enviado ao cliente: você abre em Relatórios, confere, ajusta e só então baixa.' },
     { title: 'O que ele pode fazer', text: 'Criar tarefas só para você, sempre mostrando a lista antes. As tarefas entram na primeira coluna com a etiqueta "ChatGPT". Ele não edita nem apaga tarefas que já existem. Você pode desfazer um pedido em até 48 horas, desde que ninguém tenha mexido nas tarefas.' },
     { title: 'Sua conta do ChatGPT', text: 'A conversa segue as regras da sua conta na OpenAI. Se não quiser que suas conversas sejam usadas para treinar os modelos, desligue essa opção nos Controles de dados do ChatGPT. Para apagar o que já foi visto, apague a conversa no próprio ChatGPT.' },
     { title: 'Sua chave', text: 'Ela vale por 1 ano e só funciona para agenda e clientes. Cole a chave só no campo "Chave de API" do assistente que você criou, nunca na conversa. Deixe o assistente como "Somente eu".' },

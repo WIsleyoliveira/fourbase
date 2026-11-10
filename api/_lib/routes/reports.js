@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, gestorOnly, workspaceOf } from '../auth.js'
-import { inWorkspace } from '../validation.js'
+import { inWorkspace, isUuid } from '../validation.js'
 
 const router = Router()
 export default router
@@ -66,6 +66,33 @@ router.patch('/api/report-activities/:id', auth, gestorOnly, asyncRoute(async (r
     .single()
   if (error) throw error
   res.json(data)
+}))
+
+// Rascunhos gerados pelo ChatGPT (só parâmetros e introdução; as tarefas vêm ao vivo).
+router.get('/api/reports/generated', auth, gestorOnly, asyncRoute(async (req, res) => {
+  const workspaceId = workspaceOf(req)
+  const [reps, clients] = await Promise.all([
+    supabase.from('fourbase_reports').select('*').eq('workspace_id', workspaceId).order('created_at', { ascending: false }).limit(50),
+    supabase.from('fourbase_clients').select('id, name').eq('workspace_id', workspaceId),
+  ])
+  for (const r of [reps, clients]) if (r.error) throw r.error
+  const names = Object.fromEntries((clients.data || []).map((c) => [c.id, c.name]))
+  res.json((reps.data || []).map((r) => ({ ...r, client_name: names[r.client_id] || '' })))
+}))
+
+router.get('/api/reports/generated/:id', auth, gestorOnly, asyncRoute(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Registro não encontrado' })
+  const { data, error } = await supabase.from('fourbase_reports').select('*').eq('id', req.params.id).eq('workspace_id', workspaceOf(req)).maybeSingle()
+  if (error) throw error
+  if (!data) return res.status(404).json({ error: 'Registro não encontrado' })
+  res.json(data)
+}))
+
+router.delete('/api/reports/generated/:id', auth, gestorOnly, asyncRoute(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Registro não encontrado' })
+  const { error } = await supabase.from('fourbase_reports').delete().eq('id', req.params.id).eq('workspace_id', workspaceOf(req))
+  if (error) throw error
+  res.status(204).end()
 }))
 
 router.delete('/api/report-activities/:id', auth, gestorOnly, asyncRoute(async (req, res) => {

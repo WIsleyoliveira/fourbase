@@ -6,10 +6,17 @@ versão, atualize os dois e a `version` do `package.json`.
 
 ## Próxima versão (em desenvolvimento)
 
+- **Relatórios pelo ChatGPT (MCP):** novas ferramentas `dados_relatorio`, `gerar_relatorio` e `listar_relatorios`. O gestor pede "faça o relatório do cliente X de tal a tal data"; o ChatGPT lê as tarefas do cliente no período, escreve a introdução e salva um **rascunho** que aparece em Relatórios → "Rascunhos do ChatGPT" (abre já preenchido, para conferir, ajustar e baixar em PDF/CSV). Nada é enviado ao cliente. Aviso de privacidade atualizado (versão 2026-11-10: o ChatGPT passa a ver as tarefas do cliente, de toda a equipe, no relatório). Exige a migration `20261110000100_assistant_reports.sql`.
+
 - **Assistente (ChatGPT)** — gestor de empresa liberada (`ASSISTANT_WORKSPACE_IDS`): nova tela **Assistente** no menu que guia a conexão do ChatGPT em 4 passos + teste automático ("Funcionou!") e, no dia a dia, mostra o status, o histórico "O que o ChatGPT fez" com desfazer seguro (prévia; nunca apaga tarefa em que alguém mexeu), ideias de frases e o que ele pode/não pode. O ChatGPT vê a agenda e os clientes e cria tarefas em lote (prévia, idempotência, etiqueta ChatGPT).
 - Segurança e privacidade do Assistente: aviso do que vai para a OpenAI com autorização registrada (versão do aviso), chave de conexão válida por 1 ano e só para gestor ativo, nova chave substitui a anterior, "Somente eu" no passo a passo, contrato só com `APP_URL`, interruptor `ASSISTANT_ENABLED=false`.
 - **Assistente como app do ChatGPT (MCP + login OAuth):** novo caminho principal, porque a OpenAI está descontinuando os GPTs personalizados e o ChatGPT só aceita OAuth em servidor MCP. A tela Assistente passa a guiar 4 passos (modo desenvolvedor → criar o app → conectar) e o gestor autoriza na página `/conectar`; não há chave nem instruções para copiar. Mesmas regras do caminho antigo (agenda, lote, desfazer seguro, gestor ativo). Exige também a migration `20261102000000_assistant_oauth.sql`.
 - Exige a migration `20261101000000_assistant_tokens.sql`. Fora do "O que há de novo" até abrir para todas as empresas (fase B). Ver `docs/assistente-chatgpt.md`.
+
+## 1.4.0 — 2026-11-10
+
+- **Equipe: Kanban de cada pessoa** em janela (gestor): botão "Ver Kanban" no cartão do membro mostra as tarefas dela por coluna, com barra de progresso (somente leitura).
+- **Sininho (sinalização):** o gestor sinaliza uma tarefa em aberto do colaborador, com recado opcional. Cria aviso no sino ("@gestor está sinalizando a você a tarefa …, que precisa ser realizada") e e-mail formal (respeita "Receber e-mails"). 1 por tarefa a cada 10 min e 10 por hora por pessoa. `POST /api/team/members/:userId/nudge`. Exige a migration `20261110000000_manager_reminders.sql` (novo tipo `reminder`).
 
 ## 1.3.0 — 2026-11-06
 

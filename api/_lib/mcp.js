@@ -5,19 +5,22 @@ import {
   opAgenda, opBatches, opClients, opCreate, opMe, opPreview, opUndo,
 } from './assistantService.js'
 import { MAX_BATCH } from './assistant.js'
+import { opReportCreate, opReportData, opReportList } from './assistantReports.js'
 
 export const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
 export const SERVER_INFO = { name: 'fourbase', title: 'fourbase — Agenda', version: '1.0.0' }
 
 export const MCP_INSTRUCTIONS = `Você é o Assistente de Agenda do fourbase. Ajuda o gestor a planejar a agenda conversando e cria as tarefas dele no fourbase. Português do Brasil, frases curtas, tom de colega, sem jargão (nada de "API", "JSON", nome de ferramenta). Nunca diga que fez algo sem a ferramenta ter respondido com sucesso.
 
-PODE: ver as tarefas do usuário (até 62 dias por consulta), listar clientes, conferir uma lista antes de criar, criar até ${MAX_BATCH} tarefas por vez, ver os últimos pedidos e desfazer um pedido em até 48 h. NÃO PODE: editar, mover, concluir ou apagar tarefas existentes; mexer em clientes; ver tarefas de outras pessoas; enviar avisos. Se pedirem, diga que ainda não dá e onde fazer no fourbase. As tarefas criadas recebem a etiqueta "ChatGPT" e vão para a primeira coluna do Kanban.
+PODE: ver as tarefas do usuário (até 62 dias por consulta), listar clientes, conferir uma lista antes de criar, criar até ${MAX_BATCH} tarefas por vez, ver os últimos pedidos e desfazer um pedido em até 48 h. NÃO PODE: editar, mover, concluir ou apagar tarefas existentes; mexer em clientes; ver tarefas de outras pessoas (a exceção é o relatório de um cliente, abaixo); enviar avisos. RELATÓRIOS: pode montar o rascunho de um relatório de cliente (veja abaixo). Se pedirem, diga que ainda não dá e onde fazer no fourbase. As tarefas criadas recebem a etiqueta "ChatGPT" e vão para a primeira coluna do Kanban.
 
 DATAS: fuso de Brasília. A data de hoje é o campo "today" das respostas; confie nele, não no seu relógio. Na conversa, sempre dia da semana + data (ex.: "qua 29/10, 14:00"). Dia da semana sem data ("sexta") = a próxima; se hoje for esse dia, pergunte. "De manhã"/"à tarde" sem hora: sugira 09:00/14:00 e marque "(sugestão)". Sem hora: sem horário.
 
 PRIMEIRA MENSAGEM: chame verificar_conexao e responda em até 5 linhas: "Conectado ao fourbase, [nome]." + resumo dos próximos 7 dias (ver_agenda) + 2 exemplos do que pedir.
 
 CRIAR TAREFAS: (1) entenda o pedido; se faltar algo essencial, no máximo 2 perguntas. (2) Se citar empresa ou pessoa, chame listar_clientes: um resultado, use; nenhum ou vários, pergunte; nunca invente cliente. (3) Chame ver_agenda nas datas e depois conferir_tarefas com a lista completa. (4) Mostre a tabela Nº | Dia | Horário | Tarefa | Cliente e, abaixo, os avisos (choque de horário, tarefa repetida, erros). (5) Se houver aviso, dúvida ou "(sugestão)", pergunte só o que precisa e refaça conferir_tarefas. (6) Sem pendências, chame criar_tarefas — o ChatGPT pede a permissão do usuário; não peça um "sim" separado. (7) Use um batch_id novo (gpt-AAAAMMDD-HHMM-xxxx); se der erro de rede, repita com o MESMO batch_id. Mais de ${MAX_BATCH} tarefas: lotes de até ${MAX_BATCH}. (8) Depois: "Pronto: criei N tarefas (etiqueta ChatGPT)." + links + "Para desfazer, diga 'desfaz' até [undo_until]". Perguntas de leitura não precisam de confirmação.
+
+RELATÓRIO DE CLIENTE: quando o usuário pedir um relatório de um cliente num período: (1) listar_clientes e confirme o cliente (um resultado, use; vários ou nenhum, pergunte). (2) Confirme o período (de/até) — se disser "outubro", use 01/10 a 31/10 do ano de "today". (3) Chame dados_relatorio: a resposta traz as tarefas do cliente no período (de toda a equipe), com status e responsável. (4) Escreva a introdução do relatório: formal, em português, 1 a 3 parágrafos curtos, SÓ com o que está nos dados (quantas tarefas, quantas concluídas, principais entregas, pendências) — não invente números, resultados nem datas. (5) Mostre ao usuário o resumo e a introdução e, se estiver de acordo, chame gerar_relatorio (o ChatGPT pede a permissão); use um request_id novo (rel-AAAAMMDD-HHMM-xxxx) e o MESMO ao repetir uma chamada que falhou. (6) Diga: "Rascunho pronto. Abra o fourbase → Relatórios (link) para conferir, ajustar e baixar em PDF ou CSV." O relatório nasce como rascunho: o gestor revisa antes de entregar ao cliente. Você não envia nada ao cliente. Para ver relatórios já feitos, listar_relatorios.
 
 DESFAZER: só quando o usuário pedir. Se o pedido não estiver claro, chame listar_lotes e pergunte qual; depois desfazer_lote. Informe quantas saíram; se alguma ficou, explique que alguém já mexeu nela.
 
@@ -93,6 +96,44 @@ export const TOOLS = [
     },
     invoking: 'Criando as tarefas…', invoked: 'Tarefas criadas',
     run: (ctx, a) => opCreate(ctx, { batch_id: a.batch_id, tasks: a.tasks }),
+  },
+  {
+    name: 'dados_relatorio', title: 'Ver dados do relatório', scope: 'agenda:read', annotations: READ,
+    description: 'Lê as tarefas de UM cliente num período (de toda a equipe: título, status, responsável, datas) e os totais, para escrever a introdução do relatório. Não grava nada. Máx. 366 dias.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        client_name: { type: 'string', description: 'Nome do cliente (use listar_clientes)' },
+        client_id: { type: 'string', description: 'Alternativa ao client_name' },
+        from: { type: 'string', description: 'AAAA-MM-DD' }, to: { type: 'string', description: 'AAAA-MM-DD' },
+      },
+      required: ['from', 'to'], additionalProperties: false,
+    },
+    invoking: 'Reunindo os dados do relatório…', invoked: 'Dados reunidos',
+    run: (ctx, a) => opReportData(ctx, a),
+  },
+  {
+    name: 'gerar_relatorio', title: 'Gerar relatório (rascunho)', scope: 'agenda:write', annotations: WRITE,
+    description: 'Salva o rascunho de um relatório de cliente no fourbase, com a introdução escrita. O gestor abre em Relatórios, confere, ajusta e exporta. Só depois de mostrar o resumo e a introdução ao usuário. Repetir com o mesmo request_id não duplica.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        request_id: { type: 'string', pattern: '^[A-Za-z0-9_.:-]{8,80}$', description: 'Código único do pedido, ex.: rel-20261110-0930-a1b2' },
+        client_name: { type: 'string' }, client_id: { type: 'string' },
+        from: { type: 'string', description: 'AAAA-MM-DD' }, to: { type: 'string', description: 'AAAA-MM-DD' },
+        intro: { type: 'string', maxLength: 4000, description: 'Texto de apresentação do relatório, formal, só com fatos dos dados' },
+      },
+      required: ['request_id', 'from', 'to'], additionalProperties: false,
+    },
+    invoking: 'Salvando o rascunho do relatório…', invoked: 'Rascunho salvo',
+    run: (ctx, a) => opReportCreate(ctx, a),
+  },
+  {
+    name: 'listar_relatorios', title: 'Ver relatórios gerados', scope: 'agenda:read', annotations: READ,
+    description: 'Lista os últimos rascunhos de relatório criados pelo assistente, com o link para abrir no fourbase.',
+    inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 20 } }, additionalProperties: false },
+    invoking: 'Consultando os relatórios…', invoked: 'Relatórios consultados',
+    run: (ctx, a) => opReportList(ctx, { limit: a.limit }),
   },
   {
     name: 'listar_lotes', title: 'Ver os últimos pedidos', scope: 'agenda:read', annotations: READ,

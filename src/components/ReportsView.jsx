@@ -3,6 +3,7 @@ import { IconPlus, IconTrash, IconDownload, IconChevronDown } from '../icons.jsx
 import { api } from '../api.js'
 import { memberColor } from '../colors.js'
 import { useClients, useColumns, useMembers } from '../hooks/useWorkspaceData.js'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 const NO_CLIENTS = []
 
@@ -97,6 +98,36 @@ export default function ReportsView({ currentUser, onError }) {
 
   // ── Aviso discreto quando atividades sem cliente são vinculadas automaticamente ──
   const [reassignNotice, setReassignNotice] = useState('')
+  const [generated, setGenerated] = useState([]) // rascunhos criados pelo ChatGPT
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Abre um rascunho do ChatGPT: preenche cliente, período, responsável e introdução; o resto da tela segue igual.
+  const applyGenerated = (r) => {
+    setClientId(r.client_id)
+    setDateFrom(r.period_from || '')
+    setDateTo(r.period_to || '')
+    if (r.manager_id) setManagerId(r.manager_id)
+    setIntroText(r.intro_text || '')
+    setIntroEdited(Boolean(r.intro_text))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const removeGenerated = (r) => {
+    setGenerated((prev) => prev.filter((g) => g.id !== r.id))
+    api.deleteGeneratedReport(r.id).catch((err) => {
+      onError(err)
+      api.getGeneratedReports().then(setGenerated).catch(() => {})
+    })
+  }
+
+  useEffect(() => {
+    api.getGeneratedReports().then(setGenerated).catch(() => {})
+    const wanted = new URLSearchParams(location.search).get('relatorio')
+    if (wanted) {
+      api.getGeneratedReport(wanted).then(applyGenerated).catch(onError)
+      navigate({ pathname: location.pathname }, { replace: true })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!reassignNotice) return
     const t = setTimeout(() => setReassignNotice(''), 4000)
@@ -290,6 +321,29 @@ export default function ReportsView({ currentUser, onError }) {
 
   return (
     <div className="reports-view">
+      {generated.length > 0 && (
+        <div className="panel reports-generated no-print">
+          <div className="panel-header">
+            <div>
+              <h3>Rascunhos do ChatGPT</h3>
+              <span>Gerados a seu pedido. Abra, confira e ajuste antes de baixar: nada é enviado ao cliente.</span>
+            </div>
+          </div>
+          <ul className="reports-generated-list">
+            {generated.map((r) => (
+              <li key={r.id}>
+                <div className="reports-generated-info">
+                  <strong>{r.client_name || 'Cliente'}</strong>
+                  <small>{formatDateBR(r.period_from)} a {formatDateBR(r.period_to)} · criado em {formatDateBR((r.created_at || '').slice(0, 10))}</small>
+                </div>
+                <button type="button" className="primary" onClick={() => applyGenerated(r)}>Abrir</button>
+                <button type="button" className="icon-btn danger" title="Excluir rascunho" aria-label="Excluir rascunho" onClick={() => removeGenerated(r)}><IconTrash size={14} /></button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* ── Metadados do relatório ── */}
       <div className="panel reports-meta no-print">
         <div className="panel-header">
