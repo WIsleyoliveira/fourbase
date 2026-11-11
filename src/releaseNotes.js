@@ -9,6 +9,37 @@
 
 export const RELEASES = [
   {
+    version: '1.4.0',
+    date: '2026-11-10',
+    title: 'Equipe: veja o Kanban de cada pessoa e sinalize tarefas',
+    intro: 'Para o gestor acompanhar a equipe de perto e cobrar com educação:',
+    items: [
+      {
+        kind: 'Novo',
+        icon: 'IconKanban',
+        title: 'Kanban de cada pessoa, numa janela',
+        text: 'Na aba Equipe, clique em “Ver Kanban” no cartão de qualquer pessoa para ver só as tarefas dela, por coluna, com a barra de progresso.',
+        points: [
+          'Vê quantas tarefas ela já concluiu e o que está atrasado',
+          'É só consulta: nada muda no quadro da pessoa',
+        ],
+        cta: { label: 'Abrir a Equipe', path: '/equipe' },
+      },
+      {
+        kind: 'Novo',
+        icon: 'IconBell',
+        title: 'Sininho: sinalize uma tarefa que precisa ser feita',
+        text: 'Toque no sino ao lado da tarefa e, se quiser, deixe um recado. A pessoa recebe um aviso no sino do fourbase e um e-mail em tom formal.',
+        points: [
+          'O aviso diz: “@gestor está sinalizando a você a tarefa …, que precisa ser realizada”',
+          'Cada tarefa só pode ser sinalizada de novo depois de 10 minutos',
+          'Só tarefas em aberto e da própria pessoa; quem desligou os e-mails recebe só o aviso no sino',
+        ],
+        cta: { label: 'Abrir a Equipe', path: '/equipe' },
+      },
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-11-06',
     title: 'Calendário no celular e tela inicial à sua escolha',

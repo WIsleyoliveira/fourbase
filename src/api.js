@@ -168,6 +168,11 @@ export const api = {
   // equipe (gestor)
   getTeamOverview: () => request('/api/team/overview'),
   getTeamTasks: () => request('/api/team/tasks'),
+  getGeneratedReports: () => request('/api/reports/generated'),
+  getGeneratedReport: (id) => request(`/api/reports/generated/${id}`),
+  updateGeneratedReport: (id, body) => request(`/api/reports/generated/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteGeneratedReport: (id) => request(`/api/reports/generated/${id}`, { method: 'DELETE' }),
+  nudgeMember: (userId, body) => request(`/api/team/members/${userId}/nudge`, { method: 'POST', body: JSON.stringify(body) }),
 
   // pastas de documentos
   getFolders: () => request('/api/folders'),

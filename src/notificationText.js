@@ -15,6 +15,11 @@ const cleanTitle = (title) => String(title ?? '').replace(/\s+/g, ' ').trim()
 
 export function notificationText(n, members, today) {
   const title = `“${cleanTitle(n.title)}”`
+  if (n.kind === 'reminder') {
+    const author = (members || []).find((m) => m.id === n.actor_id)?.name || 'Seu gestor'
+    const note = n.meta?.message ? ` Observação: “${cleanTitle(n.meta.message)}”` : ''
+    return `@${author} está sinalizando a você a tarefa ${title}, que precisa ser realizada.${note}`
+  }
   if (n.kind === 'mention' || n.kind === 'assignment') {
     const author = (members || []).find((m) => m.id === n.actor_id)?.name || 'Alguém'
     return n.kind === 'mention'

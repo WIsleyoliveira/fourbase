@@ -4,6 +4,8 @@ import { IconTrash, IconClose } from '../icons.jsx'
 import Avatar from './Avatar.jsx'
 import { useColumns } from '../hooks/useWorkspaceData.js'
 import { columnBuckets } from '../columnBuckets.js'
+import { useToast } from '../toast.jsx'
+import MemberKanbanModal from './MemberKanbanModal.jsx'
 
 const COLUMN_LABEL = { todo: 'A Fazer', doing: 'Em Progresso', done: 'Concluído' }
 const PRIORITY_CLASS = { Alta: 'p-alta', Média: 'p-media', Baixa: 'p-baixa' }
@@ -101,6 +103,8 @@ export default function TeamView({ onError }) {
   // Estado do fluxo de remoção
   const [confirmMember, setConfirmMember] = useState(null) // membro pendente de exclusão
   const [removing, setRemoving] = useState(false)          // loading durante a chamada API
+  const [viewMember, setViewMember] = useState(null)       // membro cujo Kanban está aberto
+  const { showToast } = useToast()
 
   useEffect(() => {
     Promise.all([api.getTeamOverview(), api.getTeamTasks()])
@@ -229,6 +233,9 @@ export default function TeamView({ onError }) {
                 <div className="progress-fill" style={{ width: `${progress}%` }} />
               </div>
               <small className="member-progress-label">{progress}% das tarefas concluídas</small>
+              <button type="button" className="member-kanban-btn" onClick={() => setViewMember(member)}>
+                Ver Kanban de {member.name.split(' ')[0]}
+              </button>
             </div>
           )
         })}
@@ -281,6 +288,15 @@ export default function TeamView({ onError }) {
           ))}
         </div>
       </div>
+
+      {viewMember && (
+        <MemberKanbanModal
+          member={viewMember}
+          tasks={tasks}
+          onClose={() => setViewMember(null)}
+          onToast={showToast}
+        />
+      )}
 
       {/* ── Modal de confirmação de remoção ──────────────────────────────── */}
       {confirmMember && (

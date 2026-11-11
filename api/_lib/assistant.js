@@ -14,7 +14,7 @@ export const DEFAULT_TOKEN_DAYS = 365
 export const TIMEZONE = 'America/Sao_Paulo'
 // Versão do aviso de privacidade da tela Assistente. O gestor autoriza ESTA versão ao criar a chave;
 // se o texto mudar, suba a versão aqui e em src/assistant/notice.js (um teste confere que são iguais).
-export const NOTICE_VERSION = '2026-11-01'
+export const NOTICE_VERSION = '2026-11-10'
 
 // Liberação por empresa (ASSISTANT_WORKSPACE_IDS): vazio = ninguém; "*" = todas; senão, lista de ids
 // separados por vírgula. Fechado por padrão: abrir para outra empresa exige política de privacidade e

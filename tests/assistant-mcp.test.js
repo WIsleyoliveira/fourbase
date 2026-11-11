@@ -304,9 +304,10 @@ test('MCP: initialize, tools/list (permissões e anotações), notificações e 
   const n = await call('POST', '/api/mcp', { token: c.access_token, body: { jsonrpc: '2.0', method: 'notifications/initialized' } })
   assert.equal(n.status, 202)
   const tools = (await rpc(c.access_token, 'tools/list')).body.result.tools
-  assert.deepEqual(tools.map((t) => t.name), ['verificar_conexao', 'ver_agenda', 'listar_clientes', 'conferir_tarefas', 'criar_tarefas', 'listar_lotes', 'desfazer_lote'])
+  assert.deepEqual(tools.map((t) => t.name), ['verificar_conexao', 'ver_agenda', 'listar_clientes', 'conferir_tarefas', 'criar_tarefas', 'dados_relatorio', 'gerar_relatorio', 'listar_relatorios', 'listar_lotes', 'desfazer_lote'])
   const by = Object.fromEntries(tools.map((t) => [t.name, t.annotations]))
-  for (const r of ['verificar_conexao', 'ver_agenda', 'listar_clientes', 'conferir_tarefas', 'listar_lotes']) assert.equal(by[r].readOnlyHint, true, r)
+  for (const r of ['verificar_conexao', 'ver_agenda', 'listar_clientes', 'conferir_tarefas', 'dados_relatorio', 'listar_relatorios', 'listar_lotes']) assert.equal(by[r].readOnlyHint, true, r)
+  assert.equal(by.gerar_relatorio.readOnlyHint, false)
   assert.equal(by.criar_tarefas.readOnlyHint, false)
   assert.equal(by.desfazer_lote.destructiveHint, true)
   assert.ok(tools.every((t) => t.inputSchema.type === 'object' && t.securitySchemes[0].type === 'oauth2'))

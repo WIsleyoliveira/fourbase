@@ -1,6 +1,6 @@
 import { supabase } from './supabase.js'
 import { diffTaskNotifications, dueNotifications } from './notificationRules.js'
-import { sendMail, buildNotificationEmail, runInBackground } from './mailer.js'
+import { sendMail, buildNotificationEmail, buildReminderEmail, runInBackground } from './mailer.js'
 
 // Serviço de notificações de tarefa (menção/atribuição): grava o aviso do sino
 // por destinatário e dispara o e-mail em segundo plano. Nada aqui lança: um erro
@@ -134,6 +134,70 @@ export async function emitTaskNotifications(before, after, actor, deps = {}) {
   } catch (err) {
     console.error('[notifications] falha ao gerar notificações:', err?.message || err)
   }
+}
+
+// ---------- Sinalização do gestor (sininho da aba Equipe) ----------
+// Mesma tarefa e mesma pessoa: no máximo uma sinalização a cada 10 minutos (evita cutucar em sequência) e, por
+// destinatário, no máximo MAX_REMINDERS_PER_HOUR por hora. O aviso do sino sempre é criado; o e-mail sai em
+// segundo plano e respeita a preferência do colaborador (notify_email).
+export const REMINDER_THROTTLE_MS = 10 * 60 * 1000
+export const MAX_REMINDERS_PER_HOUR = 10
+export const MAX_REMINDER_MESSAGE = 300
+
+export async function sendReminder({ actor, recipient, task, message }, deps = {}) {
+  const d = { ...moduleDeps, ...deps }
+  const now = d.now()
+  const { data: previous, error: prevError } = await supabase
+    .from('fourbase_notifications')
+    .select('created_at, actor_id, task_id')
+    .eq('user_id', recipient.id)
+    .eq('workspace_id', actor.workspace_id)
+    .eq('kind', 'reminder')
+    .order('created_at', { ascending: false })
+    .limit(MAX_REMINDERS_PER_HOUR)
+  if (prevError) throw prevError
+  const ageOf = (n) => now.getTime() - new Date(n.created_at).getTime()
+  if ((previous || []).some((n) => n.task_id === task.id && ageOf(n) < REMINDER_THROTTLE_MS)) {
+    return { status: 429, body: { error: 'Esta tarefa já foi sinalizada há pouco. Aguarde alguns minutos para sinalizar de novo.' } }
+  }
+  if ((previous || []).filter((n) => ageOf(n) < EMAIL_CAP_WINDOW_MS).length >= MAX_REMINDERS_PER_HOUR) {
+    return { status: 429, body: { error: 'Muitas sinalizações para esta pessoa na última hora. Tente mais tarde.' } }
+  }
+
+  const note = String(message ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_REMINDER_MESSAGE)
+  const { error: insertError } = await supabase.from('fourbase_notifications').insert({
+    workspace_id: actor.workspace_id,
+    user_id: recipient.id,
+    kind: 'reminder',
+    task_id: task.id,
+    actor_id: actor.id,
+    title: task.title,
+    meta: note ? { message: note } : {},
+    created_at: now.toISOString(),
+  })
+  if (insertError) throw insertError
+
+  const appUrl = process.env.APP_URL
+  let email = 'not_sent'
+  if (recipient.notify_email === false) email = 'recipient_opted_out'
+  else if (!appUrl) email = 'not_configured'
+  else if (!recipient.email) email = 'no_address'
+  else {
+    const mail = {
+      to: recipient.email,
+      ...buildReminderEmail({
+        actorName: actor.name, recipientName: recipient.name, title: task.title, taskId: task.id,
+        dueDate: task.due_date, message: note, appUrl,
+      }),
+    }
+    d.runInBackground(
+      Promise.resolve()
+        .then(() => d.sendMail(mail))
+        .catch((err) => console.error('[notifications] falha ao enviar e-mail de sinalização:', err?.message || err)),
+    )
+    email = 'queued'
+  }
+  return { status: 201, body: { ok: true, email } }
 }
 
 // ---------- Sino: leitura e marcação ----------

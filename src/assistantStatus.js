@@ -59,6 +59,9 @@ const ACTIVITY = {
   prever: 'conferiu uma lista de tarefas',
   criarTarefas: 'criou tarefas',
   listarLotes: 'consultou o histórico',
+  dadosRelatorio: 'consultou dados para um relatório',
+  gerarRelatorio: 'criou um rascunho de relatório',
+  listarRelatorios: 'consultou os relatórios gerados',
   desfazerLote: 'desfez um pedido',
 }
 const shortDate = (iso) => iso.split('-').reverse().slice(0, 2).join('/')

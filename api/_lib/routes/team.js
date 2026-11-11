@@ -3,6 +3,8 @@ import { supabase } from '../supabase.js'
 import { asyncRoute } from '../http.js'
 import { auth, gestorOnly, workspaceOf } from '../auth.js'
 import { loadBucketer } from '../columnBuckets.js'
+import { isUuid } from '../validation.js'
+import { sendReminder } from '../notifications.js'
 
 const router = Router()
 export default router
@@ -39,6 +41,32 @@ router.get('/api/team/overview', auth, gestorOnly, asyncRoute(async (req, res) =
     }
   })
   res.json(overview)
+}))
+
+// Sininho: o gestor sinaliza ao colaborador uma tarefa dele que ainda está em aberto.
+// Vale só para tarefa do próprio workspace, atribuída a essa pessoa e não concluída.
+router.post('/api/team/members/:userId/nudge', auth, gestorOnly, asyncRoute(async (req, res) => {
+  const workspaceId = workspaceOf(req)
+  const { userId } = req.params
+  const taskId = req.body?.task_id
+  if (!isUuid(userId) || !isUuid(taskId)) return res.status(400).json({ error: 'Pessoa ou tarefa inválida' })
+  if (userId === req.user.id) return res.status(400).json({ error: 'Você não pode sinalizar tarefas para si mesmo.' })
+
+  const [{ data: recipient, error: rErr }, { data: task, error: tErr }] = await Promise.all([
+    supabase.from('fourbase_users').select('id, name, email, notify_email, status').eq('id', userId).eq('workspace_id', workspaceId).maybeSingle(),
+    supabase.from('fourbase_tasks').select('id, title, due_date, column_key, assigned_to').eq('id', taskId).eq('workspace_id', workspaceId).maybeSingle(),
+  ])
+  if (rErr) throw rErr
+  if (tErr) throw tErr
+  if (!recipient || recipient.status === 'inactive') return res.status(404).json({ error: 'Pessoa não encontrada' })
+  if (!task || task.assigned_to !== userId) return res.status(404).json({ error: 'Tarefa não encontrada para esta pessoa' })
+  if (task.column_key === 'done') return res.status(400).json({ error: 'Esta tarefa já está concluída.' })
+
+  const r = await sendReminder({
+    actor: { id: req.user.id, name: req.user.name, workspace_id: workspaceId },
+    recipient, task, message: req.body?.message,
+  })
+  res.status(r.status).json(r.body)
 }))
 
 router.get('/api/team/tasks', auth, gestorOnly, asyncRoute(async (req, res) => {

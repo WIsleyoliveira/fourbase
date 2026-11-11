@@ -86,6 +86,31 @@ export function buildNotificationEmail({ kind, actorName, title, taskId, appUrl 
   }
 }
 
+const dataBr = (iso) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ''))
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+}
+
+// E-mail formal da sinalização do gestor ("sininho" da aba Equipe). Texto simples; título e recado
+// são tratados como texto (sem HTML). O link usa SOMENTE APP_URL.
+export function buildReminderEmail({ actorName, recipientName, title, taskId, dueDate, message, appUrl }) {
+  const gestor = truncate(oneLine(actorName), MAX_NAME_LENGTH) || 'Seu gestor'
+  const destinatario = truncate(oneLine(recipientName), MAX_NAME_LENGTH)
+  const titulo = `“${truncate(oneLine(title), MAX_TITLE_LENGTH)}”`
+  const link = `${String(appUrl ?? '').replace(/\/+$/, '')}/painel?tarefa=${taskId}`
+  const prazo = dataBr(dueDate)
+  const recado = truncate(oneLine(message), 300)
+  const linhas = [
+    destinatario ? `Prezado(a) ${destinatario},` : 'Prezado(a),',
+    '',
+    `O(A) gestor(a) ${gestor} está sinalizando a você a tarefa ${titulo}, que precisa ser realizada.`,
+  ]
+  if (prazo) linhas.push(`Prazo: ${prazo}.`)
+  if (recado) linhas.push('', `Observação de ${gestor}: “${recado}”`)
+  linhas.push('', `Solicitamos que a tarefa seja providenciada com a brevidade possível. Acesse: ${link}`, '', 'Atenciosamente,', 'fourbase')
+  return { subject: `Sinalização de tarefa: ${titulo}`, text: linhas.join('\n') + '\n' }
+}
+
 // Deixa o envio terminar depois da resposta da API (waitUntil na Vercel); fora
 // da Vercel o waitUntil não faz nada e a promessa roda normalmente. Rejeições
 // são engolidas: o envio nunca pode derrubar a requisição.
